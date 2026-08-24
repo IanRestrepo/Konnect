@@ -94,11 +94,6 @@ function serialize<T>(task: () => Promise<T>): Promise<T> {
 let memoria: Database | null = null;
 let discoEscribible = true;
 
-function esDiscoDeSoloLectura(error: unknown) {
-  const code = (error as NodeJS.ErrnoException)?.code;
-  return code === "EROFS" || code === "EACCES" || code === "EPERM";
-}
-
 async function write(db: Database) {
   memoria = db;
   if (!discoEscribible) return;
@@ -110,9 +105,10 @@ async function write(db: Database) {
     await fs.writeFile(tmp, JSON.stringify(db, null, 2), "utf8");
     await fs.rename(tmp, FILE);
   } catch (error) {
-    if (!esDiscoDeSoloLectura(error)) throw error;
-    // Sin disco donde persistir: seguimos solo con la copia en memoria.
+    // Guardar es best-effort. Un entorno sin disco de escritura no debe tumbar
+    // cada petición: la copia en memoria mantiene la aplicación en pie.
     discoEscribible = false;
+    console.warn("No se pudo guardar en disco; se continúa solo en memoria.", error);
   }
 }
 
