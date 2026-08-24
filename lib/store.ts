@@ -87,12 +87,33 @@ function serialize<T>(task: () => Promise<T>): Promise<T> {
   return next;
 }
 
+/**
+ * Copia en memoria de la base. Es la única fuente cuando el disco no admite
+ * escritura, como en un despliegue serverless.
+ */
+let memoria: Database | null = null;
+let discoEscribible = true;
+
+function esDiscoDeSoloLectura(error: unknown) {
+  const code = (error as NodeJS.ErrnoException)?.code;
+  return code === "EROFS" || code === "EACCES" || code === "EPERM";
+}
+
 async function write(db: Database) {
-  await fs.mkdir(path.dirname(FILE), { recursive: true });
-  // Temporal único por escritura: dos procesos nunca compiten por el mismo nombre.
-  const tmp = `${FILE}.${process.pid}.${Math.random().toString(36).slice(2, 8)}.tmp`;
-  await fs.writeFile(tmp, JSON.stringify(db, null, 2), "utf8");
-  await fs.rename(tmp, FILE);
+  memoria = db;
+  if (!discoEscribible) return;
+
+  try {
+    await fs.mkdir(path.dirname(FILE), { recursive: true });
+    // Temporal único por escritura: dos procesos nunca compiten por el mismo nombre.
+    const tmp = `${FILE}.${process.pid}.${Math.random().toString(36).slice(2, 8)}.tmp`;
+    await fs.writeFile(tmp, JSON.stringify(db, null, 2), "utf8");
+    await fs.rename(tmp, FILE);
+  } catch (error) {
+    if (!esDiscoDeSoloLectura(error)) throw error;
+    // Sin disco donde persistir: seguimos solo con la copia en memoria.
+    discoEscribible = false;
+  }
 }
 
 /**
@@ -129,10 +150,14 @@ function normalizar(db: Database): Database {
 }
 
 async function load(): Promise<Database> {
+  // Sin disco donde escribir, la memoria es la única versión fiable: releerla
+  // del archivo devolvería siempre la base vacía y perdería los cambios.
+  if (!discoEscribible && memoria) return memoria;
+
   try {
     const raw = await fs.readFile(FILE, "utf8");
     const parsed = JSON.parse(raw) as Partial<Database>;
-    return normalizar({
+    memoria = normalizar({
       creators: parsed.creators ?? [],
       companies: parsed.companies ?? [],
       campaigns: parsed.campaigns ?? [],
@@ -140,8 +165,9 @@ async function load(): Promise<Database> {
       roles: parsed.roles?.length ? parsed.roles : seed().roles,
       settings: parsed.settings ?? {},
     });
+    return memoria;
   } catch {
-    const fresh = seed();
+    const fresh = memoria ?? seed();
     await write(fresh);
     return fresh;
   }
