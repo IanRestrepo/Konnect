@@ -1,0 +1,253 @@
+@import "tailwindcss";
+
+/* ============================================================
+   KONNECT — sistema visual
+   Reglas duras:
+   · Nada con esquina viva. Todo redondeado, radios exactos.
+   · Bordes de 1px, muy tenues. Sin sombras duras.
+   · Poppins, con interletrado ajustado.
+   · Un solo acento, usado poco. Sin emojis.
+   ============================================================ */
+
+:root,
+[data-theme="light"] {
+  --canvas: #f1f1f4;
+  --surface: #ffffff;
+  --surface-2: #f7f7f9;
+  --surface-3: #eeeef1;
+  --line: rgba(17, 17, 22, 0.07);
+  --line-strong: rgba(17, 17, 22, 0.13);
+
+  --text: #16161a;
+  --text-muted: #6c6c78;
+  --text-subtle: #a0a0ae;
+
+  --accent: #0046d9;
+  --accent-fg: #ffffff;
+  --accent-soft: rgba(0, 70, 217, 0.1);
+
+  /* Azul de marca, fijo: no cambia con el acento elegido. */
+  --brand: #0046d9;
+
+  --solid: #16161a;
+  --solid-fg: #ffffff;
+
+  --ok: #17803d;
+  --ok-soft: rgba(23, 128, 61, 0.1);
+  --warn: #a16207;
+  --warn-soft: rgba(161, 98, 7, 0.11);
+  --danger: #be123c;
+  --danger-soft: rgba(190, 18, 60, 0.09);
+  --info: #1d4ed8;
+  --info-soft: rgba(29, 78, 216, 0.09);
+
+  --shadow-soft: 0 1px 2px rgba(17, 17, 22, 0.04);
+  --shadow-pop: 0 4px 12px rgba(17, 17, 22, 0.06), 0 24px 56px -24px rgba(17, 17, 22, 0.28);
+}
+
+[data-theme="dark"] {
+  --canvas: #0e0e11;
+  --surface: #17171b;
+  --surface-2: #1d1d22;
+  --surface-3: #26262d;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.16);
+
+  --text: #f2f2f5;
+  --text-muted: #a0a0ad;
+  --text-subtle: #71717f;
+
+  --accent: #6f9dff;
+  --accent-fg: #16161a;
+  --accent-soft: rgba(111, 157, 255, 0.14);
+  --brand: #ffffff;
+
+  --solid: #f2f2f5;
+  --solid-fg: #16161a;
+
+  --ok: #5cc98a;
+  --ok-soft: rgba(92, 201, 138, 0.13);
+  --warn: #dfa94a;
+  --warn-soft: rgba(223, 169, 74, 0.13);
+  --danger: #ef7285;
+  --danger-soft: rgba(239, 114, 133, 0.13);
+  --info: #7ba2f5;
+  --info-soft: rgba(123, 162, 245, 0.13);
+
+  --shadow-soft: none;
+  --shadow-pop: 0 24px 56px -20px rgba(0, 0, 0, 0.8);
+}
+
+/* ---------- Radios: ninguno en cero ---------- */
+:root {
+  --r-panel: 20px;
+  --r-card: 16px;
+  --r-control: 12px;
+  --r-chip: 10px;
+  --r-pill: 999px;
+  --page: 1120px;
+}
+
+/* ---------- Acentos ---------- */
+[data-accent="konnect"] { --accent: #0046d9; --accent-soft: rgba(0, 70, 217, 0.1); }
+[data-accent="indigo"] { --accent: #4f46e5; --accent-soft: rgba(79, 70, 229, 0.1); }
+[data-accent="violeta"] { --accent: #7c3aed; --accent-soft: rgba(124, 58, 237, 0.1); }
+[data-accent="azul"] { --accent: #1d69d4; --accent-soft: rgba(29, 105, 212, 0.1); }
+[data-accent="verde"] { --accent: #15794a; --accent-soft: rgba(21, 121, 74, 0.1); }
+[data-accent="ambar"] { --accent: #b45309; --accent-soft: rgba(180, 83, 9, 0.1); }
+[data-accent="rosa"] { --accent: #be185d; --accent-soft: rgba(190, 24, 93, 0.1); }
+[data-accent="tinta"] { --accent: #26262d; --accent-soft: rgba(38, 38, 45, 0.08); }
+
+[data-theme="dark"][data-accent="konnect"] { --accent: #6f9dff; --accent-fg: #16161a; --accent-soft: rgba(111, 157, 255, 0.14); }
+[data-theme="dark"][data-accent="indigo"] { --accent: #8b87ff; --accent-fg: #16161a; --accent-soft: rgba(139, 135, 255, 0.14); }
+[data-theme="dark"][data-accent="violeta"] { --accent: #a78bfa; --accent-fg: #16161a; --accent-soft: rgba(167, 139, 250, 0.14); }
+[data-theme="dark"][data-accent="azul"] { --accent: #7ba2f5; --accent-fg: #16161a; --accent-soft: rgba(123, 162, 245, 0.14); }
+[data-theme="dark"][data-accent="verde"] { --accent: #5cc98a; --accent-fg: #16161a; --accent-soft: rgba(92, 201, 138, 0.14); }
+[data-theme="dark"][data-accent="ambar"] { --accent: #e0a955; --accent-fg: #16161a; --accent-soft: rgba(224, 169, 85, 0.14); }
+[data-theme="dark"][data-accent="rosa"] { --accent: #ef7ba6; --accent-fg: #16161a; --accent-soft: rgba(239, 123, 166, 0.14); }
+[data-theme="dark"][data-accent="tinta"] { --accent: #e8e8ee; --accent-fg: #16161a; --accent-soft: rgba(232, 232, 238, 0.12); }
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--line);
+  --color-text: var(--text);
+  --color-muted: var(--text-muted);
+  --color-subtle: var(--text-subtle);
+  --color-accent: var(--accent);
+  --font-sans: var(--font-poppins), ui-sans-serif, system-ui, sans-serif;
+}
+
+html {
+  color-scheme: light;
+}
+[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--canvas);
+  color: var(--text);
+  font-family: var(--font-poppins), ui-sans-serif, system-ui, sans-serif;
+  font-size: 13.5px;
+  font-weight: 400;
+  line-height: 1.55;
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Poppins es ancha: los titulares piden interletrado más cerrado. */
+h1,
+h2,
+h3 {
+  letter-spacing: -0.03em;
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+[data-theme-transition] *,
+[data-theme-transition] *::before,
+[data-theme-transition] *::after {
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease;
+}
+
+/* ---------- utilidades ---------- */
+
+.eyebrow {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-subtle);
+  letter-spacing: -0.005em;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.display {
+  font-size: 22px;
+  line-height: 1.15;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+}
+
+@media (min-width: 640px) {
+  .display {
+    font-size: 26px;
+  }
+}
+
+.page {
+  width: 100%;
+  max-width: var(--page);
+  margin-inline: auto;
+}
+
+[data-density="compacta"] {
+  --page: 1400px;
+}
+
+@keyframes layer-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes veil-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.animate-layer {
+  animation: layer-in 180ms cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+.animate-veil {
+  animation: veil-in 160ms ease;
+}
+
+/* Tailwind v4 ya no pone el cursor de mano en los controles: lo devolvemos. */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+summary,
+label[for],
+select:not(:disabled),
+a[href] {
+  cursor: pointer;
+}
+
+button:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+}

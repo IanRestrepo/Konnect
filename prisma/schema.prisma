@@ -1,0 +1,214 @@
+// Esquema de Konnect — Postgres (Neon).
+// Los campos bancarios se guardan cifrados (AES-256-GCM) mediante lib/crypto.ts.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum CreatorStatus {
+  activo
+  pausado
+  prospecto
+  archivado
+}
+
+enum CompanyStatus {
+  activo
+  prospecto
+  inactivo
+}
+
+enum CampaignStatus {
+  borrador
+  activa
+  pausada
+  finalizada
+}
+
+enum CampaignObjective {
+  awareness
+  trafico
+  conversiones
+  lanzamiento
+}
+
+enum DeliverableType {
+  video
+  short
+  integracion
+}
+
+enum DeliverableStatus {
+  pendiente
+  en_revision
+  publicado
+  cancelado
+}
+
+enum PaymentMethod {
+  transferencia
+  paypal
+  wise
+  binance
+  deel
+  efectivo
+}
+
+model Creator {
+  id         String        @id @default(cuid())
+  name       String
+  handle     String
+  channelId  String        @unique
+  channelUrl String
+  avatarUrl  String?
+  country    String?
+  category   String
+  status     CreatorStatus @default(prospecto)
+
+  email String
+  phone String
+
+  // Métricas públicas del canal (YouTube Data API)
+  subscribers      Int      @default(0)
+  totalViews       BigInt   @default(0)
+  videoCount       Int      @default(0)
+  metricsUpdatedAt DateTime?
+
+  currency        String          @default("USD")
+  rateVideo       Decimal         @default(0) @db.Decimal(12, 2)
+  rateShort       Decimal         @default(0) @db.Decimal(12, 2)
+  rateIntegration Decimal         @default(0) @db.Decimal(12, 2)
+  paymentMethods  PaymentMethod[]
+
+  // Confidencial: cifrado en reposo. Los *Last4 permiten la vista censurada.
+  bankHolder        String?
+  bankName          String?
+  bankAccountEnc    String?
+  bankAccountLast4  String?
+  bankRoutingEnc    String?
+  bankRoutingLast4  String?
+  taxIdEnc          String?
+  taxIdLast4        String?
+  paypalEmailEnc    String?
+  bankNotesEnc      String?
+
+  notes        String?
+  deliverables Deliverable[]
+  accessLogs   SensitiveAccessLog[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([category])
+}
+
+model Company {
+  id          String        @id @default(cuid())
+  name        String
+  industry    String
+  website     String?
+  contactName String
+  contactRole String?
+  email       String
+  phone       String
+  instagram   String?
+  tiktok      String?
+  youtube     String?
+  linkedin    String?
+  status      CompanyStatus @default(prospecto)
+  notes       String?
+
+  campaigns Campaign[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+}
+
+model Campaign {
+  id        String            @id @default(cuid())
+  name      String
+  companyId String
+  company   Company           @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  status    CampaignStatus    @default(borrador)
+  objective CampaignObjective @default(awareness)
+  currency  String            @default("USD")
+  budget    Decimal           @default(0) @db.Decimal(12, 2)
+  agencyFee Decimal?          @db.Decimal(5, 2)
+  startDate DateTime
+  endDate   DateTime?
+  notes     String?
+
+  deliverables Deliverable[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([companyId])
+  @@index([status])
+}
+
+model Deliverable {
+  id         String            @id @default(cuid())
+  campaignId String
+  campaign   Campaign          @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  creatorId  String
+  creator    Creator           @relation(fields: [creatorId], references: [id], onDelete: Restrict)
+  type       DeliverableType
+  status     DeliverableStatus @default(pendiente)
+  agreedFee  Decimal           @default(0) @db.Decimal(12, 2)
+
+  // Datos públicos del video
+  videoId         String?
+  videoUrl        String?
+  title           String?
+  thumbnail       String?
+  publishedAt     DateTime?
+  durationSeconds Int?
+
+  views            BigInt?
+  likes            Int?
+  comments         Int?
+  metricsUpdatedAt DateTime?
+
+  snapshots MetricSnapshot[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([campaignId])
+  @@index([creatorId])
+}
+
+/// Histórico de métricas para graficar la evolución de cada pieza.
+model MetricSnapshot {
+  id            String      @id @default(cuid())
+  deliverableId String
+  deliverable   Deliverable @relation(fields: [deliverableId], references: [id], onDelete: Cascade)
+  views         BigInt
+  likes         Int?
+  comments      Int?
+  capturedAt    DateTime    @default(now())
+
+  @@index([deliverableId, capturedAt])
+}
+
+/// Auditoría de cada revelación de datos bancarios.
+model SensitiveAccessLog {
+  id        String   @id @default(cuid())
+  creatorId String
+  creator   Creator  @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  actor     String
+  success   Boolean
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([creatorId, createdAt])
+}
