@@ -7,6 +7,7 @@ import {
   Hash,
   Lock,
   MessagesSquare,
+  Pencil,
   Plus,
   Send,
   Settings2,
@@ -64,6 +65,7 @@ export function ChatView({
 
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [borrador, setBorrador] = useState("");
+  const [editandoMsg, setEditandoMsg] = useState<{ id: string; body: string } | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -102,7 +104,8 @@ export function ChatView({
 
     const ultimo = messages[messages.length - 1]?.createdAt;
     try {
-      const url = new URL(`/api/chat/salas/${activeRoomId}/mensajes`, window.location.origin);
+      const url = new URL("/api/chat/mensajes", window.location.origin);
+      url.searchParams.set("sala", activeRoomId);
       if (ultimo) url.searchParams.set("desde", ultimo);
 
       const res = await fetch(url, { cache: "no-store" });
@@ -137,7 +140,7 @@ export function ChatView({
     setEnviando(true);
     setError(null);
     try {
-      const res = await fetch(`/api/chat/salas/${activeRoomId}/mensajes`, {
+      const res = await fetch(`/api/chat/mensajes?sala=${activeRoomId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ body: texto }),
@@ -155,8 +158,32 @@ export function ChatView({
   }
 
   async function borrarMensaje(id: string) {
+    // Se quita de la vista al instante; si el servidor rechaza, vuelve al refrescar.
     setMessages((prev) => prev.filter((m) => m.id !== id));
-    await fetch(`/api/chat/salas/${activeRoomId}/mensajes?mensaje=${id}`, { method: "DELETE" });
+    await fetch(`/api/chat/mensajes?sala=${activeRoomId}&mensaje=${id}`, { method: "DELETE" });
+  }
+
+  async function guardarEdicion() {
+    if (!editandoMsg) return;
+    const texto = editandoMsg.body.trim();
+    if (!texto) return;
+
+    const { id } = editandoMsg;
+    setEditandoMsg(null);
+
+    try {
+      const res = await fetch(`/api/chat/mensajes?sala=${activeRoomId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messageId: id, body: texto }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "No se pudo editar.");
+
+      setMessages((prev) => prev.map((m) => (m.id === id ? (data.message as ChatMessage) : m)));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error inesperado");
+    }
   }
 
   function abrirNueva() {
@@ -373,22 +400,74 @@ export function ChatView({
                             {horaCorta(grupo.msgs[0].createdAt)}
                           </span>
                         </p>
-                        {grupo.msgs.map((m) => (
-                          <div key={m.id} className="group flex items-start gap-2">
-                            <p className="min-w-0 flex-1 text-[13.5px] leading-relaxed whitespace-pre-wrap">
-                              {m.body}
-                            </p>
-                            {(grupo.propio || puedeGestionar) && (
-                              <button
-                                onClick={() => borrarMensaje(m.id)}
-                                aria-label="Borrar mensaje"
-                                className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-[var(--r-chip)] text-[var(--text-subtle)] opacity-0 transition group-hover:opacity-100 hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"
-                              >
-                                <Trash2 size={12} />
-                              </button>
-                            )}
-                          </div>
-                        ))}
+                        {grupo.msgs.map((m) => {
+                          const editable = grupo.propio || puedeGestionar;
+                          const enEdicion = editandoMsg?.id === m.id;
+
+                          if (enEdicion) {
+                            return (
+                              <div key={m.id} className="py-1">
+                                <Textarea
+                                  value={editandoMsg.body}
+                                  onChange={(e) =>
+                                    setEditandoMsg({ id: m.id, body: e.target.value })
+                                  }
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter" && !e.shiftKey) {
+                                      e.preventDefault();
+                                      guardarEdicion();
+                                    }
+                                    if (e.key === "Escape") setEditandoMsg(null);
+                                  }}
+                                  rows={1}
+                                  className="min-h-9"
+                                  autoFocus
+                                  aria-label="Editar mensaje"
+                                />
+                                <p className="mt-1 text-[11.5px] text-[var(--text-subtle)]">
+                                  Enter guarda · Escape cancela
+                                </p>
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <div
+                              key={m.id}
+                              className="group relative -mx-2 rounded-[var(--r-chip)] px-2 py-0.5 transition-colors hover:bg-[var(--surface-2)]"
+                            >
+                              <p className="text-[13.5px] leading-relaxed whitespace-pre-wrap">
+                                {m.body}
+                                {m.editedAt && (
+                                  <span className="ml-1.5 text-[11px] text-[var(--text-subtle)]">
+                                    (editado)
+                                  </span>
+                                )}
+                              </p>
+
+                              {editable && (
+                                <div className="absolute -top-3 right-1 hidden items-center gap-0.5 rounded-[var(--r-chip)] border border-[var(--line)] bg-[var(--surface)] p-0.5 shadow-[var(--shadow-soft)] group-hover:flex">
+                                  <button
+                                    onClick={() => setEditandoMsg({ id: m.id, body: m.body })}
+                                    aria-label="Editar mensaje"
+                                    title="Editar"
+                                    className="grid h-6 w-6 place-items-center rounded-[var(--r-chip)] text-[var(--text-subtle)] transition hover:bg-[var(--surface-2)] hover:text-[var(--text)]"
+                                  >
+                                    <Pencil size={12} />
+                                  </button>
+                                  <button
+                                    onClick={() => borrarMensaje(m.id)}
+                                    aria-label="Borrar mensaje"
+                                    title="Borrar"
+                                    className="grid h-6 w-6 place-items-center rounded-[var(--r-chip)] text-[var(--text-subtle)] transition hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   ))}

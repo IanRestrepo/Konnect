@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { decrypt, encrypt } from "@/lib/crypto";
 import { codeHint, generateAccessCode, normalizeAccessCode } from "@/lib/portal";
 import type {
+  Announcement,
   BankingInfo,
   Campaign,
   ChatMessage,
@@ -38,6 +39,8 @@ import type {
 export type Settings = {
   /** Clave de YouTube guardada desde Configuración. `YOUTUBE_API_KEY` tiene prioridad. */
   youtubeApiKey?: string;
+  /** Módulos apagados por el desarrollador. Pesan más que cualquier permiso. */
+  disabledModules?: string[];
 };
 
 export type Database = {
@@ -327,6 +330,13 @@ function toRole(row: RoleRow): Role {
 /* ---------------- Roles de arranque ---------------- */
 
 const ROLES_BASE = [
+  {
+    id: "rol_developer",
+    name: "Developer",
+    color: "#6d28d9",
+    permissions: ["**"],
+    system: true,
+  },
   {
     id: "rol_admin",
     name: "Administración",
@@ -825,7 +835,28 @@ export async function addDeliverable(
 
 export async function getSettings(): Promise<Settings> {
   const row = await prisma.settings.findUnique({ where: { id: "default" } });
-  return { youtubeApiKey: row?.youtubeApiKey ?? undefined };
+  return {
+    youtubeApiKey: row?.youtubeApiKey ?? undefined,
+    disabledModules: row?.disabledModules ?? [],
+  };
+}
+
+/** Solo los módulos apagados. Se consulta en cada página protegida. */
+export async function getDisabledModules(): Promise<string[]> {
+  const row = await prisma.settings.findUnique({
+    where: { id: "default" },
+    select: { disabledModules: true },
+  });
+  return row?.disabledModules ?? [];
+}
+
+export async function setDisabledModules(keys: string[]): Promise<string[]> {
+  const row = await prisma.settings.upsert({
+    where: { id: "default" },
+    update: { disabledModules: keys },
+    create: { id: "default", disabledModules: keys },
+  });
+  return row.disabledModules;
 }
 
 export async function saveSettings(patch: Settings): Promise<Settings> {
@@ -834,7 +865,10 @@ export async function saveSettings(patch: Settings): Promise<Settings> {
     update: { youtubeApiKey: patch.youtubeApiKey ?? null },
     create: { id: "default", youtubeApiKey: patch.youtubeApiKey ?? null },
   });
-  return { youtubeApiKey: row.youtubeApiKey ?? undefined };
+  return {
+    youtubeApiKey: row.youtubeApiKey ?? undefined,
+    disabledModules: row.disabledModules,
+  };
 }
 
 /** Deja la base como recién sembrada. Útil al probar. */
@@ -1419,5 +1453,105 @@ export async function deleteMessage(
       ...(options.onlyAuthorId ? { authorId: options.onlyAuthorId } : {}),
     },
   });
+  return count > 0;
+}
+
+/** Edita un mensaje. Sin permiso de gestión, solo los propios. */
+export async function editMessage(
+  roomId: string,
+  messageId: string,
+  body: string,
+  options: { onlyAuthorId?: string } = {},
+): Promise<ChatMessage | null> {
+  const { count } = await prisma.chatMessage.updateMany({
+    where: {
+      id: messageId,
+      roomId,
+      ...(options.onlyAuthorId ? { authorId: options.onlyAuthorId } : {}),
+    },
+    data: { body, editedAt: new Date() },
+  });
+  if (!count) return null;
+
+  const row = await prisma.chatMessage.findUnique({ where: { id: messageId } });
+  if (!row) return null;
+
+  return {
+    id: row.id,
+    roomId: row.roomId,
+    authorId: row.authorId,
+    authorName: row.authorName,
+    body: row.body,
+    editedAt: isoOrNull(row.editedAt),
+    createdAt: iso(row.createdAt),
+  };
+}
+
+/* ---------------- Avisos del desarrollador ---------------- */
+
+function toAnnouncement(row: Prisma.AnnouncementGetPayload<object>): Announcement {
+  return {
+    id: row.id,
+    message: row.message,
+    tone: row.tone,
+    active: row.active,
+    roleIds: row.roleIds,
+    dismissible: row.dismissible,
+    createdAt: iso(row.createdAt),
+  };
+}
+
+export async function listAnnouncements(): Promise<Announcement[]> {
+  const rows = await prisma.announcement.findMany({ orderBy: { createdAt: "desc" } });
+  return rows.map(toAnnouncement);
+}
+
+/** Los que le tocan a un rol concreto. Vacío en `roleIds` = para todos. */
+export async function activeAnnouncementsFor(roleId: string): Promise<Announcement[]> {
+  const rows = await prisma.announcement.findMany({
+    where: { active: true },
+    orderBy: { createdAt: "desc" },
+  });
+  return rows
+    .map(toAnnouncement)
+    .filter((a) => !a.roleIds.length || a.roleIds.includes(roleId));
+}
+
+export async function createAnnouncement(input: {
+  message: string;
+  tone?: Announcement["tone"];
+  roleIds?: string[];
+  dismissible?: boolean;
+}): Promise<Announcement> {
+  const row = await prisma.announcement.create({
+    data: {
+      id: newId("av"),
+      message: input.message,
+      tone: input.tone ?? "info",
+      roleIds: input.roleIds ?? [],
+      dismissible: input.dismissible ?? true,
+    },
+  });
+  return toAnnouncement(row);
+}
+
+export async function updateAnnouncement(
+  id: string,
+  patch: {
+    message?: string;
+    tone?: Announcement["tone"];
+    active?: boolean;
+    roleIds?: string[];
+    dismissible?: boolean;
+  },
+): Promise<Announcement | null> {
+  const existe = await prisma.announcement.findUnique({ where: { id }, select: { id: true } });
+  if (!existe) return null;
+  const row = await prisma.announcement.update({ where: { id }, data: patch });
+  return toAnnouncement(row);
+}
+
+export async function deleteAnnouncement(id: string): Promise<boolean> {
+  const { count } = await prisma.announcement.deleteMany({ where: { id } });
   return count > 0;
 }

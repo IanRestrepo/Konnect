@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getSession } from "@/lib/session";
-import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+import { DEVELOPER_ROLE_ID, hasPermission, isDeveloper, PERMISSIONS } from "@/lib/permissions";
 import { createRole, listRoles } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +18,14 @@ const schema = z.object({
 export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Sin sesión." }, { status: 401 });
-  return NextResponse.json({ roles: await listRoles() });
+
+  // El rol reservado no existe para nadie más: ni se ve ni se puede asignar.
+  const roles = await listRoles();
+  return NextResponse.json({
+    roles: isDeveloper(session.permissions)
+      ? roles
+      : roles.filter((r) => r.id !== DEVELOPER_ROLE_ID),
+  });
 }
 
 export async function POST(request: Request) {

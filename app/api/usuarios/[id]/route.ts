@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { hashPassword } from "@/lib/password";
 import { getSession } from "@/lib/session";
-import { hasPermission } from "@/lib/permissions";
+import { DEVELOPER_ROLE_ID, hasPermission, isDeveloper } from "@/lib/permissions";
 import { deleteUser, listUsers, toPublicUser, updateUser } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -29,6 +29,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   const { id } = await params;
+
+  // La cuenta reservada solo la toca su dueño.
+  const objetivo = (await listUsers()).find((u) => u.id === id);
+  if (objetivo?.roleId === DEVELOPER_ROLE_ID && !isDeveloper(session.permissions)) {
+    return NextResponse.json({ error: "Usuario no encontrado." }, { status: 404 });
+  }
+
   const body = await request.json().catch(() => null);
   const parsed = schema.safeParse(body);
   if (!parsed.success) {

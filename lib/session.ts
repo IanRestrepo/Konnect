@@ -1,7 +1,13 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { SESSION_COOKIE, readToken, type SessionPayload } from "@/lib/auth";
-import { firstAllowedPath, hasPermission, type PermissionId } from "@/lib/permissions";
+import {
+  firstAllowedPath,
+  hasPermission,
+  isDeveloper,
+  type PermissionId,
+} from "@/lib/permissions";
+import { getDisabledModules } from "@/lib/store";
 
 /** Sesión del usuario en componentes de servidor y rutas de API. */
 export async function getSession(): Promise<SessionPayload | null> {
@@ -25,6 +31,14 @@ export async function requirePermission(permission: PermissionId): Promise<Sessi
   if (!hasPermission(session.permissions, permission)) {
     redirect(firstAllowedPath(session.permissions));
   }
+
+  // Un módulo apagado por el desarrollador se cierra para todos, incluida la
+  // administración. Él sigue entrando, porque si no no podría reactivarlo.
+  if (!isDeveloper(session.permissions)) {
+    const apagados = await getDisabledModules();
+    if (apagados.includes(permission)) redirect("/");
+  }
+
   return session;
 }
 

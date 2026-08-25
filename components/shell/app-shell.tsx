@@ -4,6 +4,8 @@ import { usePathname } from "next/navigation";
 import { Sidebar } from "@/components/shell/sidebar";
 import { MobileDock } from "@/components/shell/mobile-dock";
 import { useSession } from "@/components/session-provider";
+import { Announcements } from "@/components/shell/announcements";
+import type { Announcement } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 /** Rutas que ocupan todo el lienzo y gestionan su propio scroll (bandejas, tableros). */
@@ -15,7 +17,13 @@ const FULL_BLEED = ["/mensajes", "/chat"];
  */
 const BARE = ["/entrar", "/portal"];
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppShell({
+  children,
+  announcements = [],
+}: {
+  children: React.ReactNode;
+  announcements?: Announcement[];
+}) {
   const pathname = usePathname();
   const session = useSession();
 
@@ -38,9 +46,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         )}
       >
         {fullBleed ? (
-          children
+          <div className="flex h-full flex-col">
+            <Announcements items={announcements} />
+            <div className="min-h-0 flex-1">{children}</div>
+          </div>
         ) : (
-          <div className="page px-4 py-6 pb-28 sm:px-6 md:px-8 md:py-8 md:pb-20">{children}</div>
+          <>
+            <Announcements items={announcements} />
+            <div className="page px-4 py-6 pb-28 sm:px-6 md:px-8 md:py-8 md:pb-20">{children}</div>
+          </>
         )}
       </main>
 

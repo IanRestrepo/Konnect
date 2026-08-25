@@ -5,6 +5,7 @@ import { PreferencesProvider } from "@/components/preferences-provider";
 import { SessionProvider } from "@/components/session-provider";
 import { AppShell } from "@/components/shell/app-shell";
 import { getSession } from "@/lib/session";
+import { activeAnnouncementsFor, getDisabledModules } from "@/lib/store";
 import { DEFAULT_PREFERENCES, THEME_SCRIPT } from "@/lib/theme";
 
 const poppins = Poppins({
@@ -20,6 +21,9 @@ export const metadata: Metadata = {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
+  const [announcements, disabledModules] = session
+    ? await Promise.all([activeAnnouncementsFor(session.roleId), getDisabledModules()])
+    : [[], []];
 
   return (
     <html
@@ -35,8 +39,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       </head>
       <body className="min-h-full">
         <PreferencesProvider>
-          <SessionProvider session={session}>
-            <AppShell>{children}</AppShell>
+          <SessionProvider session={session} disabledModules={disabledModules}>
+            <AppShell announcements={announcements}>{children}</AppShell>
           </SessionProvider>
         </PreferencesProvider>
       </body>

@@ -125,14 +125,33 @@ export const PERMISSION_GROUPS = ["Páginas", "Acciones", "Datos sensibles", "Ad
 /** Comodín del rol de administración: concede todo, presente y futuro. */
 export const ALL_PERMISSIONS = "*" as const;
 
-export type RolePermissions = PermissionId[] | [typeof ALL_PERMISSIONS];
+/**
+ * Comodín del desarrollador. Pesa más que el de administración: pasa por
+ * encima de los módulos apagados y es el único que puede tocar el propio rol
+ * de desarrollador. La administración de la agencia no puede concederlo.
+ */
+export const DEVELOPER = "**" as const;
+
+/** Identificador del rol reservado. No se puede editar ni eliminar. */
+export const DEVELOPER_ROLE_ID = "rol_developer";
+
+export type RolePermissions =
+  | PermissionId[]
+  | [typeof ALL_PERMISSIONS]
+  | [typeof DEVELOPER];
 
 export function hasPermission(
   permissions: readonly string[] | undefined,
   permission: PermissionId,
 ): boolean {
   if (!permissions) return false;
+  if (permissions.includes(DEVELOPER)) return true;
   return permissions.includes(ALL_PERMISSIONS) || permissions.includes(permission);
+}
+
+/** Quien lo tenga manda sobre todo lo demás, incluidos los administradores. */
+export function isDeveloper(permissions: readonly string[] | undefined): boolean {
+  return Boolean(permissions?.includes(DEVELOPER));
 }
 
 /** Ruta protegida → permiso que la habilita. */

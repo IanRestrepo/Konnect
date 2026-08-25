@@ -279,3 +279,18 @@ export type ChatMessage = {
   editedAt: string | null;
   createdAt: string;
 };
+
+/* ---------------- Avisos del desarrollador ---------------- */
+
+export type AnnouncementTone = "info" | "ok" | "warn" | "danger";
+
+export type Announcement = {
+  id: string;
+  message: string;
+  tone: AnnouncementTone;
+  active: boolean;
+  /** Vacío = lo ve todo el mundo. Con roles = solo esos roles. */
+  roleIds: string[];
+  dismissible: boolean;
+  createdAt: string;
+};

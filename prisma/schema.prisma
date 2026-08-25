@@ -351,6 +351,9 @@ model Settings {
   id            String  @id @default("default")
   youtubeApiKey String?
 
+  /// Módulos apagados por el desarrollador. Pesan más que cualquier permiso.
+  disabledModules String[]
+
   updatedAt DateTime @updatedAt
 }
 
@@ -482,4 +485,31 @@ model ChatMessage {
   createdAt DateTime @default(now())
 
   @@index([roomId, createdAt])
+}
+
+/* ---------------- Avisos del desarrollador ---------------- */
+
+enum AnnouncementTone {
+  info
+  ok
+  warn
+  danger
+}
+
+/// Banner que el desarrollador muestra dentro de la aplicación.
+model Announcement {
+  id      String           @id
+  message String
+  tone    AnnouncementTone @default(info)
+  active  Boolean          @default(true)
+
+  /// Vacío = lo ve todo el mundo. Con roles = solo esos roles.
+  roleIds String[]
+  /// Si se puede cerrar, cada quien lo oculta en su navegador.
+  dismissible Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([active, createdAt])
 }

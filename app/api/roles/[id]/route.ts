@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getSession } from "@/lib/session";
-import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+import { DEVELOPER_ROLE_ID, hasPermission, isDeveloper, PERMISSIONS } from "@/lib/permissions";
 import { deleteRole, updateRole } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +22,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   const { id } = await params;
+  if (id === DEVELOPER_ROLE_ID && !isDeveloper(session.permissions)) {
+    return NextResponse.json({ error: "Rol no encontrado." }, { status: 404 });
+  }
+
   const body = await request.json().catch(() => null);
   const parsed = schema.safeParse(body);
   if (!parsed.success) {
@@ -45,6 +49,10 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   }
 
   const { id } = await params;
+  if (id === DEVELOPER_ROLE_ID && !isDeveloper(session.permissions)) {
+    return NextResponse.json({ error: "Rol no encontrado." }, { status: 404 });
+  }
+
   const result = await deleteRole(id);
   if (!result.ok) return NextResponse.json({ error: result.error }, { status: 409 });
 

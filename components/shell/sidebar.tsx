@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { Terminal } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { NAV_ITEMS } from "@/lib/nav";
-import { useCan } from "@/components/session-provider";
+import { useCan, useIsDeveloper } from "@/components/session-provider";
 import { OptionsMenu } from "@/components/shell/options-menu";
 import { KonnectMark } from "@/components/brand/logo";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -14,6 +15,7 @@ import { cn } from "@/lib/utils";
 export function Sidebar() {
   const pathname = usePathname();
   const can = useCan();
+  const soyDev = useIsDeveloper();
   const items = NAV_ITEMS.filter((item) => can(item.permission));
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -48,6 +50,23 @@ export function Sidebar() {
             </Tooltip>
           );
         })}
+
+        {/* Atajo al panel reservado. Para el resto del equipo no existe. */}
+        {soyDev && (
+          <Tooltip label="Developer">
+            <Link
+              href="/developer"
+              className={cn(
+                "grid h-10 w-10 place-items-center rounded-[var(--r-control)] border transition",
+                isActive("/developer")
+                  ? "border-transparent bg-[var(--solid)] text-[var(--solid-fg)]"
+                  : "border-transparent text-[var(--text-subtle)] hover:border-[var(--line)] hover:bg-[var(--surface)] hover:text-[var(--text)]",
+              )}
+            >
+              <Terminal size={18} strokeWidth={1.75} />
+            </Link>
+          </Tooltip>
+        )}
       </nav>
 
       <div className="mt-auto flex flex-col items-center gap-2 pt-5">
