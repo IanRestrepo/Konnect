@@ -5,6 +5,8 @@ import { codeHint, generateAccessCode, normalizeAccessCode } from "@/lib/portal"
 import type {
   BankingInfo,
   Campaign,
+  ChatMessage,
+  ChatRoom,
   CollabSession,
   Company,
   Contact,
@@ -1247,4 +1249,175 @@ export async function verifyPortalCode(
     label: encontrado.label,
     canUpload: encontrado.canUpload,
   };
+}
+
+/* ---------------- Chat interno ---------------- */
+
+type ChatRoomRow = Prisma.ChatRoomGetPayload<object> & {
+  messages?: { createdAt: Date }[];
+  _count?: { messages: number };
+};
+
+function toRoom(row: ChatRoomRow): ChatRoom {
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    color: row.color,
+    archived: row.archived,
+    roleIds: row.roleIds,
+    createdAt: iso(row.createdAt),
+    lastMessageAt: isoOrNull(row.messages?.[0]?.createdAt ?? null),
+    messageCount: row._count?.messages ?? 0,
+  };
+}
+
+/**
+ * Una sala sin roles es del equipo entero. Con roles, solo entran esos roles;
+ * administración entra siempre, porque si no podría crear una sala y quedarse
+ * fuera de ella.
+ */
+export function canSeeRoom(room: ChatRoom, roleId: string, permissions: readonly string[]): boolean {
+  if (!room.roleIds.length) return true;
+  if (permissions.includes("*")) return true;
+  return room.roleIds.includes(roleId);
+}
+
+export async function listRooms(): Promise<ChatRoom[]> {
+  const rows = await prisma.chatRoom.findMany({
+    include: {
+      messages: { orderBy: { createdAt: "desc" }, take: 1, select: { createdAt: true } },
+      _count: { select: { messages: true } },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+  return rows.map(toRoom);
+}
+
+export async function getRoom(id: string): Promise<ChatRoom | null> {
+  const row = await prisma.chatRoom.findUnique({
+    where: { id },
+    include: {
+      messages: { orderBy: { createdAt: "desc" }, take: 1, select: { createdAt: true } },
+      _count: { select: { messages: true } },
+    },
+  });
+  return row ? toRoom(row) : null;
+}
+
+export async function createRoom(input: {
+  name: string;
+  description?: string;
+  color?: string;
+  roleIds?: string[];
+}): Promise<ChatRoom> {
+  const row = await prisma.chatRoom.create({
+    data: {
+      id: newId("sa"),
+      name: input.name,
+      description: input.description ?? "",
+      color: input.color ?? "#0046d9",
+      roleIds: input.roleIds ?? [],
+    },
+  });
+  return toRoom(row);
+}
+
+export async function updateRoom(
+  id: string,
+  patch: {
+    name?: string;
+    description?: string;
+    color?: string;
+    archived?: boolean;
+    roleIds?: string[];
+  },
+): Promise<ChatRoom | null> {
+  const existe = await prisma.chatRoom.findUnique({ where: { id }, select: { id: true } });
+  if (!existe) return null;
+
+  await prisma.chatRoom.update({ where: { id }, data: patch });
+  return getRoom(id);
+}
+
+export async function deleteRoom(id: string): Promise<boolean> {
+  const { count } = await prisma.chatRoom.deleteMany({ where: { id } });
+  return count > 0;
+}
+
+/**
+ * Mensajes de una sala. `after` trae solo lo nuevo, que es lo que consulta el
+ * sondeo del navegador: así cada comprobación es una lectura mínima por índice.
+ */
+export async function listMessages(
+  roomId: string,
+  options: { after?: string; limit?: number } = {},
+): Promise<ChatMessage[]> {
+  const desde = toDate(options.after);
+
+  const rows = await prisma.chatMessage.findMany({
+    where: { roomId, ...(desde ? { createdAt: { gt: desde } } : {}) },
+    orderBy: { createdAt: desde ? "asc" : "desc" },
+    take: options.limit ?? 60,
+  });
+
+  // Sin cursor se piden los últimos, así que hay que devolverlos en orden.
+  const ordenados = desde ? rows : rows.reverse();
+
+  return ordenados.map((m) => ({
+    id: m.id,
+    roomId: m.roomId,
+    authorId: m.authorId,
+    authorName: m.authorName,
+    body: m.body,
+    editedAt: isoOrNull(m.editedAt),
+    createdAt: iso(m.createdAt),
+  }));
+}
+
+export async function sendMessage(
+  roomId: string,
+  input: { authorId: string; authorName: string; body: string },
+): Promise<ChatMessage | null> {
+  const sala = await prisma.chatRoom.findUnique({
+    where: { id: roomId },
+    select: { id: true, archived: true },
+  });
+  if (!sala || sala.archived) return null;
+
+  const row = await prisma.chatMessage.create({
+    data: {
+      id: newId("ms"),
+      roomId,
+      authorId: input.authorId,
+      authorName: input.authorName,
+      body: input.body,
+    },
+  });
+
+  return {
+    id: row.id,
+    roomId: row.roomId,
+    authorId: row.authorId,
+    authorName: row.authorName,
+    body: row.body,
+    editedAt: isoOrNull(row.editedAt),
+    createdAt: iso(row.createdAt),
+  };
+}
+
+/** Borra un mensaje. Sin permiso de gestión, solo los propios. */
+export async function deleteMessage(
+  roomId: string,
+  messageId: string,
+  options: { onlyAuthorId?: string } = {},
+): Promise<boolean> {
+  const { count } = await prisma.chatMessage.deleteMany({
+    where: {
+      id: messageId,
+      roomId,
+      ...(options.onlyAuthorId ? { authorId: options.onlyAuthorId } : {}),
+    },
+  });
+  return count > 0;
 }

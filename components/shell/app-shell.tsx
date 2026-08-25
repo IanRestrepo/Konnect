@@ -7,7 +7,7 @@ import { useSession } from "@/components/session-provider";
 import { cn } from "@/lib/utils";
 
 /** Rutas que ocupan todo el lienzo y gestionan su propio scroll (bandejas, tableros). */
-const FULL_BLEED = ["/mensajes"];
+const FULL_BLEED = ["/mensajes", "/chat"];
 
 /**
  * Rutas sin marco de aplicación: se dibujan solas. El portal va aquí aunque

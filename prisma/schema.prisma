@@ -338,6 +338,8 @@ model User {
   active       Boolean   @default(true)
   lastLoginAt  DateTime?
 
+  messages ChatMessage[]
+
   createdAt DateTime @default(now())
 
   @@index([roleId])
@@ -439,4 +441,45 @@ model SessionItem {
   createdAt DateTime @default(now())
 
   @@index([sessionId, createdAt])
+}
+
+/* ---------------- Chat interno del equipo ---------------- */
+
+/// Sala de conversación del equipo. Las crea quien gestiona el chat.
+model ChatRoom {
+  id          String  @id
+  name        String
+  description String  @default("")
+  /// Color de la etiqueta, como en los roles.
+  color       String  @default("#0046d9")
+  archived    Boolean @default(false)
+
+  /// Vacío = entra todo el equipo. Con roles = solo esos roles y administración.
+  roleIds String[]
+
+  messages ChatMessage[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([archived, createdAt])
+}
+
+model ChatMessage {
+  id     String   @id
+  roomId String
+  room   ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  /// Se queda en null si la cuenta se elimina: el hilo no debe perder mensajes.
+  authorId String?
+  author   User?   @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  /// Nombre en el momento de enviar, para que el hilo siga legible después.
+  authorName String
+
+  body     String
+  editedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([roomId, createdAt])
 }

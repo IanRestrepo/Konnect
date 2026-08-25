@@ -253,3 +253,29 @@ export type CollabSession = {
   items: SessionItem[];
   createdAt: string;
 };
+
+/* ---------------- Chat interno ---------------- */
+
+export type ChatRoom = {
+  id: string;
+  name: string;
+  description: string;
+  color: string;
+  archived: boolean;
+  /** Vacío = entra todo el equipo. Con roles = solo esos y administración. */
+  roleIds: string[];
+  createdAt: string;
+  /** Para ordenar por actividad y marcar salas sin estrenar. */
+  lastMessageAt: string | null;
+  messageCount: number;
+};
+
+export type ChatMessage = {
+  id: string;
+  roomId: string;
+  authorId: string | null;
+  authorName: string;
+  body: string;
+  editedAt: string | null;
+  createdAt: string;
+};

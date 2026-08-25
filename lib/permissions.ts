@@ -47,6 +47,13 @@ export const PERMISSIONS = [
     href: "/finanzas",
   },
   {
+    id: "ver_chat",
+    label: "Chat",
+    description: "Salas de conversación del equipo",
+    group: "Páginas",
+    href: "/chat",
+  },
+  {
     id: "ver_sesiones",
     label: "Sesiones",
     description: "Espacios de entrega compartidos con creadores y clientes",
@@ -79,6 +86,13 @@ export const PERMISSIONS = [
     label: "Crear y editar empresas",
     description: "Alta y modificación de clientes",
     group: "Acciones",
+    href: null,
+  },
+  {
+    id: "gestionar_chat",
+    label: "Gestionar salas de chat",
+    description: "Crear, renombrar y archivar salas, y borrar cualquier mensaje",
+    group: "Administración",
     href: null,
   },
   {
@@ -129,6 +143,7 @@ const ROUTE_PERMISSION: { prefix: string; permission: PermissionId }[] = [
   { prefix: "/mensajes", permission: "ver_mensajes" },
   { prefix: "/finanzas", permission: "ver_finanzas" },
   { prefix: "/sesiones", permission: "ver_sesiones" },
+  { prefix: "/chat", permission: "ver_chat" },
   { prefix: "/configuracion", permission: "gestionar_ajustes" },
 ];
 
