@@ -15,6 +15,8 @@ import {
   RefreshCw,
   Trash2,
   TriangleAlert,
+  Upload,
+  KeyRound,
 } from "lucide-react";
 import { PageTitle, SectionHead } from "@/components/ui/section";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,7 +30,8 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
-import { Input, Label, Select, Textarea } from "@/components/ui/field";
+import { Input, Label, Select } from "@/components/ui/field";
+import { MATERIAL_VACIO, MaterialFields, type MaterialDraft } from "@/components/sessions/material-fields";
 import { useCan } from "@/components/session-provider";
 import { PORTAL_ROLE, SESSION_ITEM_KIND, SESSION_STATUS } from "@/lib/labels";
 import type { CollabSession, PortalRole, SessionItemKind } from "@/lib/types";
@@ -54,10 +57,13 @@ const ICONO_ITEM: Record<SessionItemKind, typeof FileText> = {
 
 export function SessionDetail({
   session,
+  portalUrl,
   campaignName,
   creator,
 }: {
   session: CollabSession;
+  /** Se arma en el servidor para que servidor y cliente pinten lo mismo. */
+  portalUrl: string;
   campaignName: string | null;
   creator: CreatorResumen | null;
 }) {
@@ -70,12 +76,7 @@ export function SessionDetail({
   const [copiado, setCopiado] = useState<string | null>(null);
 
   const [itemOpen, setItemOpen] = useState(false);
-  const [item, setItem] = useState({
-    kind: "entregable" as SessionItemKind,
-    title: "",
-    url: "",
-    notes: "",
-  });
+  const [item, setItem] = useState<MaterialDraft>({ ...MATERIAL_VACIO });
 
   const [accesoOpen, setAccesoOpen] = useState(false);
   const [acceso, setAcceso] = useState({
@@ -85,8 +86,7 @@ export function SessionDetail({
   });
 
   const abierta = session.status === "abierta";
-  const enlace =
-    typeof window === "undefined" ? "" : `${window.location.origin}/portal/${session.id}`;
+  const enlace = portalUrl;
 
   async function copiar(texto: string, marca: string) {
     try {
@@ -132,7 +132,7 @@ export function SessionDetail({
       "No se pudo subir el material.",
     );
     if (ok) {
-      setItem({ kind: "entregable", title: "", url: "", notes: "" });
+      setItem({ ...MATERIAL_VACIO });
       setItemOpen(false);
     }
   }
@@ -451,8 +451,9 @@ export function SessionDetail({
       <Modal
         open={itemOpen}
         onClose={() => setItemOpen(false)}
+        icon={Upload}
         title="Subir material"
-        description="Por ahora se comparten enlaces: Drive, YouTube, Frame.io, lo que uses."
+        description="Se comparten enlaces, no archivos."
         footer={
           <>
             <Button variant="ghost" onClick={() => setItemOpen(false)}>
@@ -465,54 +466,13 @@ export function SessionDetail({
           </>
         }
       >
-        <div className="space-y-3">
-          <div>
-            <Label htmlFor="it-kind">Tipo</Label>
-            <Select
-              id="it-kind"
-              value={item.kind}
-              onChange={(e) => setItem({ ...item, kind: e.target.value as SessionItemKind })}
-            >
-              {Object.entries(SESSION_ITEM_KIND).map(([id, k]) => (
-                <option key={id} value={id}>
-                  {k.label}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div>
-            <Label htmlFor="it-title">Título</Label>
-            <Input
-              id="it-title"
-              value={item.title}
-              onChange={(e) => setItem({ ...item, title: e.target.value })}
-              placeholder="Corte final del video"
-            />
-          </div>
-          <div>
-            <Label htmlFor="it-url">Enlace</Label>
-            <Input
-              id="it-url"
-              value={item.url}
-              onChange={(e) => setItem({ ...item, url: e.target.value })}
-              placeholder="https://…"
-            />
-          </div>
-          <div>
-            <Label htmlFor="it-notes">Notas</Label>
-            <Textarea
-              id="it-notes"
-              rows={2}
-              value={item.notes}
-              onChange={(e) => setItem({ ...item, notes: e.target.value })}
-            />
-          </div>
-        </div>
+        <MaterialFields value={item} onChange={setItem} />
       </Modal>
 
       <Modal
         open={accesoOpen}
         onClose={() => setAccesoOpen(false)}
+        icon={KeyRound}
         title="Nuevo acceso"
         description="Se genera un código propio, que podrás copiar en la tabla."
         footer={

@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { requirePermission } from "@/lib/session";
 import { getCampaign, getCreator } from "@/lib/data";
@@ -13,6 +14,13 @@ export default async function SesionPage({ params }: { params: Promise<{ id: str
   const session = await getCollabSession(id);
   if (!session) notFound();
 
+  // El enlace se arma en el servidor: leer window durante el render rompía la
+  // hidratación y dejaba la página sin botones.
+  const cabeceras = await headers();
+  const host = cabeceras.get("x-forwarded-host") ?? cabeceras.get("host") ?? "";
+  const protocolo = cabeceras.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
+  const portalUrl = host ? `${protocolo}://${host}/portal/${id}` : `/portal/${id}`;
+
   const [campaign, creator] = await Promise.all([
     session.campaignId ? getCampaign(session.campaignId) : null,
     session.creatorId ? getCreator(session.creatorId) : null,
@@ -21,6 +29,7 @@ export default async function SesionPage({ params }: { params: Promise<{ id: str
   return (
     <SessionDetail
       session={session}
+      portalUrl={portalUrl}
       campaignName={campaign?.name ?? null}
       creator={
         creator

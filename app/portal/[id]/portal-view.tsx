@@ -2,7 +2,16 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ExternalLink, FileText, Link2, LoaderCircle, LogOut, Plus, TriangleAlert } from "lucide-react";
+import {
+  ExternalLink,
+  FileText,
+  Link2,
+  LoaderCircle,
+  LogOut,
+  Plus,
+  TriangleAlert,
+  Upload,
+} from "lucide-react";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { SectionHead } from "@/components/ui/section";
 import { ListBox, ListRow, RowIcon } from "@/components/ui/list";
@@ -12,7 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
-import { Input, Label, Select, Textarea } from "@/components/ui/field";
+import { MATERIAL_VACIO, MaterialFields, type MaterialDraft } from "@/components/sessions/material-fields";
 import { PORTAL_ROLE, SESSION_ITEM_KIND, SESSION_STATUS } from "@/lib/labels";
 import type { PortalRole, SessionItem, SessionItemKind, SessionStatus } from "@/lib/types";
 import { formatCompact, formatDate } from "@/lib/utils";
@@ -60,12 +69,7 @@ export function PortalView({
   const [open, setOpen] = useState(false);
   const [ocupado, setOcupado] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState({
-    kind: "entregable" as SessionItemKind,
-    title: "",
-    url: "",
-    notes: "",
-  });
+  const [form, setForm] = useState<MaterialDraft>({ ...MATERIAL_VACIO });
 
   const estado = SESSION_STATUS[status];
 
@@ -84,7 +88,7 @@ export function PortalView({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? "No se pudo subir.");
-      setForm({ kind: "entregable", title: "", url: "", notes: "" });
+      setForm({ ...MATERIAL_VACIO });
       setOpen(false);
       router.refresh();
     } catch (e) {
@@ -227,8 +231,9 @@ export function PortalView({
       <Modal
         open={open}
         onClose={() => setOpen(false)}
+        icon={Upload}
         title="Subir material"
-        description="Comparte el enlace de Drive, YouTube, WeTransfer o donde lo tengas."
+        description="Comparte el enlace de donde lo tengas subido."
         footer={
           <>
             <Button variant="ghost" onClick={() => setOpen(false)}>
@@ -241,49 +246,7 @@ export function PortalView({
           </>
         }
       >
-        <div className="space-y-3">
-          <div>
-            <Label htmlFor="pt-kind">Tipo</Label>
-            <Select
-              id="pt-kind"
-              value={form.kind}
-              onChange={(e) => setForm({ ...form, kind: e.target.value as SessionItemKind })}
-            >
-              {Object.entries(SESSION_ITEM_KIND).map(([id, k]) => (
-                <option key={id} value={id}>
-                  {k.label}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div>
-            <Label htmlFor="pt-title">Título</Label>
-            <Input
-              id="pt-title"
-              value={form.title}
-              onChange={(e) => setForm({ ...form, title: e.target.value })}
-              placeholder="Primer corte"
-            />
-          </div>
-          <div>
-            <Label htmlFor="pt-url">Enlace</Label>
-            <Input
-              id="pt-url"
-              value={form.url}
-              onChange={(e) => setForm({ ...form, url: e.target.value })}
-              placeholder="https://…"
-            />
-          </div>
-          <div>
-            <Label htmlFor="pt-notes">Notas</Label>
-            <Textarea
-              id="pt-notes"
-              rows={2}
-              value={form.notes}
-              onChange={(e) => setForm({ ...form, notes: e.target.value })}
-            />
-          </div>
-        </div>
+        <MaterialFields value={form} onChange={setForm} />
       </Modal>
     </div>
   );
