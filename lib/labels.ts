@@ -57,3 +57,32 @@ export const COMPANY_STATUS: Record<string, { label: string; tone: Tone }> = {
   prospecto: { label: "Prospecto", tone: "info" },
   inactivo: { label: "Inactivo", tone: "neutral" },
 };
+
+/** Listas de los desplegables. Compartidas entre el alta y la edición. */
+export const CATEGORIES = [
+  "Tecnología",
+  "Gaming",
+  "Lifestyle",
+  "Belleza",
+  "Fitness",
+  "Finanzas",
+  "Educación",
+  "Entretenimiento",
+  "Automotriz",
+  "Cocina",
+];
+
+export const INDUSTRIES = [
+  "Software B2B",
+  "Consumo masivo",
+  "Fintech",
+  "Belleza",
+  "Moda",
+  "Gaming",
+  "Educación",
+  "Salud",
+  "Automotriz",
+  "Otro",
+];
+
+export const CURRENCIES = ["USD", "MXN", "COP", "EUR"] as const;

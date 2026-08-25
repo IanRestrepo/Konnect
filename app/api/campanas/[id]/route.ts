@@ -10,8 +10,11 @@ export const dynamic = "force-dynamic";
 const schema = z.object({
   status: z.enum(["borrador", "activa", "pausada", "finalizada"]).optional(),
   name: z.string().min(1).optional(),
+  objective: z.enum(["awareness", "trafico", "conversiones", "lanzamiento"]).optional(),
+  currency: z.enum(["USD", "MXN", "COP", "EUR"]).optional(),
   budget: z.number().optional(),
   notes: z.string().optional(),
+  startDate: z.string().optional(),
   endDate: z.string().nullable().optional(),
 });
 

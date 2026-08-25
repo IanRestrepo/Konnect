@@ -1,16 +1,16 @@
 import { requirePermission } from "@/lib/session";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Pencil } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { PageTitle } from "@/components/ui/section";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { DefList, DefRow } from "@/components/ui/def-list";
 import { Stat, StatBand } from "@/components/ui/stat";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { ViewsChart, type ChartPoint } from "@/components/campaigns/views-chart";
 import { DeliverablesSection } from "@/components/campaigns/deliverables-section";
 import { CampaignSwitch } from "@/components/campaigns/campaign-switch";
+import { EditCampaignButton } from "@/components/campaigns/edit-campaign-dialog";
 import { campaignMetrics, getCampaign, getCompany, getCreators } from "@/lib/data";
 import { CAMPAIGN_OBJECTIVE, CAMPAIGN_STATUS } from "@/lib/labels";
 import { formatCompact, formatDate, formatMoney } from "@/lib/utils";
@@ -50,10 +50,7 @@ export default async function CampanaPage({ params }: { params: Promise<{ id: st
           title={campaign.name}
           description={CAMPAIGN_OBJECTIVE[campaign.objective]}
           actions={
-            <Button variant="primary" size="lg">
-              Editar campaña
-              <Pencil size={15} />
-            </Button>
+            <EditCampaignButton campaign={campaign} />
           }
         />
         <div className="mt-3 flex flex-wrap items-center gap-2">

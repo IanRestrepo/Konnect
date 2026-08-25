@@ -1,7 +1,7 @@
 import { requirePermission } from "@/lib/session";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ExternalLink, Megaphone, Pencil } from "lucide-react";
+import { ArrowLeft, ExternalLink, Megaphone } from "lucide-react";
 import { PageTitle, SectionLabel } from "@/components/ui/section";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { ListBox, ListRow, RowIcon } from "@/components/ui/list";
@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { ContactsPanel } from "@/components/companies/contacts-panel";
+import { EditCompanyButton } from "@/components/companies/edit-company-dialog";
 import { campaignMetrics, companyCampaigns, getCampaigns, getCompany } from "@/lib/data";
 import { CAMPAIGN_OBJECTIVE, CAMPAIGN_STATUS, COMPANY_STATUS } from "@/lib/labels";
 import { companyInvestmentSeries, trend, viewsSeries } from "@/lib/series";
@@ -61,10 +62,7 @@ export default async function EmpresaPage({ params }: { params: Promise<{ id: st
                     </Button>
                   </Link>
                 )}
-                <Button variant="primary" size="lg">
-                  Editar
-                  <Pencil size={15} />
-                </Button>
+                <EditCompanyButton company={company} />
               </>
             }
           />

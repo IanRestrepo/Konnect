@@ -1,7 +1,7 @@
 import { requirePermission } from "@/lib/session";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ExternalLink, Film, Pencil, RefreshCw } from "lucide-react";
+import { ArrowLeft, ExternalLink, Film, RefreshCw } from "lucide-react";
 import { PageTitle, SectionLabel } from "@/components/ui/section";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { DefList, DefRow } from "@/components/ui/def-list";
@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { BankingPanel } from "@/components/creators/banking-panel";
 import { ChannelsPanel } from "@/components/creators/channels-panel";
 import { SocialsPanel } from "@/components/creators/socials-panel";
+import { EditCreatorButton } from "@/components/creators/edit-creator-dialog";
 import { creatorCampaigns, getCampaigns, getCreator } from "@/lib/data";
 import {
   CREATOR_STATUS,
@@ -70,10 +71,7 @@ export default async function CreadorPage({ params }: { params: Promise<{ id: st
                 <Button variant="secondary" size="icon-lg" aria-label="Actualizar métricas">
                   <RefreshCw size={17} strokeWidth={1.75} />
                 </Button>
-                <Button variant="primary" size="lg">
-                  Editar
-                  <Pencil size={15} />
-                </Button>
+                <EditCreatorButton creator={creator} />
               </>
             }
           />
