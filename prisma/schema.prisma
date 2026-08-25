@@ -1,4 +1,5 @@
 // Esquema de Konnect — Postgres (Neon).
+// Refleja los tipos de `lib/types.ts`; `lib/store.ts` es la única capa que lo consulta.
 // Los campos bancarios se guardan cifrados (AES-256-GCM) mediante lib/crypto.ts.
 
 generator client {
@@ -58,24 +59,35 @@ enum PaymentMethod {
   efectivo
 }
 
+enum SocialPlatform {
+  instagram
+  tiktok
+  x
+  twitch
+  kick
+  discord
+  roblox
+  web
+}
+
 model Creator {
-  id         String        @id @default(cuid())
+  id         String        @id
   name       String
   handle     String
-  channelId  String        @unique
+  channelId  String
   channelUrl String
   avatarUrl  String?
-  country    String?
+  country    String        @default("")
   category   String
   status     CreatorStatus @default(prospecto)
 
-  email String
-  phone String
+  email String @default("")
+  phone String @default("")
 
   // Métricas públicas del canal (YouTube Data API)
-  subscribers      Int      @default(0)
-  totalViews       BigInt   @default(0)
-  videoCount       Int      @default(0)
+  subscribers      Int       @default(0)
+  totalViews       BigInt    @default(0)
+  videoCount       Int       @default(0)
   metricsUpdatedAt DateTime?
 
   currency        String          @default("USD")
@@ -85,18 +97,21 @@ model Creator {
   paymentMethods  PaymentMethod[]
 
   // Confidencial: cifrado en reposo. Los *Last4 permiten la vista censurada.
-  bankHolder        String?
-  bankName          String?
-  bankAccountEnc    String?
-  bankAccountLast4  String?
-  bankRoutingEnc    String?
-  bankRoutingLast4  String?
-  taxIdEnc          String?
-  taxIdLast4        String?
-  paypalEmailEnc    String?
-  bankNotesEnc      String?
+  bankHolder       String?
+  bankName         String?
+  bankAccountEnc   String?
+  bankAccountLast4 String?
+  bankRoutingEnc   String?
+  bankRoutingLast4 String?
+  taxIdEnc         String?
+  taxIdLast4       String?
+  paypalEmailEnc   String?
+  bankNotesEnc     String?
 
-  notes        String?
+  notes String @default("")
+
+  channels     CreatorChannel[]
+  socials      SocialLink[]
   deliverables Deliverable[]
   accessLogs   SensitiveAccessLog[]
 
@@ -105,34 +120,97 @@ model Creator {
 
   @@index([status])
   @@index([category])
+  @@index([createdAt])
+}
+
+/// Canal adicional de un creador: secundario, de shorts, de clips…
+model CreatorChannel {
+  id        String  @id
+  creatorId String
+  creator   Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  label      String
+  channelId  String
+  channelUrl String
+  handle     String
+  avatarUrl  String?
+
+  subscribers      Int       @default(0)
+  totalViews       BigInt    @default(0)
+  videoCount       Int       @default(0)
+  metricsUpdatedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@unique([creatorId, channelId])
+  @@index([creatorId])
+}
+
+/// Perfil del creador fuera de YouTube.
+model SocialLink {
+  id        String  @id
+  creatorId String
+  creator   Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  platform SocialPlatform
+  handle   String
+  url      String
+
+  createdAt DateTime @default(now())
+
+  @@index([creatorId])
 }
 
 model Company {
-  id          String        @id @default(cuid())
-  name        String
-  industry    String
-  website     String?
-  contactName String
-  contactRole String?
-  email       String
-  phone       String
-  instagram   String?
-  tiktok      String?
-  youtube     String?
-  linkedin    String?
-  status      CompanyStatus @default(prospecto)
-  notes       String?
+  id       String  @id
+  name     String
+  industry String
+  website  String?
 
+  // Atajo al contacto principal; se mantiene sincronizado con `contacts`.
+  contactName String @default("")
+  contactRole String @default("")
+  email       String @default("")
+  phone       String @default("")
+
+  instagram String?
+  tiktok    String?
+  youtube   String?
+  linkedin  String?
+
+  status CompanyStatus @default(prospecto)
+  notes  String        @default("")
+
+  contacts  Contact[]
   campaigns Campaign[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([status])
+  @@index([createdAt])
+}
+
+/// Persona de contacto en una empresa. Puede haber varias.
+model Contact {
+  id        String  @id
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  name    String
+  role    String  @default("")
+  email   String  @default("")
+  phone   String  @default("")
+  primary Boolean @default(false)
+  notes   String  @default("")
+
+  createdAt DateTime @default(now())
+
+  @@index([companyId])
 }
 
 model Campaign {
-  id        String            @id @default(cuid())
+  id        String            @id
   name      String
   companyId String
   company   Company           @relation(fields: [companyId], references: [id], onDelete: Restrict)
@@ -143,7 +221,7 @@ model Campaign {
   agencyFee Decimal?          @db.Decimal(5, 2)
   startDate DateTime
   endDate   DateTime?
-  notes     String?
+  notes     String            @default("")
 
   deliverables Deliverable[]
 
@@ -152,10 +230,11 @@ model Campaign {
 
   @@index([companyId])
   @@index([status])
+  @@index([createdAt])
 }
 
 model Deliverable {
-  id         String            @id @default(cuid())
+  id         String            @id
   campaignId String
   campaign   Campaign          @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   creatorId  String
@@ -211,4 +290,48 @@ model SensitiveAccessLog {
   createdAt DateTime @default(now())
 
   @@index([creatorId, createdAt])
+}
+
+model Role {
+  id String @id
+
+  name String
+  /// Color de la etiqueta, como en Discord.
+  color String @default("#0046d9")
+  /// Llaves de lib/permissions, o ["*"] para el rol de administración.
+  permissions String[]
+  /// Los roles del sistema no se pueden borrar ni quedarse sin permisos.
+  system Boolean @default(false)
+
+  users User[]
+
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model User {
+  id String @id
+
+  name String
+  /// Siempre en minúsculas: es la llave de acceso.
+  email        String    @unique
+  passwordHash String
+  roleId       String
+  role         Role      @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  active       Boolean   @default(true)
+  lastLoginAt  DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([roleId])
+  @@index([createdAt])
+}
+
+/// Ajustes de la aplicación. Una sola fila, con id "default".
+model Settings {
+  id            String  @id @default("default")
+  youtubeApiKey String?
+
+  updatedAt DateTime @updatedAt
 }

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCreator } from "@/lib/data";
+import { revealBanking } from "@/lib/store";
 import { clearFailures, isLocked, registerFailure, verifyAccessCode } from "@/lib/crypto";
 import { getSession } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
@@ -47,8 +47,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     );
   }
 
-  const creator = await getCreator(id);
-  if (!creator) {
+  // Se descifra solo aquí: `read()` nunca saca de la base los datos completos.
+  const banking = await revealBanking(id);
+  if (!banking) {
     return NextResponse.json({ error: "Creador no encontrado." }, { status: 404 });
   }
 
@@ -57,5 +58,5 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     `[auditoría] datos bancarios revelados — creador= usuario= ()`,
   );
 
-  return NextResponse.json({ banking: creator.banking, revealedAt: new Date().toISOString() });
+  return NextResponse.json({ banking, revealedAt: new Date().toISOString() });
 }
