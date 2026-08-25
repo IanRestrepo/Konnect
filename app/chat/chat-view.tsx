@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Archive,
-  Hash,
   Lock,
   MessagesSquare,
   Pencil,
@@ -361,7 +360,9 @@ export function ChatView({
                       : "text-[var(--text-muted)]",
                   )}
                 >
-                  {room.roleIds.length ? <Lock size={11} /> : <Hash size={11} />}
+                  <span aria-hidden className="text-[var(--text-subtle)]">
+                    {room.roleIds.length ? "•" : "#"}
+                  </span>
                   {room.name}
                 </a>
               ))}
@@ -378,10 +379,11 @@ export function ChatView({
 
             <header className="flex items-center gap-3 border-b border-[var(--line)] px-4 py-3">
               <span
-                className="grid h-8 w-8 shrink-0 place-items-center rounded-[var(--r-control)]"
-                style={{ backgroundColor: `${activa.color}1a`, color: activa.color }}
+                className="shrink-0 text-[20px] leading-none font-semibold"
+                style={{ color: activa.color }}
+                aria-hidden
               >
-                {activa.roleIds.length ? <Lock size={15} /> : <Hash size={15} />}
+                {activa.roleIds.length ? "•" : "#"}
               </span>
               <div className="min-w-0 flex-1">
                 <h1 className="truncate text-[15px] font-semibold">{activa.name}</h1>
@@ -391,6 +393,12 @@ export function ChatView({
                   </p>
                 )}
               </div>
+              {activa.roleIds.length > 0 && (
+                <Badge plain>
+                  <Lock size={11} />
+                  Privada
+                </Badge>
+              )}
               {activa.archived && <Badge tone="warn">Archivada</Badge>}
               {puedeGestionar && (
                 <Button
@@ -690,10 +698,14 @@ function RoomRow({
         )}
       >
         <span
-          className="grid h-6 w-6 shrink-0 place-items-center rounded-[var(--r-chip)]"
-          style={{ backgroundColor: `${room.color}1a`, color: room.color }}
+          className={cn(
+            "w-3 shrink-0 text-center text-[15px] leading-none",
+            activa ? "font-semibold" : "text-[var(--text-subtle)]",
+          )}
+          style={activa ? { color: room.color } : undefined}
+          aria-hidden
         >
-          {room.roleIds.length ? <Lock size={12} /> : <Hash size={12} />}
+          {room.roleIds.length ? "•" : "#"}
         </span>
         <span
           className={cn(
