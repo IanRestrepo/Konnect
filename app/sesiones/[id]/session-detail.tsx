@@ -8,15 +8,22 @@ import {
   Check,
   Copy,
   ExternalLink,
+  FileText,
+  Link2,
   LoaderCircle,
   Plus,
   RefreshCw,
   Trash2,
   TriangleAlert,
 } from "lucide-react";
-import { PageTitle, SectionLabel } from "@/components/ui/section";
+import { PageTitle, SectionHead } from "@/components/ui/section";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableWrap, Td, Th, Tr } from "@/components/ui/table";
+import { ListBox, ListRow, RowIcon } from "@/components/ui/list";
+import { EmptyState } from "@/components/ui/empty-state";
+import { DefList, DefRow } from "@/components/ui/def-list";
 import { Stat, StatBand } from "@/components/ui/stat";
+import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -35,6 +42,14 @@ type CreatorResumen = {
   subscribers: number;
   totalViews: number;
   videoCount: number;
+};
+
+const ICONO_ITEM: Record<SessionItemKind, typeof FileText> = {
+  entregable: Link2,
+  guion: FileText,
+  borrador: FileText,
+  referencia: Link2,
+  nota: FileText,
 };
 
 export function SessionDetail({
@@ -69,7 +84,7 @@ export function SessionDetail({
     canUpload: false,
   });
 
-  const estado = SESSION_STATUS[session.status];
+  const abierta = session.status === "abierta";
   const enlace =
     typeof window === "undefined" ? "" : `${window.location.origin}/portal/${session.id}`;
 
@@ -155,34 +170,30 @@ export function SessionDetail({
           description={session.notes || "Sin notas."}
           actions={
             puedeEditar && (
-              <>
-                <Button
-                  variant="secondary"
-                  size="lg"
-                  onClick={() =>
-                    llamar(
-                      `/api/sesiones/${session.id}`,
-                      json(
-                        { status: session.status === "abierta" ? "cerrada" : "abierta" },
-                        "PATCH",
-                      ),
-                      "No se pudo cambiar el estado.",
-                    )
-                  }
-                  disabled={ocupado}
-                >
-                  {session.status === "abierta" ? "Cerrar sesión" : "Reabrir"}
-                </Button>
-                <Button variant="primary" size="lg" onClick={() => setItemOpen(true)}>
-                  <Plus size={15} />
-                  Subir material
-                </Button>
-              </>
+              <Button variant="accent" size="lg" onClick={() => setItemOpen(true)}>
+                <Plus size={16} />
+                Subir material
+              </Button>
             )
           }
         />
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Badge tone={estado.tone}>{estado.label}</Badge>
+          <Switch
+            checked={abierta}
+            busy={ocupado}
+            disabled={!puedeEditar}
+            label={abierta ? "Sesión abierta" : "Sesión cerrada"}
+            onChange={(next) =>
+              llamar(
+                `/api/sesiones/${session.id}`,
+                json({ status: next ? "abierta" : "cerrada" }, "PATCH"),
+                "No se pudo cambiar el estado.",
+              )
+            }
+          />
+          <Badge tone={SESSION_STATUS[session.status].tone}>
+            {SESSION_STATUS[session.status].label}
+          </Badge>
           {creator && <Badge plain>{creator.name}</Badge>}
           {!session.showMetrics && <Badge tone="warn">Métricas ocultas</Badge>}
         </div>
@@ -200,167 +211,219 @@ export function SessionDetail({
           <Stat label="Suscriptores" value={formatCompact(creator.subscribers)} />
           <Stat label="Vistas del canal" value={formatCompact(creator.totalViews)} />
           <Stat label="Videos" value={formatCompact(creator.videoCount)} />
-          <Stat label="Material compartido" value={String(session.items.length)} />
+          <Stat
+            label="Material compartido"
+            value={String(session.items.length)}
+            hint={`${session.accesses.filter((a) => !a.revoked).length} accesos activos`}
+          />
         </StatBand>
       )}
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
         <section>
-          <SectionLabel>Material</SectionLabel>
+          <SectionHead
+            title="Material"
+            hint={
+              session.items.length
+                ? `${session.items.length} elementos, del más reciente al más antiguo`
+                : undefined
+            }
+          />
+
           {session.items.length === 0 ? (
-            <Card className="px-5 py-6 text-[13px] text-[var(--text-muted)]">
-              Todavía no hay nada. Sube un enlace o espera a que lo haga el creador.
-            </Card>
+            <EmptyState
+              icon={Link2}
+              title="Sin material todavía"
+              description="Sube un enlace o espera a que lo haga el creador desde su portal."
+              action={
+                puedeEditar && (
+                  <Button variant="accent" onClick={() => setItemOpen(true)}>
+                    <Plus size={16} />
+                    Subir material
+                  </Button>
+                )
+              }
+            />
           ) : (
-            <div className="space-y-2">
+            <ListBox>
               {session.items.map((it) => {
                 const kind = SESSION_ITEM_KIND[it.kind];
+                const Icono = ICONO_ITEM[it.kind];
                 return (
-                  <Card key={it.id} className="px-4 py-3">
-                    <div className="flex items-start gap-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge tone={kind.tone}>{kind.label}</Badge>
-                          <span className="text-[13px] font-medium">{it.title}</span>
-                        </div>
+                  <ListRow
+                    key={it.id}
+                    href={it.url ?? undefined}
+                    chevron={false}
+                    leading={
+                      <RowIcon>
+                        <Icono size={17} strokeWidth={1.75} />
+                      </RowIcon>
+                    }
+                    title={it.title}
+                    subtitle={[
+                      it.authorLabel,
+                      it.authorRole ? PORTAL_ROLE[it.authorRole] : "Agencia",
+                      formatDate(it.createdAt),
+                    ].join(" · ")}
+                    trailing={
+                      <span className="flex items-center gap-2">
+                        <Badge tone={kind.tone}>{kind.label}</Badge>
                         {it.url && (
-                          <a
-                            href={it.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="mt-1 flex items-center gap-1.5 truncate text-[12.5px] text-[var(--accent)] hover:underline"
+                          <ExternalLink size={14} className="text-[var(--text-subtle)]" />
+                        )}
+                        {puedeEditar && (
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              llamar(
+                                `/api/sesiones/${session.id}/items?itemId=${it.id}`,
+                                { method: "DELETE" },
+                                "No se pudo borrar.",
+                              );
+                            }}
+                            aria-label={`Borrar ${it.title}`}
+                            className="grid h-8 w-8 place-items-center rounded-[var(--r-control)] text-[var(--text-subtle)] transition hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"
                           >
-                            <ExternalLink size={12} className="shrink-0" />
-                            {it.url}
-                          </a>
+                            <Trash2 size={14} />
+                          </button>
                         )}
-                        {it.notes && (
-                          <p className="mt-1 text-[12.5px] text-[var(--text-muted)]">{it.notes}</p>
-                        )}
-                        <p className="mt-1 text-[11.5px] text-[var(--text-subtle)]">
-                          {it.authorLabel}
-                          {it.authorRole ? ` · ${PORTAL_ROLE[it.authorRole]}` : " · Agencia"} ·{" "}
-                          {formatDate(it.createdAt)}
-                        </p>
-                      </div>
-
-                      {puedeEditar && (
-                        <button
-                          onClick={() =>
-                            llamar(
-                              `/api/sesiones/${session.id}/items?itemId=${it.id}`,
-                              { method: "DELETE" },
-                              "No se pudo borrar.",
-                            )
-                          }
-                          aria-label="Borrar elemento"
-                          className="grid h-8 w-8 shrink-0 place-items-center rounded-[var(--r-control)] text-[var(--text-subtle)] transition hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
-                    </div>
-                  </Card>
+                      </span>
+                    }
+                  />
                 );
               })}
-            </div>
+            </ListBox>
           )}
+
+          <SectionHead
+            title="Accesos"
+            hint="Cada persona entra con su propio código."
+            className="mt-7"
+            action={
+              puedeEditar && (
+                <Button variant="secondary" size="sm" onClick={() => setAccesoOpen(true)}>
+                  <Plus size={14} />
+                  Añadir
+                </Button>
+              )
+            }
+          />
+
+          <TableWrap>
+            <Table className="min-w-[620px]">
+              <thead>
+                <tr>
+                  <Th>Quién</Th>
+                  <Th>Código</Th>
+                  <Th>Última entrada</Th>
+                  {puedeEditar && <Th align="right">Acciones</Th>}
+                </tr>
+              </thead>
+              <tbody>
+                {session.accesses.map((a) => (
+                  <Tr key={a.id} className={a.revoked ? "opacity-55" : undefined}>
+                    <Td>
+                      <div className="flex items-center gap-2">
+                        <Badge plain>{PORTAL_ROLE[a.role]}</Badge>
+                        <span className="truncate font-medium">{a.label}</span>
+                        {a.revoked ? (
+                          <Badge tone="danger">Revocado</Badge>
+                        ) : (
+                          !a.canUpload && <Badge>Solo lectura</Badge>
+                        )}
+                      </div>
+                    </Td>
+                    <Td>
+                      {a.revoked ? (
+                        <span className="text-[var(--text-subtle)]">— — —</span>
+                      ) : (
+                        <button
+                          onClick={() => copiar(a.code, a.id)}
+                          title="Copiar código"
+                          className="tabular inline-flex items-center gap-2 rounded-[var(--r-control)] bg-[var(--surface-2)] px-2.5 py-1.5 text-[12.5px] tracking-wider transition hover:bg-[var(--surface-3,var(--surface-2))] hover:text-[var(--accent)]"
+                        >
+                          {a.code}
+                          {copiado === a.id ? <Check size={13} /> : <Copy size={13} />}
+                        </button>
+                      )}
+                    </Td>
+                    <Td className="text-[var(--text-muted)]">
+                      {a.lastSeenAt ? formatDate(a.lastSeenAt) : "Nunca"}
+                    </Td>
+                    {puedeEditar && (
+                      <Td align="right">
+                        <span className="inline-flex gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={ocupado}
+                            title="Generar un código nuevo"
+                            onClick={() =>
+                              llamar(
+                                `/api/sesiones/${session.id}/accesos`,
+                                json({ accessId: a.id, action: "regenerar" }, "PATCH"),
+                                "No se pudo cambiar el código.",
+                              )
+                            }
+                          >
+                            <RefreshCw size={13} />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={ocupado}
+                            onClick={() =>
+                              llamar(
+                                `/api/sesiones/${session.id}/accesos`,
+                                json(
+                                  { accessId: a.id, action: a.revoked ? "reactivar" : "revocar" },
+                                  "PATCH",
+                                ),
+                                "No se pudo cambiar el acceso.",
+                              )
+                            }
+                          >
+                            {a.revoked ? "Reactivar" : "Revocar"}
+                          </Button>
+                        </span>
+                      </Td>
+                    )}
+                  </Tr>
+                ))}
+              </tbody>
+            </Table>
+          </TableWrap>
         </section>
 
         <div className="space-y-6">
           <Card>
             <CardHeader>
               <CardTitle>Enlace del portal</CardTitle>
+              <Button variant="secondary" size="sm" onClick={() => copiar(enlace, "enlace")}>
+                {copiado === "enlace" ? <Check size={13} /> : <Copy size={13} />}
+                Copiar
+              </Button>
             </CardHeader>
-            <div className="border-t border-[var(--line)] p-4">
-              <p className="text-[12.5px] text-[var(--text-muted)]">
-                Manda este enlace junto con el código de cada persona.
+            <div className="border-t border-[var(--line)] px-4 py-3">
+              <p className="truncate text-[12.5px] text-[var(--text-muted)]">{enlace}</p>
+              <p className="mt-1.5 text-[11.5px] text-[var(--text-subtle)]">
+                Mándalo junto con el código de cada persona. Sin código no se ve nada.
               </p>
-              <div className="mt-2 flex gap-2">
-                <Input readOnly value={enlace} aria-label="Enlace del portal" />
-                <Button variant="secondary" onClick={() => copiar(enlace, "enlace")}>
-                  {copiado === "enlace" ? <Check size={14} /> : <Copy size={14} />}
-                </Button>
-              </div>
             </div>
           </Card>
 
           <Card>
             <CardHeader>
-              <CardTitle>Accesos</CardTitle>
-              {puedeEditar && (
-                <Button variant="secondary" size="sm" onClick={() => setAccesoOpen(true)}>
-                  Añadir
-                </Button>
-              )}
+              <CardTitle>Resumen</CardTitle>
             </CardHeader>
-
-            <div className="divide-y divide-[var(--line)] border-t border-[var(--line)]">
-              {session.accesses.map((a) => (
-                <div key={a.id} className="px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <Badge plain>{PORTAL_ROLE[a.role]}</Badge>
-                    <span className="min-w-0 flex-1 truncate text-[13px] font-medium">
-                      {a.label}
-                    </span>
-                    {a.revoked && <Badge tone="danger">Revocado</Badge>}
-                    {!a.canUpload && !a.revoked && <Badge>Solo lectura</Badge>}
-                  </div>
-
-                  <div className="mt-2 flex items-center gap-2">
-                    <code className="tabular flex-1 rounded-[var(--r-control)] bg-[var(--surface-2)] px-2.5 py-1.5 text-[12.5px] tracking-wider">
-                      {a.revoked ? "— — —" : a.code}
-                    </code>
-                    {!a.revoked && (
-                      <Button variant="secondary" size="sm" onClick={() => copiar(a.code, a.id)}>
-                        {copiado === a.id ? <Check size={13} /> : <Copy size={13} />}
-                      </Button>
-                    )}
-                  </div>
-
-                  <p className="mt-1.5 text-[11.5px] text-[var(--text-subtle)]">
-                    {a.lastSeenAt ? `Última entrada ${formatDate(a.lastSeenAt)}` : "Nunca ha entrado"}
-                  </p>
-
-                  {puedeEditar && (
-                    <div className="mt-2 flex gap-1.5">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={ocupado}
-                        onClick={() =>
-                          llamar(
-                            `/api/sesiones/${session.id}/accesos`,
-                            json({ accessId: a.id, action: "regenerar" }, "PATCH"),
-                            "No se pudo cambiar el código.",
-                          )
-                        }
-                      >
-                        <RefreshCw size={13} />
-                        Nuevo código
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={ocupado}
-                        onClick={() =>
-                          llamar(
-                            `/api/sesiones/${session.id}/accesos`,
-                            json(
-                              { accessId: a.id, action: a.revoked ? "reactivar" : "revocar" },
-                              "PATCH",
-                            ),
-                            "No se pudo cambiar el acceso.",
-                          )
-                        }
-                      >
-                        {a.revoked ? "Reactivar" : "Revocar"}
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
+            <DefList className="border-t border-[var(--line)]">
+              <DefRow label="Estado">{abierta ? "Abierta" : "Cerrada"}</DefRow>
+              <DefRow label="Campaña">{campaignName ?? "—"}</DefRow>
+              <DefRow label="Métricas en el portal">
+                {session.showMetrics ? "Visibles" : "Ocultas"}
+              </DefRow>
+              <DefRow label="Creada">{formatDate(session.createdAt)}</DefRow>
+            </DefList>
           </Card>
 
           {creator && (
@@ -410,11 +473,11 @@ export function SessionDetail({
               value={item.kind}
               onChange={(e) => setItem({ ...item, kind: e.target.value as SessionItemKind })}
             >
-              <option value="entregable">Entregable</option>
-              <option value="guion">Guion</option>
-              <option value="borrador">Borrador</option>
-              <option value="referencia">Referencia</option>
-              <option value="nota">Nota</option>
+              {Object.entries(SESSION_ITEM_KIND).map(([id, k]) => (
+                <option key={id} value={id}>
+                  {k.label}
+                </option>
+              ))}
             </Select>
           </div>
           <div>
@@ -451,7 +514,7 @@ export function SessionDetail({
         open={accesoOpen}
         onClose={() => setAccesoOpen(false)}
         title="Nuevo acceso"
-        description="Se genera un código propio, que podrás copiar en la lista."
+        description="Se genera un código propio, que podrás copiar en la tabla."
         footer={
           <>
             <Button variant="ghost" onClick={() => setAccesoOpen(false)}>
@@ -472,9 +535,11 @@ export function SessionDetail({
               value={acceso.role}
               onChange={(e) => setAcceso({ ...acceso, role: e.target.value as PortalRole })}
             >
-              <option value="creador">Creador</option>
-              <option value="cliente">Cliente</option>
-              <option value="invitado">Invitado</option>
+              {Object.entries(PORTAL_ROLE).map(([id, label]) => (
+                <option key={id} value={id}>
+                  {label}
+                </option>
+              ))}
             </Select>
           </div>
           <div>

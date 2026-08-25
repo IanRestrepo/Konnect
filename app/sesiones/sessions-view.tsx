@@ -4,18 +4,20 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { FolderKanban, LoaderCircle, Plus, TriangleAlert, X } from "lucide-react";
 import { PageTitle } from "@/components/ui/section";
-import { Card } from "@/components/ui/card";
+import { Segmented, SearchInput, Toolbar } from "@/components/shell/toolbar";
 import { ListBox, ListRow, RowIcon } from "@/components/ui/list";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { FieldHint, Input, Label, Select, Textarea } from "@/components/ui/field";
 import { useCan } from "@/components/session-provider";
 import { PORTAL_ROLE, SESSION_STATUS } from "@/lib/labels";
-import type { CollabSession, PortalRole } from "@/lib/types";
+import type { CollabSession, PortalRole, SessionStatus } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
 
 type Opcion = { id: string; name: string };
+type Filtro = SessionStatus | "todas";
 type AccesoBorrador = { role: PortalRole; label: string; canUpload: boolean };
 
 const ACCESOS_INICIALES: AccesoBorrador[] = [
@@ -36,10 +38,11 @@ export function SessionsView({
   const can = useCan();
   const puedeEditar = can("editar_sesiones");
 
+  const [query, setQuery] = useState("");
+  const [filtro, setFiltro] = useState<Filtro>("todas");
   const [open, setOpen] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [filtro, setFiltro] = useState("");
 
   const [form, setForm] = useState({
     name: "",
@@ -50,11 +53,38 @@ export function SessionsView({
   });
   const [accesos, setAccesos] = useState<AccesoBorrador[]>(ACCESOS_INICIALES);
 
+  const filtros = useMemo<{ id: Filtro; label: string; count: number }[]>(
+    () => [
+      { id: "todas", label: "Todas", count: sessions.length },
+      {
+        id: "abierta",
+        label: "Abiertas",
+        count: sessions.filter((s) => s.status === "abierta").length,
+      },
+      {
+        id: "cerrada",
+        label: "Cerradas",
+        count: sessions.filter((s) => s.status === "cerrada").length,
+      },
+    ],
+    [sessions],
+  );
+
+  const nombreCreador = useMemo(
+    () => new Map(creators.map((c) => [c.id, c.name])),
+    [creators],
+  );
+
   const visibles = useMemo(() => {
-    const q = filtro.trim().toLowerCase();
-    if (!q) return sessions;
-    return sessions.filter((s) => s.name.toLowerCase().includes(q));
-  }, [sessions, filtro]);
+    const q = query.trim().toLowerCase();
+    return sessions.filter((s) => {
+      if (filtro !== "todas" && s.status !== filtro) return false;
+      if (!q) return true;
+      const creador = s.creatorId ? (nombreCreador.get(s.creatorId) ?? "") : "";
+      const etiquetas = s.accesses.map((a) => a.label).join(" ");
+      return [s.name, creador, etiquetas].join(" ").toLowerCase().includes(q);
+    });
+  }, [sessions, query, filtro, nombreCreador]);
 
   function abrir() {
     setForm({ name: "", campaignId: "", creatorId: "", notes: "", showMetrics: true });
@@ -108,34 +138,48 @@ export function SessionsView({
         description="Espacios compartidos con el creador y el cliente para cada entrega."
         actions={
           puedeEditar && (
-            <Button variant="primary" size="lg" onClick={abrir}>
-              <Plus size={15} />
+            <Button variant="accent" size="lg" onClick={abrir}>
+              <Plus size={16} />
               Nueva sesión
             </Button>
           )
         }
       />
 
-      {sessions.length > 3 && (
-        <Input
-          value={filtro}
-          onChange={(e) => setFiltro(e.target.value)}
-          placeholder="Buscar por nombre…"
-          aria-label="Buscar sesión"
+      <Toolbar>
+        <Segmented options={filtros} value={filtro} onChange={setFiltro} />
+        <SearchInput
+          value={query}
+          onChange={setQuery}
+          placeholder="Buscar por nombre, creador o acceso…"
         />
-      )}
+      </Toolbar>
 
       {visibles.length === 0 ? (
-        <Card className="px-5 py-8 text-center text-[13px] text-[var(--text-muted)]">
-          {sessions.length === 0
-            ? "Todavía no hay sesiones. Crea una para compartir material con un creador."
-            : "Ninguna sesión coincide con la búsqueda."}
-        </Card>
+        <EmptyState
+          icon={FolderKanban}
+          title={sessions.length === 0 ? "Todavía no hay sesiones" : "Sin resultados"}
+          description={
+            sessions.length === 0
+              ? "Una sesión es el espacio donde el creador sube su material y el cliente lo revisa, cada uno con su propio código."
+              : "Ajusta los filtros o prueba con otro nombre."
+          }
+          action={
+            puedeEditar && (
+              <Button variant="accent" onClick={abrir}>
+                <Plus size={16} />
+                Nueva sesión
+              </Button>
+            )
+          }
+        />
       ) : (
         <ListBox>
           {visibles.map((s) => {
             const estado = SESSION_STATUS[s.status];
             const vivos = s.accesses.filter((a) => !a.revoked);
+            const creador = s.creatorId ? nombreCreador.get(s.creatorId) : null;
+
             return (
               <ListRow
                 key={s.id}
@@ -146,14 +190,15 @@ export function SessionsView({
                   </RowIcon>
                 }
                 title={s.name}
-                subtitle={`${s.items.length} elementos · ${vivos.length} accesos · ${formatDate(s.createdAt)}`}
+                subtitle={[creador, `${s.items.length} elementos`, formatDate(s.createdAt)]
+                  .filter(Boolean)
+                  .join(" · ")}
                 trailing={
-                  <span className="flex items-center gap-2">
-                    {vivos.slice(0, 3).map((a) => (
-                      <Badge key={a.id} plain>
-                        {PORTAL_ROLE[a.role]}
-                      </Badge>
-                    ))}
+                  <span className="flex items-center gap-4">
+                    <span className="hidden text-right sm:block">
+                      <span className="tabular block text-[14px] font-semibold">{vivos.length}</span>
+                      <span className="block text-[11.5px] text-[var(--text-subtle)]">accesos</span>
+                    </span>
                     <Badge tone={estado.tone}>{estado.label}</Badge>
                   </span>
                 }
@@ -251,9 +296,11 @@ export function SessionsView({
                   className="w-32 shrink-0"
                   aria-label="Tipo de acceso"
                 >
-                  <option value="creador">Creador</option>
-                  <option value="cliente">Cliente</option>
-                  <option value="invitado">Invitado</option>
+                  {Object.entries(PORTAL_ROLE).map(([id, label]) => (
+                    <option key={id} value={id}>
+                      {label}
+                    </option>
+                  ))}
                 </Select>
 
                 <Input

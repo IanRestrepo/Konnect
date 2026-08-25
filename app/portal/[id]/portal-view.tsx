@@ -2,8 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ExternalLink, LoaderCircle, LogOut, Plus, TriangleAlert } from "lucide-react";
+import { ExternalLink, FileText, Link2, LoaderCircle, LogOut, Plus, TriangleAlert } from "lucide-react";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
+import { SectionHead } from "@/components/ui/section";
+import { ListBox, ListRow, RowIcon } from "@/components/ui/list";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Stat, StatBand } from "@/components/ui/stat";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
@@ -21,6 +24,14 @@ type CreatorResumen = {
   subscribers: number;
   totalViews: number;
   videoCount: number;
+};
+
+const ICONO_ITEM: Record<SessionItemKind, typeof FileText> = {
+  entregable: Link2,
+  guion: FileText,
+  borrador: FileText,
+  referencia: Link2,
+  nota: FileText,
 };
 
 /** Lo que ve quien entró con un código. Sin navegación ni datos de la agencia. */
@@ -89,12 +100,12 @@ export function PortalView({
   }
 
   return (
-    <div className="min-h-dvh bg-[var(--bg)]">
-      <header className="border-b border-[var(--line)] px-5 py-4">
-        <div className="mx-auto flex max-w-4xl items-center gap-3">
+    <div className="min-h-dvh bg-[var(--canvas)]">
+      <header className="sticky top-0 z-10 border-b border-[var(--line)] bg-[var(--surface)]/85 backdrop-blur">
+        <div className="mx-auto flex max-w-4xl items-center gap-3 px-5 py-3.5">
           <div className="min-w-0 flex-1">
             <p className="eyebrow">Portal de entregas</p>
-            <h1 className="truncate text-[18px] font-semibold tracking-tight">{name}</h1>
+            <h1 className="truncate text-[16px] font-semibold tracking-tight">{name}</h1>
           </div>
           <Badge plain>
             {PORTAL_ROLE[role]} · {label}
@@ -107,12 +118,17 @@ export function PortalView({
       </header>
 
       <main className="mx-auto max-w-4xl space-y-6 px-5 py-7">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge tone={estado.tone}>{estado.label}</Badge>
-          {!canUpload && <Badge>Solo lectura</Badge>}
-        </div>
-
-        {notes && <p className="text-[13px] leading-relaxed text-[var(--text-muted)]">{notes}</p>}
+        {(notes || !canUpload || status === "cerrada") && (
+          <Card className="px-4 py-3.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge tone={estado.tone}>{estado.label}</Badge>
+              {!canUpload && <Badge>Solo lectura</Badge>}
+            </div>
+            {notes && (
+              <p className="mt-2 text-[13px] leading-relaxed text-[var(--text-muted)]">{notes}</p>
+            )}
+          </Card>
+        )}
 
         {error && (
           <p className="flex items-start gap-2 rounded-[var(--r-control)] bg-[var(--danger-soft)] px-3 py-2 text-[12.5px] text-[var(--danger)]">
@@ -142,53 +158,68 @@ export function PortalView({
         )}
 
         <section>
-          <div className="mb-2 flex items-center justify-between">
-            <h2 className="text-[14px] font-semibold tracking-tight">Material</h2>
-            {canUpload && (
-              <Button variant="primary" size="sm" onClick={() => setOpen(true)}>
-                <Plus size={14} />
-                Subir
-              </Button>
-            )}
-          </div>
+          <SectionHead
+            title="Material"
+            hint={items.length ? `${items.length} elementos` : undefined}
+            action={
+              canUpload && (
+                <Button variant="accent" size="sm" onClick={() => setOpen(true)}>
+                  <Plus size={14} />
+                  Subir
+                </Button>
+              )
+            }
+          />
 
           {items.length === 0 ? (
-            <Card className="px-5 py-6 text-[13px] text-[var(--text-muted)]">
-              Todavía no hay nada compartido.
-            </Card>
+            <EmptyState
+              icon={Link2}
+              title="Todavía no hay nada"
+              description={
+                canUpload
+                  ? "Sube el enlace de tu guion, tu borrador o el corte final."
+                  : "Cuando se comparta material aparecerá aquí."
+              }
+              action={
+                canUpload && (
+                  <Button variant="accent" onClick={() => setOpen(true)}>
+                    <Plus size={16} />
+                    Subir material
+                  </Button>
+                )
+              }
+            />
           ) : (
-            <div className="space-y-2">
+            <ListBox>
               {items.map((it) => {
                 const kind = SESSION_ITEM_KIND[it.kind];
+                const Icono = ICONO_ITEM[it.kind];
                 return (
-                  <Card key={it.id} className="px-4 py-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge tone={kind.tone}>{kind.label}</Badge>
-                      <span className="text-[13px] font-medium">{it.title}</span>
-                    </div>
-                    {it.url && (
-                      <a
-                        href={it.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-1 flex items-center gap-1.5 truncate text-[12.5px] text-[var(--accent)] hover:underline"
-                      >
-                        <ExternalLink size={12} className="shrink-0" />
-                        {it.url}
-                      </a>
-                    )}
-                    {it.notes && (
-                      <p className="mt-1 text-[12.5px] text-[var(--text-muted)]">{it.notes}</p>
-                    )}
-                    <p className="mt-1 text-[11.5px] text-[var(--text-subtle)]">
-                      {it.authorLabel}
-                      {it.authorRole ? ` · ${PORTAL_ROLE[it.authorRole]}` : " · Agencia"} ·{" "}
-                      {formatDate(it.createdAt)}
-                    </p>
-                  </Card>
+                  <ListRow
+                    key={it.id}
+                    href={it.url ?? undefined}
+                    chevron={false}
+                    leading={
+                      <RowIcon>
+                        <Icono size={17} strokeWidth={1.75} />
+                      </RowIcon>
+                    }
+                    title={it.title}
+                    subtitle={[
+                      it.authorLabel,
+                      it.authorRole ? PORTAL_ROLE[it.authorRole] : "Agencia",
+                      formatDate(it.createdAt),
+                    ].join(" · ")}
+                    trailing={
+                      <span className="flex items-center gap-2">
+                        <Badge tone={kind.tone}>{kind.label}</Badge>
+                        {it.url && <ExternalLink size={14} className="text-[var(--text-subtle)]" />}
+                      </span>
+                    }
+                  />
                 );
               })}
-            </div>
+            </ListBox>
           )}
         </section>
       </main>
@@ -218,11 +249,11 @@ export function PortalView({
               value={form.kind}
               onChange={(e) => setForm({ ...form, kind: e.target.value as SessionItemKind })}
             >
-              <option value="entregable">Entregable</option>
-              <option value="guion">Guion</option>
-              <option value="borrador">Borrador</option>
-              <option value="referencia">Referencia</option>
-              <option value="nota">Nota</option>
+              {Object.entries(SESSION_ITEM_KIND).map(([id, k]) => (
+                <option key={id} value={id}>
+                  {k.label}
+                </option>
+              ))}
             </Select>
           </div>
           <div>
