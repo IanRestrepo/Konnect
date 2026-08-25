@@ -195,3 +195,50 @@ export type Contact = {
   primary: boolean;
   notes: string;
 };
+
+/* ---------------- Sesiones de entrega ---------------- */
+
+export type SessionStatus = "abierta" | "cerrada";
+
+/** Quién entra al portal. La agencia entra por la aplicación, no por código. */
+export type PortalRole = "creador" | "cliente" | "invitado";
+
+export type SessionItemKind = "entregable" | "guion" | "borrador" | "referencia" | "nota";
+
+/** Un código de acceso al portal. `code` solo viaja hacia la agencia. */
+export type SessionAccess = {
+  id: string;
+  role: PortalRole;
+  label: string;
+  code: string;
+  codeHint: string;
+  canUpload: boolean;
+  revoked: boolean;
+  lastSeenAt: string | null;
+  createdAt: string;
+};
+
+export type SessionItem = {
+  id: string;
+  kind: SessionItemKind;
+  title: string;
+  url: string | null;
+  notes: string;
+  authorRole: PortalRole | null;
+  authorLabel: string;
+  createdAt: string;
+};
+
+/** Espacio compartido con el creador y el cliente para una colaboración. */
+export type CollabSession = {
+  id: string;
+  name: string;
+  status: SessionStatus;
+  notes: string;
+  campaignId: string | null;
+  creatorId: string | null;
+  showMetrics: boolean;
+  accesses: SessionAccess[];
+  items: SessionItem[];
+  createdAt: string;
+};

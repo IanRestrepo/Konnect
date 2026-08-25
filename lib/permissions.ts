@@ -47,6 +47,13 @@ export const PERMISSIONS = [
     href: "/finanzas",
   },
   {
+    id: "ver_sesiones",
+    label: "Sesiones",
+    description: "Espacios de entrega compartidos con creadores y clientes",
+    group: "Páginas",
+    href: "/sesiones",
+  },
+  {
     id: "ver_datos_bancarios",
     label: "Ver datos bancarios",
     description: "Revelar la información de pago de los creadores (además pide el código)",
@@ -71,6 +78,13 @@ export const PERMISSIONS = [
     id: "editar_empresas",
     label: "Crear y editar empresas",
     description: "Alta y modificación de clientes",
+    group: "Acciones",
+    href: null,
+  },
+  {
+    id: "editar_sesiones",
+    label: "Gestionar sesiones de entrega",
+    description: "Crear sesiones, repartir códigos de acceso y subir material",
     group: "Acciones",
     href: null,
   },
@@ -114,6 +128,7 @@ const ROUTE_PERMISSION: { prefix: string; permission: PermissionId }[] = [
   { prefix: "/empresas", permission: "ver_empresas" },
   { prefix: "/mensajes", permission: "ver_mensajes" },
   { prefix: "/finanzas", permission: "ver_finanzas" },
+  { prefix: "/sesiones", permission: "ver_sesiones" },
   { prefix: "/configuracion", permission: "gestionar_ajustes" },
 ];
 

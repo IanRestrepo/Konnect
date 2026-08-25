@@ -5,10 +5,20 @@ import { hasPermission, permissionForPath, firstAllowedPath } from "@/lib/permis
 /** Rutas accesibles sin sesión. */
 const PUBLIC = ["/entrar", "/api/auth/entrar", "/api/auth/inicial", "/api/auth/estado"];
 
+/**
+ * El portal de sesiones es para gente de fuera: entra con un código, no con
+ * una cuenta. Su propio token se valida en cada ruta, no aquí.
+ */
+const PORTAL = ["/portal", "/api/portal"];
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (PUBLIC.some((route) => pathname === route || pathname.startsWith(`${route}/`))) {
+    return NextResponse.next();
+  }
+
+  if (PORTAL.some((route) => pathname === route || pathname.startsWith(`${route}/`))) {
     return NextResponse.next();
   }
 

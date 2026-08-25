@@ -114,6 +114,7 @@ model Creator {
   socials      SocialLink[]
   deliverables Deliverable[]
   accessLogs   SensitiveAccessLog[]
+  sessions     CollabSession[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -224,6 +225,7 @@ model Campaign {
   notes     String            @default("")
 
   deliverables Deliverable[]
+  sessions     CollabSession[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -334,4 +336,93 @@ model Settings {
   youtubeApiKey String?
 
   updatedAt DateTime @updatedAt
+}
+
+/* ---------------- Sesiones de entrega (portal externo) ---------------- */
+
+enum SessionStatus {
+  abierta
+  cerrada
+}
+
+/// Quién entra al portal. La agencia entra por la aplicación, no por código.
+enum PortalRole {
+  creador
+  cliente
+  invitado
+}
+
+enum SessionItemKind {
+  entregable
+  guion
+  borrador
+  referencia
+  nota
+}
+
+/// Espacio compartido con el creador y el cliente para una colaboración.
+model CollabSession {
+  id     String        @id
+  name   String
+  status SessionStatus @default(abierta)
+  notes  String        @default("")
+
+  campaignId String?
+  campaign   Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  creatorId  String?
+  creator    Creator?  @relation(fields: [creatorId], references: [id], onDelete: SetNull)
+
+  /// Si está apagado, nadie de fuera ve métricas aunque tenga acceso.
+  showMetrics Boolean @default(true)
+
+  accesses SessionAccess[]
+  items    SessionItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([campaignId])
+  @@index([creatorId])
+  @@index([createdAt])
+}
+
+/// Un código de acceso al portal. Cifrado, porque la agencia debe reenviarlo.
+model SessionAccess {
+  id        String        @id
+  sessionId String
+  session   CollabSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  role  PortalRole
+  label String
+
+  codeEnc  String
+  codeHint String
+
+  canUpload Boolean @default(true)
+  revoked   Boolean @default(false)
+
+  lastSeenAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([sessionId])
+}
+
+/// Material compartido dentro de la sesión. Por ahora siempre un enlace.
+model SessionItem {
+  id        String        @id
+  sessionId String
+  session   CollabSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  kind  SessionItemKind @default(entregable)
+  title String
+  url   String?
+  notes String          @default("")
+
+  /// Quién lo subió. La agencia queda registrada con el nombre del usuario.
+  authorRole  PortalRole?
+  authorLabel String
+
+  createdAt DateTime @default(now())
+
+  @@index([sessionId, createdAt])
 }

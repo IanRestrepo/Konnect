@@ -86,3 +86,22 @@ export const INDUSTRIES = [
 ];
 
 export const CURRENCIES = ["USD", "MXN", "COP", "EUR"] as const;
+
+export const SESSION_STATUS: Record<string, { label: string; tone: Tone }> = {
+  abierta: { label: "Abierta", tone: "ok" },
+  cerrada: { label: "Cerrada", tone: "neutral" },
+};
+
+export const PORTAL_ROLE: Record<string, string> = {
+  creador: "Creador",
+  cliente: "Cliente",
+  invitado: "Invitado",
+};
+
+export const SESSION_ITEM_KIND: Record<string, { label: string; tone: Tone }> = {
+  entregable: { label: "Entregable", tone: "accent" },
+  guion: { label: "Guion", tone: "info" },
+  borrador: { label: "Borrador", tone: "warn" },
+  referencia: { label: "Referencia", tone: "neutral" },
+  nota: { label: "Nota", tone: "neutral" },
+};

@@ -1,16 +1,22 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { decrypt, encrypt } from "@/lib/crypto";
+import { codeHint, generateAccessCode, normalizeAccessCode } from "@/lib/portal";
 import type {
   BankingInfo,
   Campaign,
+  CollabSession,
   Company,
   Contact,
   Creator,
   CreatorChannel,
   Deliverable,
+  PortalRole,
   PublicUser,
   Role,
+  SessionItem,
+  SessionItemKind,
+  SessionStatus,
   SocialLink,
   SocialPlatform,
   User,
@@ -973,5 +979,254 @@ export function toPublicUser(user: User): PublicUser {
     active: user.active,
     lastLoginAt: user.lastLoginAt,
     createdAt: user.createdAt,
+  };
+}
+
+/* ---------------- Sesiones de entrega ---------------- */
+
+const sessionInclude = {
+  accesses: { orderBy: { createdAt: "asc" } },
+  items: { orderBy: { createdAt: "desc" } },
+} satisfies Prisma.CollabSessionInclude;
+
+type SessionRow = Prisma.CollabSessionGetPayload<{ include: typeof sessionInclude }>;
+
+function toSession(row: SessionRow): CollabSession {
+  return {
+    id: row.id,
+    name: row.name,
+    status: row.status,
+    notes: row.notes,
+    campaignId: row.campaignId,
+    creatorId: row.creatorId,
+    showMetrics: row.showMetrics,
+    accesses: row.accesses.map((a) => ({
+      id: a.id,
+      role: a.role,
+      label: a.label,
+      code: unseal(a.codeEnc),
+      codeHint: a.codeHint,
+      canUpload: a.canUpload,
+      revoked: a.revoked,
+      lastSeenAt: isoOrNull(a.lastSeenAt),
+      createdAt: iso(a.createdAt),
+    })),
+    items: row.items.map((i) => ({
+      id: i.id,
+      kind: i.kind,
+      title: i.title,
+      url: i.url,
+      notes: i.notes,
+      authorRole: i.authorRole,
+      authorLabel: i.authorLabel,
+      createdAt: iso(i.createdAt),
+    })),
+    createdAt: iso(row.createdAt),
+  };
+}
+
+export async function listSessions(): Promise<CollabSession[]> {
+  const rows = await prisma.collabSession.findMany({
+    include: sessionInclude,
+    orderBy: { createdAt: "desc" },
+  });
+  return rows.map(toSession);
+}
+
+export async function getCollabSession(id: string): Promise<CollabSession | null> {
+  const row = await prisma.collabSession.findUnique({ where: { id }, include: sessionInclude });
+  return row ? toSession(row) : null;
+}
+
+export async function createCollabSession(input: {
+  name: string;
+  campaignId?: string | null;
+  creatorId?: string | null;
+  notes?: string;
+  showMetrics?: boolean;
+  accesses: { role: PortalRole; label: string; canUpload?: boolean }[];
+}): Promise<CollabSession> {
+  const row = await prisma.collabSession.create({
+    data: {
+      id: newId("se"),
+      name: input.name,
+      campaignId: input.campaignId || null,
+      creatorId: input.creatorId || null,
+      notes: input.notes ?? "",
+      showMetrics: input.showMetrics ?? true,
+      accesses: {
+        create: input.accesses.map((a) => {
+          const code = generateAccessCode();
+          return {
+            id: newId("ac"),
+            role: a.role,
+            label: a.label,
+            codeEnc: encrypt(code),
+            codeHint: codeHint(code),
+            canUpload: a.canUpload ?? true,
+          };
+        }),
+      },
+    },
+    include: sessionInclude,
+  });
+
+  return toSession(row);
+}
+
+export async function updateCollabSession(
+  id: string,
+  patch: { name?: string; status?: SessionStatus; notes?: string; showMetrics?: boolean },
+): Promise<CollabSession | null> {
+  const existe = await prisma.collabSession.findUnique({ where: { id }, select: { id: true } });
+  if (!existe) return null;
+
+  await prisma.collabSession.update({ where: { id }, data: patch });
+  return getCollabSession(id);
+}
+
+export async function deleteCollabSession(id: string): Promise<boolean> {
+  const { count } = await prisma.collabSession.deleteMany({ where: { id } });
+  return count > 0;
+}
+
+export async function addSessionAccess(
+  sessionId: string,
+  input: { role: PortalRole; label: string; canUpload?: boolean },
+): Promise<CollabSession | null> {
+  const existe = await prisma.collabSession.findUnique({
+    where: { id: sessionId },
+    select: { id: true },
+  });
+  if (!existe) return null;
+
+  const code = generateAccessCode();
+  await prisma.sessionAccess.create({
+    data: {
+      id: newId("ac"),
+      sessionId,
+      role: input.role,
+      label: input.label,
+      codeEnc: encrypt(code),
+      codeHint: codeHint(code),
+      canUpload: input.canUpload ?? true,
+    },
+  });
+
+  return getCollabSession(sessionId);
+}
+
+/** Revoca o reactiva un acceso sin borrarlo, para no perder el rastro. */
+export async function setAccessRevoked(
+  accessId: string,
+  revoked: boolean,
+): Promise<CollabSession | null> {
+  const access = await prisma.sessionAccess.findUnique({
+    where: { id: accessId },
+    select: { sessionId: true },
+  });
+  if (!access) return null;
+
+  await prisma.sessionAccess.update({ where: { id: accessId }, data: { revoked } });
+  return getCollabSession(access.sessionId);
+}
+
+/** Cambia el código y deja fuera a quien tuviera el anterior. */
+export async function regenerateAccessCode(accessId: string): Promise<CollabSession | null> {
+  const access = await prisma.sessionAccess.findUnique({
+    where: { id: accessId },
+    select: { sessionId: true },
+  });
+  if (!access) return null;
+
+  const code = generateAccessCode();
+  await prisma.sessionAccess.update({
+    where: { id: accessId },
+    data: { codeEnc: encrypt(code), codeHint: codeHint(code), revoked: false, lastSeenAt: null },
+  });
+
+  return getCollabSession(access.sessionId);
+}
+
+export async function addSessionItem(
+  sessionId: string,
+  input: {
+    kind: SessionItemKind;
+    title: string;
+    url?: string | null;
+    notes?: string;
+    authorRole: PortalRole | null;
+    authorLabel: string;
+  },
+): Promise<SessionItem | null> {
+  const existe = await prisma.collabSession.findUnique({
+    where: { id: sessionId },
+    select: { id: true, status: true },
+  });
+  if (!existe || existe.status === "cerrada") return null;
+
+  const row = await prisma.sessionItem.create({
+    data: {
+      id: newId("it"),
+      sessionId,
+      kind: input.kind,
+      title: input.title,
+      url: input.url || null,
+      notes: input.notes ?? "",
+      authorRole: input.authorRole,
+      authorLabel: input.authorLabel,
+    },
+  });
+
+  return {
+    id: row.id,
+    kind: row.kind,
+    title: row.title,
+    url: row.url,
+    notes: row.notes,
+    authorRole: row.authorRole,
+    authorLabel: row.authorLabel,
+    createdAt: iso(row.createdAt),
+  };
+}
+
+export async function removeSessionItem(sessionId: string, itemId: string): Promise<boolean> {
+  const { count } = await prisma.sessionItem.deleteMany({ where: { id: itemId, sessionId } });
+  return count > 0;
+}
+
+/**
+ * Comprueba un código contra los accesos vivos de la sesión. Recorre todos los
+ * accesos aunque encuentre el bueno, para no delatar por tiempo cuál acertó.
+ */
+export async function verifyPortalCode(
+  sessionId: string,
+  code: string,
+): Promise<{ id: string; role: PortalRole; label: string; canUpload: boolean } | null> {
+  const session = await prisma.collabSession.findUnique({
+    where: { id: sessionId },
+    include: { accesses: { where: { revoked: false } } },
+  });
+  if (!session || session.status === "cerrada") return null;
+
+  const buscado = normalizeAccessCode(code);
+  if (!buscado) return null;
+
+  let encontrado: (typeof session.accesses)[number] | null = null;
+  for (const acceso of session.accesses) {
+    if (normalizeAccessCode(unseal(acceso.codeEnc)) === buscado) encontrado = acceso;
+  }
+  if (!encontrado) return null;
+
+  await prisma.sessionAccess.update({
+    where: { id: encontrado.id },
+    data: { lastSeenAt: new Date() },
+  });
+
+  return {
+    id: encontrado.id,
+    role: encontrado.role,
+    label: encontrado.label,
+    canUpload: encontrado.canUpload,
   };
 }

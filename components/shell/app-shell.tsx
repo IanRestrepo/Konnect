@@ -9,8 +9,11 @@ import { cn } from "@/lib/utils";
 /** Rutas que ocupan todo el lienzo y gestionan su propio scroll (bandejas, tableros). */
 const FULL_BLEED = ["/mensajes"];
 
-/** Rutas sin marco de aplicación: se dibujan solas. */
-const BARE = ["/entrar"];
+/**
+ * Rutas sin marco de aplicación: se dibujan solas. El portal va aquí aunque
+ * quien lo abra tenga sesión de agencia: es la vista de gente de fuera.
+ */
+const BARE = ["/entrar", "/portal"];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
