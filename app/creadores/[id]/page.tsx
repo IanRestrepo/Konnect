@@ -21,6 +21,7 @@ import {
   DELIVERABLE_TYPE,
   PAYMENT_METHOD,
 } from "@/lib/labels";
+import { PLATFORM_METRICS } from "@/lib/socials";
 import { creatorViewsSeries, trend } from "@/lib/series";
 import { formatCompact, formatDate, formatMoney } from "@/lib/utils";
 
@@ -29,6 +30,9 @@ export default async function CreadorPage({ params }: { params: Promise<{ id: st
   const { id } = await params;
   const [creator, campaigns] = await Promise.all([getCreator(id), getCampaigns()]);
   if (!creator) notFound();
+
+  // Las métricas se nombran según dónde publica: un TikToker no tiene suscriptores.
+  const metricas = PLATFORM_METRICS[creator.mainPlatform];
 
   const related = creatorCampaigns(campaigns, creator.id);
   const status = CREATOR_STATUS[creator.status];
@@ -60,14 +64,17 @@ export default async function CreadorPage({ params }: { params: Promise<{ id: st
         <div className="min-w-0 flex-1">
           <PageTitle
             title={creator.name}
-            description={`${creator.handle} · ${creator.country}`}
+            description={[creator.handle, creator.country].filter(Boolean).join(" · ")}
             actions={
               <>
-                <Link href={creator.channelUrl} target="_blank" rel="noreferrer">
-                  <Button variant="secondary" size="icon-lg" aria-label="Abrir canal">
-                    <ExternalLink size={17} strokeWidth={1.75} />
-                  </Button>
-                </Link>
+                {/* Un creador de TikTok o Instagram no tiene canal que abrir. */}
+                {creator.channelUrl && (
+                  <Link href={creator.channelUrl} target="_blank" rel="noreferrer">
+                    <Button variant="secondary" size="icon-lg" aria-label="Abrir canal">
+                      <ExternalLink size={17} strokeWidth={1.75} />
+                    </Button>
+                  </Link>
+                )}
                 <Button variant="secondary" size="icon-lg" aria-label="Actualizar métricas">
                   <RefreshCw size={17} strokeWidth={1.75} />
                 </Button>
@@ -90,9 +97,9 @@ export default async function CreadorPage({ params }: { params: Promise<{ id: st
       </div>
 
       <StatBand>
-        <Stat label="Suscriptores" value={formatCompact(creator.subscribers)} />
-        <Stat label="Vistas del canal" value={formatCompact(creator.totalViews)} />
-        <Stat label="Videos" value={formatCompact(creator.videoCount)} />
+        <Stat label={metricas.audience} value={formatCompact(creator.subscribers)} />
+        <Stat label={metricas.views} value={formatCompact(creator.totalViews)} />
+        <Stat label={metricas.content} value={formatCompact(creator.videoCount)} />
         <Stat
           label="Vistas para clientes"
           value={formatCompact(generatedViews)}

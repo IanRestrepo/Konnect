@@ -60,6 +60,7 @@ enum PaymentMethod {
 }
 
 enum SocialPlatform {
+  youtube
   instagram
   tiktok
   x
@@ -71,11 +72,16 @@ enum SocialPlatform {
 }
 
 model Creator {
-  id         String        @id
-  name       String
-  handle     String
-  channelId  String
-  channelUrl String
+  id     String @id
+  name   String
+  handle String
+
+  /// Dónde vive principalmente. No todos los creadores son de YouTube.
+  mainPlatform SocialPlatform @default(youtube)
+
+  /// Solo para canales de YouTube; vacío en el resto de plataformas.
+  channelId  String?
+  channelUrl String?
   avatarUrl  String?
   country    String        @default("")
   category   String
@@ -147,7 +153,7 @@ model CreatorChannel {
   @@index([creatorId])
 }
 
-/// Perfil del creador fuera de YouTube.
+/// Perfil del creador en una plataforma, con sus propias métricas.
 model SocialLink {
   id        String  @id
   creatorId String
@@ -156,6 +162,14 @@ model SocialLink {
   platform SocialPlatform
   handle   String
   url      String
+
+  avatarUrl String?
+
+  /// Seguidores, suscriptores o como los llame cada plataforma.
+  followers        Int       @default(0)
+  totalViews       BigInt    @default(0)
+  contentCount     Int       @default(0)
+  metricsUpdatedAt DateTime?
 
   createdAt DateTime @default(now())
 

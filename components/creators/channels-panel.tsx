@@ -95,15 +95,17 @@ export function ChannelsPanel({
                 {principal.handle} · {formatCompact(principal.subscribers)} subs
               </p>
             </div>
-            <Link
-              href={principal.channelUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="shrink-0 text-[var(--text-subtle)] transition hover:text-[var(--accent)]"
-              aria-label="Abrir canal principal"
-            >
-              <ExternalLink size={14} />
-            </Link>
+            {principal.channelUrl && (
+              <Link
+                href={principal.channelUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="shrink-0 text-[var(--text-subtle)] transition hover:text-[var(--accent)]"
+                aria-label="Abrir canal principal"
+              >
+                <ExternalLink size={14} />
+              </Link>
+            )}
           </div>
 
           {channels.map((canal) => (

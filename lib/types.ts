@@ -24,6 +24,9 @@ export type Creator = {
   id: string;
   name: string;
   handle: string;
+  /** Dónde vive principalmente. No todos los creadores son de YouTube. */
+  mainPlatform: SocialPlatform;
+  /** Vacíos si el creador no tiene canal de YouTube. */
   channelId: string;
   channelUrl: string;
   avatarUrl: string | null;
@@ -168,6 +171,7 @@ export type CreatorChannel = {
 };
 
 export type SocialPlatform =
+  | "youtube"
   | "instagram"
   | "tiktok"
   | "x"
@@ -177,11 +181,18 @@ export type SocialPlatform =
   | "roblox"
   | "web";
 
+/** Perfil del creador en una plataforma, con sus propias métricas. */
 export type SocialLink = {
   id: string;
   platform: SocialPlatform;
   handle: string;
   url: string;
+  avatarUrl: string | null;
+  /** Seguidores, suscriptores o como los llame cada plataforma. */
+  followers: number;
+  totalViews: number;
+  contentCount: number;
+  metricsUpdatedAt: string | null;
 };
 
 /** Persona de contacto en una empresa. Puede haber varias. */

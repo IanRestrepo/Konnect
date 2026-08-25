@@ -12,8 +12,19 @@ const schema = z.object({
   socials: z.array(
     z.object({
       id: z.string().optional(),
-      platform: z.enum(["instagram", "tiktok", "x", "twitch", "kick", "discord", "roblox", "web"]),
+      platform: z.enum([
+        "youtube",
+        "instagram",
+        "tiktok",
+        "x",
+        "twitch",
+        "kick",
+        "discord",
+        "roblox",
+        "web",
+      ]),
       handle: z.string().min(1, "Falta el usuario."),
+      followers: z.number().min(0).default(0),
     }),
   ),
 });
@@ -39,6 +50,11 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     platform: s.platform,
     handle: s.handle.trim(),
     url: PLATFORM_URL[s.platform](s.handle.trim()),
+    avatarUrl: null,
+    followers: s.followers,
+    totalViews: 0,
+    contentCount: 0,
+    metricsUpdatedAt: null,
   }));
 
   const creator = await setCreatorSocials(id, socials);

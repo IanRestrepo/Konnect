@@ -1,13 +1,18 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { createCreator } from "@/lib/store";
+import { createCreator, newId } from "@/lib/store";
+import { PLATFORM_URL } from "@/lib/socials";
 
 export const dynamic = "force-dynamic";
 
 const schema = z.object({
   name: z.string({ error: "Falta el nombre." }).min(1, "Falta el nombre."),
   handle: z.string().default(""),
+  /** Dónde vive el creador. Solo YouTube trae datos de la API. */
+  mainPlatform: z
+    .enum(["youtube", "instagram", "tiktok", "x", "twitch", "kick", "discord", "roblox", "web"])
+    .default("youtube"),
   channelId: z.string().default(""),
   channelUrl: z.string().default(""),
   avatarUrl: z.string().nullable().default(null),
@@ -44,6 +49,27 @@ const schema = z.object({
       taxId: "",
     }),
   notes: z.string().default(""),
+  /** Perfiles del creador, cada uno con sus propias métricas. */
+  socials: z
+    .array(
+      z.object({
+        platform: z.enum([
+          "youtube",
+          "instagram",
+          "tiktok",
+          "x",
+          "twitch",
+          "kick",
+          "discord",
+          "roblox",
+          "web",
+        ]),
+        handle: z.string().min(1),
+        url: z.string().default(""),
+        followers: z.number().min(0).default(0),
+      }),
+    )
+    .default([]),
 });
 
 export async function POST(request: Request) {
@@ -57,10 +83,22 @@ export async function POST(request: Request) {
     );
   }
 
+  const { socials, ...datos } = parsed.data;
+
   const creator = await createCreator({
-    ...parsed.data,
+    ...datos,
     channels: [],
-    socials: [],
+    socials: socials.map((s) => ({
+      id: newId("so"),
+      platform: s.platform,
+      handle: s.handle.trim(),
+      url: s.url.trim() || PLATFORM_URL[s.platform](s.handle.trim()),
+      avatarUrl: null,
+      followers: s.followers,
+      totalViews: 0,
+      contentCount: 0,
+      metricsUpdatedAt: null,
+    })),
     metricsUpdatedAt: new Date().toISOString(),
   });
 

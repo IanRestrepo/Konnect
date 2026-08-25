@@ -2,14 +2,15 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Link2, LoaderCircle, Lock, Search, TriangleAlert } from "lucide-react";
+import { Link2, LoaderCircle, Lock, Search, TriangleAlert, UserPlus } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { FieldHint, Input, Label, Select, Textarea } from "@/components/ui/field";
-import { PAYMENT_METHOD } from "@/lib/labels";
-import type { PaymentMethod } from "@/lib/types";
+import { FieldHint, Input, InputWithIcon, Label, Select, Textarea } from "@/components/ui/field";
+import { CATEGORIES, CURRENCIES, PAYMENT_METHOD } from "@/lib/labels";
+import { PLATFORMS, PLATFORM_URL } from "@/lib/socials";
+import type { PaymentMethod, SocialPlatform } from "@/lib/types";
 import { cn, formatCompact } from "@/lib/utils";
 
 type ChannelPreview = {
@@ -25,18 +26,8 @@ type ChannelPreview = {
   source: "api" | "demo";
 };
 
-const CATEGORIES = [
-  "Tecnología",
-  "Gaming",
-  "Lifestyle",
-  "Belleza",
-  "Fitness",
-  "Finanzas",
-  "Educación",
-  "Entretenimiento",
-  "Automotriz",
-  "Cocina",
-];
+/** Las que la agencia usa a diario van primero; el resto se añaden luego. */
+const PLATAFORMAS_ALTA: SocialPlatform[] = ["youtube", "tiktok", "instagram", "twitch", "kick"];
 
 const EMPTY = {
   category: CATEGORIES[0],
@@ -56,29 +47,47 @@ const EMPTY = {
   notes: "",
 };
 
+/** Datos que en YouTube llegan de la API y en el resto se escriben a mano. */
+const PERFIL_VACIO = { name: "", handle: "", url: "", followers: "" };
+
 export function NewCreatorDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const router = useRouter();
+  const [platform, setPlatform] = useState<SocialPlatform>("youtube");
   const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [channel, setChannel] = useState<ChannelPreview | null>(null);
+  const [perfil, setPerfil] = useState({ ...PERFIL_VACIO });
   const [methods, setMethods] = useState<PaymentMethod[]>(["transferencia"]);
   const [form, setForm] = useState({ ...EMPTY });
+
+  const esYoutube = platform === "youtube";
+  // En YouTube hace falta buscar el canal; en el resto basta con el nombre.
+  const listo = esYoutube ? Boolean(channel) : Boolean(perfil.name.trim());
 
   function set<K extends keyof typeof EMPTY>(key: K, value: string) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
   function close() {
+    setPlatform("youtube");
     setUrl("");
     setChannel(null);
+    setPerfil({ ...PERFIL_VACIO });
     setError(null);
     setLoading(false);
     setSaving(false);
     setMethods(["transferencia"]);
     setForm({ ...EMPTY });
     onClose();
+  }
+
+  function cambiarPlataforma(next: SocialPlatform) {
+    setPlatform(next);
+    setChannel(null);
+    setPerfil({ ...PERFIL_VACIO });
+    setError(null);
   }
 
   async function lookup() {
@@ -98,23 +107,33 @@ export function NewCreatorDialog({ open, onClose }: { open: boolean; onClose: ()
   }
 
   async function save() {
-    if (!channel) return;
+    if (!listo) return;
     setSaving(true);
     setError(null);
+
+    const handle = esYoutube ? channel!.handle : perfil.handle.trim() || perfil.name.trim();
+    const enlace = esYoutube
+      ? channel!.channelUrl
+      : perfil.url.trim() || PLATFORM_URL[platform](handle);
+    const seguidores = esYoutube ? channel!.subscribers : Number(perfil.followers) || 0;
+
     try {
       const res = await fetch("/api/creadores", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: channel.name,
-          handle: channel.handle,
-          channelId: channel.channelId,
-          channelUrl: channel.channelUrl,
-          avatarUrl: channel.avatarUrl,
-          country: channel.country ?? "",
-          subscribers: channel.subscribers,
-          totalViews: channel.totalViews,
-          videoCount: channel.videoCount,
+          name: esYoutube ? channel!.name : perfil.name.trim(),
+          handle,
+          mainPlatform: platform,
+          // Los campos de canal solo existen en YouTube.
+          channelId: esYoutube ? channel!.channelId : "",
+          channelUrl: esYoutube ? channel!.channelUrl : "",
+          avatarUrl: esYoutube ? channel!.avatarUrl : null,
+          country: esYoutube ? (channel!.country ?? "") : "",
+          subscribers: seguidores,
+          totalViews: esYoutube ? channel!.totalViews : 0,
+          videoCount: esYoutube ? channel!.videoCount : 0,
+          socials: [{ platform, handle, url: enlace, followers: seguidores }],
           category: form.category,
           status: form.status,
           email: form.email.trim(),
@@ -150,19 +169,23 @@ export function NewCreatorDialog({ open, onClose }: { open: boolean; onClose: ()
     setMethods((prev) => (prev.includes(id) ? prev.filter((m) => m !== id) : [...prev, id]));
   }
 
+  const etiqueta = PLATFORMS.find((p) => p.id === platform)?.label ?? platform;
+
   return (
     <Modal
       open={open}
       onClose={close}
       size="lg"
+      icon={UserPlus}
       title="Añadir creador"
-      description="Pega el enlace del canal de YouTube y completamos los datos públicos."
+      description="Elige dónde publica. De YouTube traemos los datos solos; el resto se escribe a mano."
+      footerNote={listo ? undefined : "Completa la plataforma para seguir"}
       footer={
         <>
           <Button variant="ghost" onClick={close}>
             Cancelar
           </Button>
-          <Button variant="primary" onClick={save} disabled={!channel || saving}>
+          <Button variant="primary" onClick={save} disabled={!listo || saving}>
             {saving && <LoaderCircle size={14} className="animate-spin" />}
             Guardar creador
           </Button>
@@ -171,33 +194,93 @@ export function NewCreatorDialog({ open, onClose }: { open: boolean; onClose: ()
     >
       <div className="space-y-4">
         <div>
-          <Label htmlFor="channel-url">Enlace del canal</Label>
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <Link2
-                size={14}
-                className="absolute top-1/2 left-3 -translate-y-1/2 text-[var(--text-subtle)]"
-              />
-              <Input
+          <Label>Plataforma principal</Label>
+          <div className="flex flex-wrap gap-1.5">
+            {PLATAFORMAS_ALTA.map((id) => {
+              const activa = id === platform;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => cambiarPlataforma(id)}
+                  className={cn(
+                    "h-8 rounded-[var(--r-pill)] border px-3 text-[12.5px] font-medium transition",
+                    activa
+                      ? "border-transparent bg-[var(--accent-soft)] text-[var(--accent)]"
+                      : "border-[var(--line)] bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)]",
+                  )}
+                >
+                  {PLATFORMS.find((p) => p.id === id)?.label ?? id}
+                </button>
+              );
+            })}
+          </div>
+          <FieldHint>Podrás añadirle más perfiles desde su ficha.</FieldHint>
+        </div>
+
+        {esYoutube ? (
+          <div>
+            <Label htmlFor="channel-url">Enlace del canal</Label>
+            <div className="flex gap-2">
+              <InputWithIcon
                 id="channel-url"
+                icon={<Link2 size={14} />}
+                wrapperClassName="flex-1"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && lookup()}
                 placeholder="https://www.youtube.com/@creador"
-                className="pl-9"
+              />
+              <Button variant="primary" onClick={lookup} disabled={loading || !url.trim()}>
+                {loading ? <LoaderCircle size={14} className="animate-spin" /> : <Search size={14} />}
+                Buscar
+              </Button>
+            </div>
+            <FieldHint>Acepta /@handle, /channel/UC…, /c/nombre o el ID del canal.</FieldHint>
+          </div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <Label htmlFor="perfil-name">Nombre</Label>
+              <Input
+                id="perfil-name"
+                value={perfil.name}
+                onChange={(e) => setPerfil({ ...perfil, name: e.target.value })}
+                placeholder="Nombre del creador"
               />
             </div>
-            <Button variant="primary" onClick={lookup} disabled={loading || !url.trim()}>
-              {loading ? (
-                <LoaderCircle size={14} className="animate-spin" />
-              ) : (
-                <Search size={14} />
-              )}
-              Buscar
-            </Button>
+            <div>
+              <Label htmlFor="perfil-handle">Usuario en {etiqueta}</Label>
+              <Input
+                id="perfil-handle"
+                value={perfil.handle}
+                onChange={(e) => setPerfil({ ...perfil, handle: e.target.value })}
+                placeholder="@usuario"
+              />
+            </div>
+            <div>
+              <Label htmlFor="perfil-url">Enlace del perfil</Label>
+              <InputWithIcon
+                id="perfil-url"
+                icon={<Link2 size={14} />}
+                value={perfil.url}
+                onChange={(e) => setPerfil({ ...perfil, url: e.target.value })}
+                placeholder="Se arma solo si lo dejas vacío"
+              />
+            </div>
+            <div>
+              <Label htmlFor="perfil-followers">Seguidores</Label>
+              <Input
+                id="perfil-followers"
+                type="number"
+                min={0}
+                value={perfil.followers}
+                onChange={(e) => setPerfil({ ...perfil, followers: e.target.value })}
+                placeholder="0"
+              />
+            </div>
           </div>
-          <FieldHint>Acepta /@handle, /channel/UC…, /c/nombre o el ID del canal.</FieldHint>
-        </div>
+        )}
 
         {error && (
           <p className="flex items-start gap-2 rounded-[var(--r-control)] bg-[var(--danger-soft)] px-3 py-2 text-[12.5px] text-[var(--danger)]">
@@ -206,50 +289,52 @@ export function NewCreatorDialog({ open, onClose }: { open: boolean; onClose: ()
           </p>
         )}
 
-        {channel && (
-          <>
-            <div className="rounded-[var(--r-card)] border border-[var(--line)] bg-[var(--surface-2)] p-4">
-              <div className="flex items-start gap-3">
-                <Avatar src={channel.avatarUrl} name={channel.name} size={44} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="truncate font-semibold">{channel.name}</p>
-                    {channel.source === "demo" ? (
-                      <Badge tone="warn">Modo demo</Badge>
-                    ) : (
-                      <Badge tone="ok">Verificado</Badge>
-                    )}
-                  </div>
-                  <p className="truncate text-[12px] text-[var(--text-subtle)]">
-                    {channel.handle} · {channel.channelId}
-                  </p>
+        {esYoutube && channel && (
+          <div className="rounded-[var(--r-card)] border border-[var(--line)] bg-[var(--surface-2)] p-4">
+            <div className="flex items-start gap-3">
+              <Avatar src={channel.avatarUrl} name={channel.name} size={44} />
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="truncate font-semibold">{channel.name}</p>
+                  {channel.source === "demo" ? (
+                    <Badge tone="warn">Modo demo</Badge>
+                  ) : (
+                    <Badge tone="ok">Verificado</Badge>
+                  )}
                 </div>
-              </div>
-
-              <div className="mt-3 grid grid-cols-3 gap-2">
-                {[
-                  { label: "Suscriptores", value: formatCompact(channel.subscribers) },
-                  { label: "Vistas totales", value: formatCompact(channel.totalViews) },
-                  { label: "Videos", value: formatCompact(channel.videoCount) },
-                ].map((s) => (
-                  <div
-                    key={s.label}
-                    className="rounded-[var(--r-control)] border border-[var(--line)] bg-[var(--surface)] px-3 py-2"
-                  >
-                    <p className="tabular text-[16px] font-semibold">{s.value}</p>
-                    <p className="text-[11.5px] text-[var(--text-subtle)]">{s.label}</p>
-                  </div>
-                ))}
-              </div>
-
-              {channel.source === "demo" && (
-                <p className="mt-3 text-[12px] text-[var(--warn)]">
-                  Sin YOUTUBE_API_KEY los datos son de ejemplo. Configúrala en Configuración →
-                  Integraciones para leer canales reales.
+                <p className="truncate text-[12px] text-[var(--text-subtle)]">
+                  {channel.handle} · {channel.channelId}
                 </p>
-              )}
+              </div>
             </div>
 
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              {[
+                { label: "Suscriptores", value: formatCompact(channel.subscribers) },
+                { label: "Vistas totales", value: formatCompact(channel.totalViews) },
+                { label: "Videos", value: formatCompact(channel.videoCount) },
+              ].map((s) => (
+                <div
+                  key={s.label}
+                  className="rounded-[var(--r-control)] border border-[var(--line)] bg-[var(--surface)] px-3 py-2"
+                >
+                  <p className="tabular text-[16px] font-semibold">{s.value}</p>
+                  <p className="text-[11.5px] text-[var(--text-subtle)]">{s.label}</p>
+                </div>
+              ))}
+            </div>
+
+            {channel.source === "demo" && (
+              <p className="mt-3 text-[12px] text-[var(--warn)]">
+                Sin YOUTUBE_API_KEY los datos son de ejemplo. Configúrala en Configuración →
+                Integraciones para leer canales reales.
+              </p>
+            )}
+          </div>
+        )}
+
+        {listo && (
+          <>
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <Label htmlFor="category">Categoría</Label>
@@ -265,11 +350,7 @@ export function NewCreatorDialog({ open, onClose }: { open: boolean; onClose: ()
               </div>
               <div>
                 <Label htmlFor="status">Estado</Label>
-                <Select
-                  id="status"
-                  value={form.status}
-                  onChange={(e) => set("status", e.target.value)}
-                >
+                <Select id="status" value={form.status} onChange={(e) => set("status", e.target.value)}>
                   <option value="activo">Activo</option>
                   <option value="pausado">En pausa</option>
                   <option value="prospecto">Prospecto</option>
@@ -328,10 +409,9 @@ export function NewCreatorDialog({ open, onClose }: { open: boolean; onClose: ()
                   onChange={(e) => set("currency", e.target.value)}
                   aria-label="Moneda"
                 >
-                  <option>USD</option>
-                  <option>MXN</option>
-                  <option>COP</option>
-                  <option>EUR</option>
+                  {CURRENCIES.map((c) => (
+                    <option key={c}>{c}</option>
+                  ))}
                 </Select>
                 <Input
                   type="number"

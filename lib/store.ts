@@ -179,8 +179,9 @@ function toCreator(row: CreatorRow): Creator {
     id: row.id,
     name: row.name,
     handle: row.handle,
-    channelId: row.channelId,
-    channelUrl: row.channelUrl,
+    mainPlatform: row.mainPlatform,
+    channelId: row.channelId ?? "",
+    channelUrl: row.channelUrl ?? "",
     avatarUrl: row.avatarUrl,
     country: row.country,
     category: row.category,
@@ -204,6 +205,11 @@ function toCreator(row: CreatorRow): Creator {
       platform: s.platform as SocialPlatform,
       handle: s.handle,
       url: s.url,
+      avatarUrl: s.avatarUrl,
+      followers: s.followers,
+      totalViews: num(s.totalViews),
+      contentCount: s.contentCount,
+      metricsUpdatedAt: isoOrNull(s.metricsUpdatedAt),
     })),
     createdAt: iso(row.createdAt),
   };
@@ -394,8 +400,9 @@ export async function createCreator(input: Omit<Creator, "id" | "createdAt">): P
       id: newId("cr"),
       name: input.name,
       handle: input.handle,
-      channelId: input.channelId,
-      channelUrl: input.channelUrl,
+      mainPlatform: input.mainPlatform ?? "youtube",
+      channelId: input.channelId || null,
+      channelUrl: input.channelUrl || null,
       avatarUrl: input.avatarUrl,
       country: input.country ?? "",
       category: input.category,
@@ -433,6 +440,11 @@ export async function createCreator(input: Omit<Creator, "id" | "createdAt">): P
           platform: s.platform,
           handle: s.handle,
           url: s.url,
+          avatarUrl: s.avatarUrl ?? null,
+          followers: s.followers ?? 0,
+          totalViews: BigInt(Math.trunc(s.totalViews ?? 0)),
+          contentCount: s.contentCount ?? 0,
+          metricsUpdatedAt: toDate(s.metricsUpdatedAt),
         })),
       },
     },
@@ -450,8 +462,9 @@ export async function updateCreator(id: string, patch: Partial<Creator>): Promis
 
   if (patch.name !== undefined) data.name = patch.name;
   if (patch.handle !== undefined) data.handle = patch.handle;
-  if (patch.channelId !== undefined) data.channelId = patch.channelId;
-  if (patch.channelUrl !== undefined) data.channelUrl = patch.channelUrl;
+  if (patch.mainPlatform !== undefined) data.mainPlatform = patch.mainPlatform;
+  if (patch.channelId !== undefined) data.channelId = patch.channelId || null;
+  if (patch.channelUrl !== undefined) data.channelUrl = patch.channelUrl || null;
   if (patch.avatarUrl !== undefined) data.avatarUrl = patch.avatarUrl;
   if (patch.country !== undefined) data.country = patch.country;
   if (patch.category !== undefined) data.category = patch.category;
@@ -511,6 +524,11 @@ async function replaceCreatorLists(id: string, patch: Partial<Creator>): Promise
             platform: s.platform,
             handle: s.handle,
             url: s.url,
+            avatarUrl: s.avatarUrl ?? null,
+            followers: s.followers ?? 0,
+            totalViews: BigInt(Math.trunc(s.totalViews ?? 0)),
+            contentCount: s.contentCount ?? 0,
+            metricsUpdatedAt: toDate(s.metricsUpdatedAt),
           },
         });
       }

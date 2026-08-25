@@ -11,6 +11,7 @@ import { ListBox, ListRow } from "@/components/ui/list";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NewCreatorDialog } from "@/components/creators/new-creator-dialog";
 import { CREATOR_STATUS } from "@/lib/labels";
+import { PLATFORM_METRICS } from "@/lib/socials";
 import type { Creator, CreatorStatus } from "@/lib/types";
 import { formatCompact, formatMoney } from "@/lib/utils";
 
@@ -111,7 +112,7 @@ export function CreatorsView({
                     href={`/creadores/${creator.id}`}
                     leading={<Avatar src={creator.avatarUrl} name={creator.name} size={38} />}
                     title={creator.name}
-                    subtitle={`${creator.handle} · ${formatCompact(creator.subscribers)} subs · ${campaignCount[creator.id] ?? 0} campañas`}
+                    subtitle={`${creator.handle} · ${formatCompact(creator.subscribers)} ${PLATFORM_METRICS[creator.mainPlatform].audienceShort} · ${campaignCount[creator.id] ?? 0} campañas`}
                     trailing={
                       <span className="flex items-center gap-4">
                         <span className="hidden text-right sm:block">
