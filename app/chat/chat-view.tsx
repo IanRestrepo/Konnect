@@ -287,9 +287,9 @@ export function ChatView({
   const archivadas = rooms.filter((r) => r.archived);
 
   return (
-    <div className="flex h-[calc(100dvh-theme(spacing.4))] gap-4">
+    <div className="flex h-full overflow-hidden">
       {/* ---- Salas ---- */}
-      <aside className="hidden w-60 shrink-0 flex-col rounded-[var(--r-card)] border border-[var(--line)] bg-[var(--surface)] md:flex">
+      <aside className="hidden w-60 shrink-0 flex-col border-r border-[var(--line)] bg-[var(--surface-2)] md:flex">
         <div className="flex items-center justify-between gap-2 px-4 py-3.5">
           <h2 className="text-[14px] font-semibold">Salas</h2>
           {puedeGestionar && (
@@ -299,7 +299,7 @@ export function ChatView({
           )}
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto border-t border-[var(--line)] p-2">
+        <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
           {activas.map((room) => (
             <RoomRow
               key={room.id}
@@ -328,7 +328,7 @@ export function ChatView({
       </aside>
 
       {/* ---- Conversación ---- */}
-      <section className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-[var(--r-card)] border border-[var(--line)] bg-[var(--surface)]">
+      <section className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[var(--surface)]">
         {!activa ? (
           <div className="grid flex-1 place-items-center p-6">
             <EmptyState
@@ -347,6 +347,35 @@ export function ChatView({
           </div>
         ) : (
           <>
+            {/* En teléfono la barra lateral no cabe: las salas pasan a una
+                tira horizontal para poder cambiar igual. */}
+            <div className="flex gap-1.5 overflow-x-auto border-b border-[var(--line)] bg-[var(--surface-2)] px-3 py-2 md:hidden">
+              {rooms.map((room) => (
+                <a
+                  key={room.id}
+                  href={"/chat?sala=" + room.id}
+                  className={cn(
+                    "inline-flex shrink-0 items-center gap-1.5 rounded-[var(--r-pill)] px-2.5 py-1 text-[12.5px] transition",
+                    room.id === activeRoomId
+                      ? "bg-[var(--surface)] font-medium shadow-[var(--shadow-soft)]"
+                      : "text-[var(--text-muted)]",
+                  )}
+                >
+                  {room.roleIds.length ? <Lock size={11} /> : <Hash size={11} />}
+                  {room.name}
+                </a>
+              ))}
+              {puedeGestionar && (
+                <button
+                  onClick={abrirNueva}
+                  aria-label="Nueva sala"
+                  className="grid h-7 w-7 shrink-0 place-items-center rounded-[var(--r-pill)] text-[var(--text-subtle)] transition hover:bg-[var(--surface-3)]"
+                >
+                  <Plus size={13} />
+                </button>
+              )}
+            </div>
+
             <header className="flex items-center gap-3 border-b border-[var(--line)] px-4 py-3">
               <span
                 className="grid h-8 w-8 shrink-0 place-items-center rounded-[var(--r-control)]"
@@ -490,8 +519,8 @@ export function ChatView({
                   Esta sala está archivada. Reactívala para volver a escribir.
                 </p>
               ) : (
-                <div className="flex items-end gap-2">
-                  <Textarea
+                <div className="flex items-end gap-2 rounded-[var(--r-control)] border border-[var(--line)] bg-[var(--surface-2)] py-1.5 pr-1.5 pl-3 transition focus-within:border-[var(--accent)] focus-within:bg-[var(--surface)] focus-within:shadow-[0_0_0_3px_var(--accent-soft)]">
+                  <textarea
                     value={borrador}
                     onChange={(e) => setBorrador(e.target.value)}
                     onKeyDown={(e) => {
@@ -503,17 +532,17 @@ export function ChatView({
                     }}
                     rows={1}
                     placeholder={`Escribe en ${activa.name}…`}
-                    className="min-h-10 flex-1"
                     aria-label="Mensaje"
+                    className="max-h-40 min-h-7 flex-1 resize-none bg-transparent py-1 text-[13.5px] leading-relaxed text-[var(--text)] outline-none placeholder:text-[var(--text-subtle)]"
                   />
-                  <Button
-                    variant="accent"
+                  <button
                     onClick={enviar}
                     disabled={!borrador.trim() || enviando}
                     aria-label="Enviar"
+                    className="grid h-8 w-8 shrink-0 place-items-center rounded-[var(--r-chip)] bg-[var(--accent)] text-[var(--accent-fg)] transition disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     <Send size={15} />
-                  </Button>
+                  </button>
                 </div>
               )}
             </div>
@@ -655,7 +684,9 @@ function RoomRow({
         href={`/chat?sala=${room.id}`}
         className={cn(
           "flex items-center gap-2.5 rounded-[var(--r-control)] px-2.5 py-2 transition",
-          activa ? "bg-[var(--surface-3)]" : "hover:bg-[var(--surface-2)]",
+          activa
+            ? "bg-[var(--surface)] font-medium shadow-[var(--shadow-soft)]"
+            : "hover:bg-[var(--surface-3)]",
         )}
       >
         <span
