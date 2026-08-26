@@ -10,6 +10,7 @@ import {
   Plus,
   Search,
   Send,
+  Users,
   Settings2,
   Trash2,
   TriangleAlert,
@@ -27,7 +28,7 @@ import type { ChatMessage, ChatRoom } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type RolOpcion = { id: string; name: string; color: string };
-type PersonaOpcion = { id: string; name: string; avatarUrl: string | null };
+type PersonaOpcion = { id: string; name: string; avatarUrl: string | null; roleId: string };
 
 /** Cada cuánto se pregunta por mensajes nuevos con la pestaña a la vista. */
 const SONDEO_MS = 5000;
@@ -86,6 +87,7 @@ export function ChatView({
   });
 
   const [busqueda, setBusqueda] = useState("");
+  const [verGente, setVerGente] = useState(false);
   const finRef = useRef<HTMLDivElement | null>(null);
   const activa = rooms.find((r) => r.id === activeRoomId) ?? null;
 
@@ -112,6 +114,21 @@ export function ChatView({
     if (!q) return rooms;
     return rooms.filter((r) => presentar(r).nombre.toLowerCase().includes(q));
   }, [rooms, busqueda, presentar]);
+
+  /**
+   * Quién puede leer la sala. En una privada son sus miembros; en una por
+   * roles, quien tenga ese rol; y si no tiene ninguna restricción, el equipo.
+   */
+  const integrantes = useCallback(
+    (room: ChatRoom) => {
+      if (room.memberIds.length) {
+        return room.memberIds.map((id) => porId.get(id)).filter(Boolean) as PersonaOpcion[];
+      }
+      if (room.roleIds.length) return users.filter((u) => room.roleIds.includes(u.roleId));
+      return users;
+    },
+    [porId, users],
+  );
 
   const salas = visibles.filter((r) => !r.memberIds.length);
   const directas = visibles.filter((r) => r.memberIds.length > 0);
@@ -468,6 +485,22 @@ export function ChatView({
                 </Badge>
               )}
               {activa.archived && <Badge tone="warn">Archivada</Badge>}
+
+              <button
+                onClick={() => setVerGente((v) => !v)}
+                aria-pressed={verGente}
+                aria-label="Quién está en la sala"
+                title="Quién está aquí"
+                className={cn(
+                  "flex shrink-0 items-center gap-1.5 rounded-[var(--r-pill)] px-2 py-1 text-[12.5px] transition",
+                  verGente
+                    ? "bg-[var(--surface-3)] text-[var(--text)]"
+                    : "text-[var(--text-muted)] hover:bg-[var(--surface-2)]",
+                )}
+              >
+                <Users size={14} />
+                <span className="tabular">{integrantes(activa).length}</span>
+              </button>
               {puedeGestionar && (
                 <Button
                   variant="ghost"
@@ -480,6 +513,7 @@ export function ChatView({
               )}
             </header>
 
+            <div className="flex min-h-0 flex-1">
             <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4">
               {messages.length === 0 && (
                 <p className="py-10 text-center text-[13px] text-[var(--text-muted)]">
@@ -586,6 +620,35 @@ export function ChatView({
               ))}
 
               <div ref={finRef} />
+            </div>
+
+            {verGente && (
+              <aside className="hidden w-56 shrink-0 flex-col overflow-y-auto border-l border-[var(--line)] bg-[var(--surface-2)] p-3 sm:flex">
+                <p className="px-1 pb-2 text-[11px] font-medium tracking-[0.04em] text-[var(--text-subtle)] uppercase">
+                  {activa.memberIds.length
+                    ? "Miembros"
+                    : activa.roleIds.length
+                      ? "Con acceso por rol"
+                      : "Todo el equipo"}
+                </p>
+                {integrantes(activa).map((persona) => (
+                  <div
+                    key={persona.id}
+                    className="flex items-center gap-2.5 rounded-[var(--r-control)] px-1.5 py-1.5"
+                  >
+                    <Avatar
+                      src={persona.avatarUrl}
+                      name={persona.name}
+                      size={26}
+                      className="shrink-0 rounded-[var(--r-chip)]"
+                    />
+                    <span className="min-w-0 flex-1 truncate text-[13px]">
+                      {persona.id === me.id ? `${persona.name} (tú)` : persona.name}
+                    </span>
+                  </div>
+                ))}
+              </aside>
+            )}
             </div>
 
             {error && (

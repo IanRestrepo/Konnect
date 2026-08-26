@@ -917,10 +917,6 @@ export async function findUserById(id: string): Promise<User | null> {
   return row ? toUser(row) : null;
 }
 
-export async function countUsers(): Promise<number> {
-  return prisma.user.count();
-}
-
 export async function createUser(
   input: Omit<User, "id" | "createdAt" | "lastLoginAt" | "avatarUrl"> & { avatarUrl?: string | null },
 ): Promise<User | { error: string }> {

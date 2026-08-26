@@ -10,11 +10,10 @@ const INPUT =
   "h-12 w-full rounded-[10px] border border-transparent bg-[#eceffc] px-4 text-[14px] text-[#16161a] " +
   "outline-none transition placeholder:text-[#8b8fa3] focus:border-[#0046d9] focus:bg-white";
 
-export function LoginForm({ primeraVez }: { primeraVez: boolean }) {
+export function LoginForm() {
   const router = useRouter();
   const destino = useSearchParams().get("destino") ?? "/";
 
-  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [verClave, setVerClave] = useState(false);
@@ -28,10 +27,10 @@ export function LoginForm({ primeraVez }: { primeraVez: boolean }) {
     setError(null);
 
     try {
-      const res = await fetch(primeraVez ? "/api/auth/inicial" : "/api/auth/entrar", {
+      const res = await fetch("/api/auth/entrar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(primeraVez ? { name, email, password } : { email, password }),
+        body: JSON.stringify({ email, password }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "No pudimos iniciar sesión.");
@@ -52,33 +51,13 @@ export function LoginForm({ primeraVez }: { primeraVez: boolean }) {
 
       <div className="mx-auto flex w-full max-w-[380px] flex-1 flex-col justify-center py-12">
         <h1 className="text-[32px] leading-[1.1] font-semibold tracking-[-0.035em] text-white">
-          {primeraVez ? "Empecemos" : "Bienvenido"}
+          Bienvenido
         </h1>
         <p className="mt-2 text-[14px] text-white/55">
-          {primeraVez
-            ? "Crea la cuenta de administración de la agencia."
-            : "Accede a tu panel de gestión."}
+          Accede a tu panel de gestión.
         </p>
 
         <form onSubmit={submit} className="mt-8 space-y-4">
-          {primeraVez && (
-            <div>
-              <label htmlFor="name" className="mb-1.5 block text-[13px] text-white/70">
-                Nombre
-              </label>
-              <input
-                id="name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Tu nombre"
-                autoComplete="name"
-                autoFocus
-                required
-                className={INPUT}
-              />
-            </div>
-          )}
-
           <div>
             <label htmlFor="email" className="mb-1.5 block text-[13px] text-white/70">
               Email
@@ -90,7 +69,7 @@ export function LoginForm({ primeraVez }: { primeraVez: boolean }) {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="tu@agencia.com"
               autoComplete="email"
-              autoFocus={!primeraVez}
+              autoFocus
               required
               className={INPUT}
             />
@@ -107,7 +86,7 @@ export function LoginForm({ primeraVez }: { primeraVez: boolean }) {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                autoComplete={primeraVez ? "new-password" : "current-password"}
+                autoComplete="current-password"
                 required
                 className={`${INPUT} pr-11`}
               />
@@ -121,19 +100,15 @@ export function LoginForm({ primeraVez }: { primeraVez: boolean }) {
               </button>
             </div>
 
-            {primeraVez ? (
-              <p className="mt-2 text-[12px] text-white/40">Mínimo 8 caracteres.</p>
-            ) : (
-              <div className="mt-2 flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => setAyuda((v) => !v)}
-                  className="text-[12.5px] text-white/50 transition hover:text-white/80"
-                >
-                  ¿Olvidaste tu contraseña?
-                </button>
-              </div>
-            )}
+            <div className="mt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setAyuda((v) => !v)}
+                className="text-[12.5px] text-white/50 transition hover:text-white/80"
+              >
+                ¿Olvidaste tu contraseña?
+              </button>
+            </div>
           </div>
 
           {ayuda && (
@@ -156,19 +131,13 @@ export function LoginForm({ primeraVez }: { primeraVez: boolean }) {
             className="flex h-12 w-full items-center justify-center gap-2 rounded-[10px] bg-white text-[14px] font-semibold text-[#08080a] transition hover:bg-white/90 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {loading && <LoaderCircle size={16} className="animate-spin" />}
-            {primeraVez ? "Crear cuenta y entrar" : "Entrar"}
+            Entrar
           </button>
         </form>
 
         <p className="mt-7 text-center text-[12.5px] text-white/40">
-          {primeraVez ? (
-            "Esta cuenta tendrá todos los permisos y podrá dar de alta al resto del equipo."
-          ) : (
-            <>
-              ¿Sin acceso?{" "}
-              <span className="font-medium text-white/70">Pídeselo a un administrador</span>
-            </>
-          )}
+          ¿Sin acceso?{" "}
+          <span className="font-medium text-white/70">Pídeselo a un administrador</span>
         </p>
       </div>
     </div>

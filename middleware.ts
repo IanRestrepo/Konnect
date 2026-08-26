@@ -3,7 +3,7 @@ import { SESSION_COOKIE, readToken } from "@/lib/auth";
 import { hasPermission, permissionForPath, firstAllowedPath } from "@/lib/permissions";
 
 /** Rutas accesibles sin sesión. */
-const PUBLIC = ["/entrar", "/api/auth/entrar", "/api/auth/inicial", "/api/auth/estado"];
+const PUBLIC = ["/entrar", "/api/auth/entrar"];
 
 /**
  * El portal de sesiones es para gente de fuera: entra con un código, no con

@@ -35,7 +35,7 @@ export default async function ChatPage({
       roles={roles.map((r) => ({ id: r.id, name: r.name, color: r.color }))}
       users={users
         .filter((u) => u.active)
-        .map((u) => ({ id: u.id, name: u.name, avatarUrl: u.avatarUrl }))}
+        .map((u) => ({ id: u.id, name: u.name, avatarUrl: u.avatarUrl, roleId: u.roleId }))}
       me={{ id: session.userId, name: session.name }}
     />
   );

@@ -2,7 +2,6 @@ import { Suspense } from "react";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { redirect } from "next/navigation";
-import { countUsers } from "@/lib/store";
 import { getSession } from "@/lib/session";
 import { LoginForm } from "@/app/entrar/login-form";
 import { LoginArt } from "@/app/entrar/login-art";
@@ -32,15 +31,12 @@ export default async function EntrarPage() {
   const session = await getSession();
   if (session) redirect("/");
 
-  const [primeraVez, artwork] = await Promise.all([
-    countUsers().then((n) => n === 0),
-    findArtwork(),
-  ]);
+  const artwork = await findArtwork();
 
   return (
     <div className="grid min-h-dvh bg-[#08080a] lg:grid-cols-2">
       <Suspense>
-        <LoginForm primeraVez={primeraVez} />
+        <LoginForm />
       </Suspense>
       <LoginArt src={artwork} />
     </div>
