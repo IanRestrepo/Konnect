@@ -307,6 +307,7 @@ function toUser(row: UserRow): User {
   return {
     id: row.id,
     name: row.name,
+    avatarUrl: row.avatarUrl,
     email: row.email,
     passwordHash: row.passwordHash,
     roleId: row.roleId,
@@ -921,7 +922,7 @@ export async function countUsers(): Promise<number> {
 }
 
 export async function createUser(
-  input: Omit<User, "id" | "createdAt" | "lastLoginAt">,
+  input: Omit<User, "id" | "createdAt" | "lastLoginAt" | "avatarUrl"> & { avatarUrl?: string | null },
 ): Promise<User | { error: string }> {
   await ensureRoles();
 
@@ -939,6 +940,7 @@ export async function createUser(
       data: {
         id: newId("us"),
         name: input.name,
+        avatarUrl: input.avatarUrl ?? null,
         email,
         passwordHash: input.passwordHash,
         roleId: input.roleId,
@@ -961,6 +963,7 @@ export async function updateUser(id: string, patch: Partial<User>): Promise<User
 
   const data: Prisma.UserUpdateInput = {};
   if (patch.name !== undefined) data.name = patch.name;
+  if (patch.avatarUrl !== undefined) data.avatarUrl = patch.avatarUrl || null;
   if (patch.email !== undefined) data.email = patch.email.trim().toLowerCase();
   if (patch.passwordHash !== undefined) data.passwordHash = patch.passwordHash;
   if (patch.active !== undefined) data.active = patch.active;
@@ -1028,6 +1031,7 @@ export function toPublicUser(user: User): PublicUser {
   return {
     id: user.id,
     name: user.name,
+    avatarUrl: user.avatarUrl,
     email: user.email,
     roleId: user.roleId,
     active: user.active,

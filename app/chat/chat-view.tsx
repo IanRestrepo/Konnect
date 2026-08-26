@@ -8,6 +8,7 @@ import {
   MessagesSquare,
   Pencil,
   Plus,
+  Search,
   Send,
   Settings2,
   Trash2,
@@ -26,7 +27,7 @@ import type { ChatMessage, ChatRoom } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type RolOpcion = { id: string; name: string; color: string };
-type PersonaOpcion = { id: string; name: string };
+type PersonaOpcion = { id: string; name: string; avatarUrl: string | null };
 
 /** Cada cuánto se pregunta por mensajes nuevos con la pestaña a la vista. */
 const SONDEO_MS = 5000;
@@ -84,8 +85,36 @@ export function ChatView({
     memberIds: [] as string[],
   });
 
+  const [busqueda, setBusqueda] = useState("");
   const finRef = useRef<HTMLDivElement | null>(null);
   const activa = rooms.find((r) => r.id === activeRoomId) ?? null;
+
+  const porId = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
+
+  /**
+   * Una sala privada de dos se presenta como la persona con la que hablas:
+   * su nombre y su foto, no el nombre interno de la sala.
+   */
+  const presentar = useCallback(
+    (room: ChatRoom) => {
+      const otros = room.memberIds.filter((id) => id !== me.id);
+      if (room.memberIds.length && otros.length === 1) {
+        const persona = porId.get(otros[0]);
+        if (persona) return { nombre: persona.name, persona, directa: true as const };
+      }
+      return { nombre: room.name, persona: null, directa: false as const };
+    },
+    [porId, me.id],
+  );
+
+  const visibles = useMemo(() => {
+    const q = busqueda.trim().toLowerCase();
+    if (!q) return rooms;
+    return rooms.filter((r) => presentar(r).nombre.toLowerCase().includes(q));
+  }, [rooms, busqueda, presentar]);
+
+  const salas = visibles.filter((r) => !r.memberIds.length);
+  const directas = visibles.filter((r) => r.memberIds.length > 0);
 
   // Al cambiar de sala, el servidor manda otro historial y hay que soltar el
   // anterior. Se ajusta durante el render, no en un efecto: así no hay un
@@ -267,8 +296,15 @@ export function ChatView({
 
   /** Mensajes agrupados por día, y dentro por autor si van seguidos. */
   const bloques = useMemo(() => {
-    const dias: { dia: string; grupos: { autor: string; propio: boolean; msgs: ChatMessage[] }[] }[] =
-      [];
+    const dias: {
+      dia: string;
+      grupos: {
+        autor: string;
+        avatarUrl: string | null;
+        propio: boolean;
+        msgs: ChatMessage[];
+      }[];
+    }[] = [];
 
     for (const m of messages) {
       const dia = diaLargo(m.createdAt);
@@ -290,55 +326,65 @@ export function ChatView({
       else
         ultimoDia.grupos.push({
           autor: m.authorName,
+          avatarUrl: (m.authorId && porId.get(m.authorId)?.avatarUrl) || null,
           propio: m.authorId === me.id,
           msgs: [m],
         });
     }
 
     return dias;
-  }, [messages, me.id]);
-
-  const activas = rooms.filter((r) => !r.archived);
-  const archivadas = rooms.filter((r) => r.archived);
+  }, [messages, me.id, porId]);
 
   return (
     <div className="flex h-full overflow-hidden">
       {/* ---- Salas ---- */}
-      <aside className="hidden w-60 shrink-0 flex-col border-r border-[var(--line)] bg-[var(--surface-2)] md:flex">
-        <div className="flex items-center justify-between gap-2 px-4 py-3.5">
-          <h2 className="text-[14px] font-semibold">Salas</h2>
-          {puedeGestionar && (
-            <Button variant="secondary" size="sm" onClick={abrirNueva} aria-label="Nueva sala">
-              <Plus size={14} />
-            </Button>
-          )}
+      <aside className="hidden w-64 shrink-0 flex-col border-r border-[var(--line)] bg-[var(--surface-2)] md:flex">
+        <div className="p-3">
+          <div className="relative">
+            <Search
+              size={14}
+              className="absolute top-1/2 left-3 -translate-y-1/2 text-[var(--text-subtle)]"
+            />
+            <input
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Buscar"
+              aria-label="Buscar sala o persona"
+              className="h-9 w-full rounded-[var(--r-control)] border border-[var(--line)] bg-[var(--surface)] pr-3 pl-8.5 text-[13px] outline-none placeholder:text-[var(--text-subtle)] focus:border-[var(--line-strong)]"
+            />
+          </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
-          {activas.map((room) => (
-            <RoomRow
-              key={room.id}
-              room={room}
-              activa={room.id === activeRoomId}
-              onEditar={puedeGestionar ? () => abrirEdicion(room) : undefined}
-            />
-          ))}
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-2 pb-3">
+          <Seccion titulo="Salas" onAnadir={puedeGestionar ? abrirNueva : undefined}>
+            {salas.length === 0 && <Vacio texto="Sin salas" />}
+            {salas.map((room) => (
+              <RoomRow
+                key={room.id}
+                room={room}
+                nombre={room.name}
+                activa={room.id === activeRoomId}
+                onEditar={puedeGestionar ? () => abrirEdicion(room) : undefined}
+              />
+            ))}
+          </Seccion>
 
-          {archivadas.length > 0 && (
-            <>
-              <p className="mt-3 mb-1 px-2 text-[11px] font-medium tracking-wide text-[var(--text-subtle)] uppercase">
-                Archivadas
-              </p>
-              {archivadas.map((room) => (
+          <Seccion titulo="Directos" onAnadir={puedeGestionar ? abrirNueva : undefined}>
+            {directas.length === 0 && <Vacio texto="Sin conversaciones" />}
+            {directas.map((room) => {
+              const { nombre, persona } = presentar(room);
+              return (
                 <RoomRow
                   key={room.id}
                   room={room}
+                  nombre={nombre}
+                  persona={persona}
                   activa={room.id === activeRoomId}
                   onEditar={puedeGestionar ? () => abrirEdicion(room) : undefined}
                 />
-              ))}
-            </>
-          )}
+              );
+            })}
+          </Seccion>
         </div>
       </aside>
 
@@ -392,14 +438,23 @@ export function ChatView({
             </div>
 
             <header className="flex items-center gap-3 border-b border-[var(--line)] px-4 py-3">
-              <RoomIcon
-                name={activa.icon}
-                size={19}
-                style={{ color: activa.color }}
-                className="shrink-0"
-              />
+              {presentar(activa).persona ? (
+                <Avatar
+                  src={presentar(activa).persona!.avatarUrl}
+                  name={presentar(activa).persona!.name}
+                  size={30}
+                  className="shrink-0 rounded-[var(--r-chip)]"
+                />
+              ) : (
+                <RoomIcon
+                  name={activa.icon}
+                  size={19}
+                  style={{ color: activa.color }}
+                  className="shrink-0"
+                />
+              )}
               <div className="min-w-0 flex-1">
-                <h1 className="truncate text-[15px] font-semibold">{activa.name}</h1>
+                <h1 className="truncate text-[15px] font-semibold">{presentar(activa).nombre}</h1>
                 {activa.description && (
                   <p className="truncate text-[12px] text-[var(--text-muted)]">
                     {activa.description}
@@ -435,14 +490,20 @@ export function ChatView({
               {bloques.map((dia) => (
                 <div key={dia.dia} className="space-y-4">
                   <div className="flex items-center gap-3">
-                    <span className="h-px flex-1 bg-[var(--line)]" />
-                    <span className="text-[11.5px] text-[var(--text-subtle)]">{dia.dia}</span>
+                    <span className="text-[11.5px] font-medium text-[var(--text-subtle)]">
+                      {dia.dia}
+                    </span>
                     <span className="h-px flex-1 bg-[var(--line)]" />
                   </div>
 
                   {dia.grupos.map((grupo, i) => (
                     <div key={`${grupo.autor}-${i}`} className="flex gap-3">
-                      <Avatar name={grupo.autor} size={32} className="mt-0.5 shrink-0" />
+                      <Avatar
+                        src={grupo.avatarUrl}
+                        name={grupo.autor}
+                        size={36}
+                        className="mt-0.5 shrink-0 rounded-[var(--r-card)]"
+                      />
                       <div className="min-w-0 flex-1">
                         <p className="flex items-baseline gap-2">
                           <span className="text-[13px] font-semibold">{grupo.autor}</span>
@@ -552,7 +613,7 @@ export function ChatView({
                       }
                     }}
                     rows={1}
-                    placeholder={`Escribe en ${activa.name}…`}
+                    placeholder={`Mensaje para ${presentar(activa).nombre}`}
                     aria-label="Mensaje"
                     className="max-h-40 min-h-7 flex-1 resize-none bg-transparent py-1 text-[13.5px] leading-relaxed text-[var(--text)] outline-none placeholder:text-[var(--text-subtle)]"
                   />
@@ -758,12 +819,51 @@ export function ChatView({
   );
 }
 
+function Seccion({
+  titulo,
+  onAnadir,
+  children,
+}: {
+  titulo: string;
+  onAnadir?: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <section>
+      <div className="flex items-center justify-between gap-2 px-2.5 pb-1">
+        <h2 className="text-[11px] font-medium tracking-[0.04em] text-[var(--text-subtle)] uppercase">
+          {titulo}
+        </h2>
+        {onAnadir && (
+          <button
+            onClick={onAnadir}
+            aria-label={`Añadir en ${titulo}`}
+            className="grid h-5 w-5 place-items-center rounded-[var(--r-chip)] text-[var(--text-subtle)] transition hover:bg-[var(--surface-3)] hover:text-[var(--text)]"
+          >
+            <Plus size={13} />
+          </button>
+        )}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function Vacio({ texto }: { texto: string }) {
+  return <p className="px-2.5 py-1 text-[12px] text-[var(--text-subtle)]">{texto}</p>;
+}
+
 function RoomRow({
   room,
+  nombre,
+  persona,
   activa,
   onEditar,
 }: {
   room: ChatRoom;
+  nombre: string;
+  /** Si la sala es una conversación de dos, la persona del otro lado. */
+  persona?: PersonaOpcion | null;
   activa: boolean;
   onEditar?: () => void;
 }) {
@@ -772,27 +872,38 @@ function RoomRow({
       <a
         href={`/chat?sala=${room.id}`}
         className={cn(
-          "flex items-center gap-2.5 rounded-[var(--r-control)] px-2.5 py-2 transition",
+          "flex items-center gap-2.5 rounded-[var(--r-control)] px-2.5 py-1.5 transition",
           activa
-            ? "bg-[var(--surface)] font-medium shadow-[var(--shadow-soft)]"
+            ? "bg-[var(--surface)] shadow-[var(--shadow-soft)]"
             : "hover:bg-[var(--surface-3)]",
         )}
       >
-<RoomIcon
-          name={room.icon}
-          size={15}
-          className={cn("shrink-0", !activa && "text-[var(--text-subtle)]")}
-          style={activa ? { color: room.color } : undefined}
-        />
+        {persona ? (
+          <Avatar
+            src={persona.avatarUrl}
+            name={persona.name}
+            size={24}
+            className="shrink-0 rounded-[var(--r-chip)]"
+          />
+        ) : (
+          <RoomIcon
+            name={room.icon}
+            size={15}
+            className={cn("shrink-0", !activa && "text-[var(--text-subtle)]")}
+            style={activa ? { color: room.color } : undefined}
+          />
+        )}
+
         <span
           className={cn(
             "min-w-0 flex-1 truncate text-[13px]",
-            activa ? "font-semibold" : "text-[var(--text-muted)]",
+            activa ? "font-medium" : "text-[var(--text-muted)]",
             room.archived && "opacity-60",
           )}
         >
-          {room.name}
+          {nombre}
         </span>
+
         {room.messageCount > 0 && (
           <span className="tabular text-[11px] text-[var(--text-subtle)]">
             {room.messageCount}
@@ -803,7 +914,7 @@ function RoomRow({
       {onEditar && (
         <button
           onClick={onEditar}
-          aria-label={`Ajustes de ${room.name}`}
+          aria-label={`Ajustes de ${nombre}`}
           className="absolute top-1/2 right-1.5 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-[var(--r-chip)] bg-[var(--surface)] text-[var(--text-subtle)] opacity-0 transition group-hover/room:opacity-100 hover:text-[var(--text)]"
         >
           <Settings2 size={12} />

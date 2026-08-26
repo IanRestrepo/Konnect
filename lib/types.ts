@@ -142,6 +142,8 @@ export type Role = {
 export type User = {
   id: string;
   name: string;
+  /** Foto de perfil. Sin ella, el avatar cae en las iniciales. */
+  avatarUrl: string | null;
   email: string;
   passwordHash: string;
   roleId: string;

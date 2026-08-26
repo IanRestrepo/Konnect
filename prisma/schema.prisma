@@ -330,6 +330,8 @@ model User {
   id String @id
 
   name String
+  /// Foto de perfil. Por ahora una URL; cuando haya almacenamiento, se sube.
+  avatarUrl String?
   /// Siempre en minúsculas: es la llave de acceso.
   email        String    @unique
   passwordHash String

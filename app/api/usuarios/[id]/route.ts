@@ -13,6 +13,7 @@ const schema = z.object({
   roleId: z.string().min(1).optional(),
   active: z.boolean().optional(),
   password: z.string().min(8, "La contraseña necesita al menos 8 caracteres.").optional(),
+  avatarUrl: z.string().nullable().optional(),
 });
 
 /** Impide quedarse sin ninguna cuenta de administración activa. */
