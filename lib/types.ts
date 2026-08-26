@@ -265,6 +265,8 @@ export type ChatRoom = {
   color: string;
   /** Nombre del icono de Lucide; ver `lib/chat-icons`. */
   icon: string;
+  /** Quién creó la sala. Null si esa cuenta ya no existe. */
+  createdById: string | null;
   archived: boolean;
   /** Vacío = entra todo el equipo. Con roles = solo esos y administración. */
   roleIds: string[];

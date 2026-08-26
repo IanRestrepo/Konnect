@@ -1299,6 +1299,7 @@ function toRoom(row: ChatRoomRow): ChatRoom {
     description: row.description,
     color: row.color,
     icon: row.icon,
+    createdById: row.createdById,
     archived: row.archived,
     roleIds: row.roleIds,
     memberIds: row.memberIds,
@@ -1358,6 +1359,7 @@ export async function createRoom(input: {
   icon?: string;
   roleIds?: string[];
   memberIds?: string[];
+  createdById?: string;
 }): Promise<ChatRoom> {
   const row = await prisma.chatRoom.create({
     data: {
@@ -1366,6 +1368,7 @@ export async function createRoom(input: {
       description: input.description ?? "",
       color: input.color ?? "#0046d9",
       icon: input.icon ?? "hash",
+      createdById: input.createdById ?? null,
       roleIds: input.roleIds ?? [],
       memberIds: input.memberIds ?? [],
     },

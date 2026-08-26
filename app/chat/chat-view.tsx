@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Archive,
+  Crown,
   Lock,
   MessagesSquare,
   Pencil,
@@ -87,7 +88,7 @@ export function ChatView({
   });
 
   const [busqueda, setBusqueda] = useState("");
-  const [verGente, setVerGente] = useState(false);
+  const [verGente, setVerGente] = useState(true);
   const finRef = useRef<HTMLDivElement | null>(null);
   const activa = rooms.find((r) => r.id === activeRoomId) ?? null;
 
@@ -128,6 +129,17 @@ export function ChatView({
       return users;
     },
     [porId, users],
+  );
+
+  /** Los integrantes repartidos por rol, en el orden en que están definidos. */
+  const porRol = useCallback(
+    (room: ChatRoom) => {
+      const gente = integrantes(room);
+      return roles
+        .map((rol) => ({ rol, personas: gente.filter((p) => p.roleId === rol.id) }))
+        .filter((grupo) => grupo.personas.length > 0);
+    },
+    [integrantes, roles],
   );
 
   const salas = visibles.filter((r) => !r.memberIds.length);
@@ -623,29 +635,43 @@ export function ChatView({
             </div>
 
             {verGente && (
-              <aside className="hidden w-56 shrink-0 flex-col overflow-y-auto border-l border-[var(--line)] bg-[var(--surface-2)] p-3 sm:flex">
-                <p className="px-1 pb-2 text-[11px] font-medium tracking-[0.04em] text-[var(--text-subtle)] uppercase">
-                  {activa.memberIds.length
-                    ? "Miembros"
-                    : activa.roleIds.length
-                      ? "Con acceso por rol"
-                      : "Todo el equipo"}
-                </p>
-                {integrantes(activa).map((persona) => (
-                  <div
-                    key={persona.id}
-                    className="flex items-center gap-2.5 rounded-[var(--r-control)] px-1.5 py-1.5"
-                  >
-                    <Avatar
-                      src={persona.avatarUrl}
-                      name={persona.name}
-                      size={26}
-                      className="shrink-0 rounded-[var(--r-chip)]"
-                    />
-                    <span className="min-w-0 flex-1 truncate text-[13px]">
-                      {persona.id === me.id ? `${persona.name} (tú)` : persona.name}
-                    </span>
-                  </div>
+              <aside className="hidden w-60 shrink-0 flex-col overflow-y-auto border-l border-[var(--line)] bg-[var(--surface-2)] py-3 lg:flex">
+                {porRol(activa).map(({ rol, personas }) => (
+                  <section key={rol.id} className="mb-3">
+                    <p className="px-4 pb-1 text-[11px] font-semibold tracking-[0.04em] text-[var(--text-subtle)] uppercase">
+                      {rol.name} — {personas.length}
+                    </p>
+
+                    {personas.map((persona) => {
+                      const creador = persona.id === activa.createdById;
+                      return (
+                        <div
+                          key={persona.id}
+                          className="mx-2 flex items-center gap-2.5 rounded-[var(--r-control)] px-2 py-1.5 transition hover:bg-[var(--surface-3)]"
+                        >
+                          <Avatar
+                            src={persona.avatarUrl}
+                            name={persona.name}
+                            size={28}
+                            className="shrink-0 rounded-full"
+                          />
+                          <span
+                            className="min-w-0 flex-1 truncate text-[13px] font-medium"
+                            style={{ color: rol.color }}
+                          >
+                            {persona.id === me.id ? `${persona.name} (tú)` : persona.name}
+                          </span>
+                          {creador && (
+                            <Crown
+                              size={13}
+                              className="shrink-0 text-[var(--warn)]"
+                              aria-label="Creó la sala"
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </section>
                 ))}
               </aside>
             )}

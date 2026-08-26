@@ -45,7 +45,11 @@ export async function POST(request: Request) {
     );
   }
 
-  const room = await createRoom({ ...parsed.data, name: parsed.data.name.trim() });
+  const room = await createRoom({
+    ...parsed.data,
+    name: parsed.data.name.trim(),
+    createdById: session.userId,
+  });
 
   revalidatePath("/chat");
   return NextResponse.json({ room }, { status: 201 });

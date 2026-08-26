@@ -462,6 +462,9 @@ model ChatRoom {
   /// Icono de Lucide que elige quien crea la sala.
   icon String @default("hash")
 
+  /// Quién la creó. Se queda en null si esa cuenta se elimina.
+  createdById String?
+
   /// Vacío = entra todo el equipo. Con roles = solo esos roles y administración.
   roleIds String[]
 
