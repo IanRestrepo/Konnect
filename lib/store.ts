@@ -1298,8 +1298,10 @@ function toRoom(row: ChatRoomRow): ChatRoom {
     name: row.name,
     description: row.description,
     color: row.color,
+    icon: row.icon,
     archived: row.archived,
     roleIds: row.roleIds,
+    memberIds: row.memberIds,
     createdAt: iso(row.createdAt),
     lastMessageAt: isoOrNull(row.messages?.[0]?.createdAt ?? null),
     messageCount: row._count?.messages ?? 0,
@@ -1307,13 +1309,23 @@ function toRoom(row: ChatRoomRow): ChatRoom {
 }
 
 /**
- * Una sala sin roles es del equipo entero. Con roles, solo entran esos roles;
- * administración entra siempre, porque si no podría crear una sala y quedarse
- * fuera de ella.
+ * Quién entra a una sala.
+ *
+ * · Privada (con miembros): solo ellos. Ni administración ni el desarrollador,
+ *   porque una conversación privada que lee un tercero no es privada.
+ * · Por roles: esos roles, y administración, que si no podría crear una sala
+ *   y quedarse fuera de ella.
+ * · Sin nada: el equipo entero.
  */
-export function canSeeRoom(room: ChatRoom, roleId: string, permissions: readonly string[]): boolean {
+export function canSeeRoom(
+  room: ChatRoom,
+  roleId: string,
+  permissions: readonly string[],
+  userId?: string,
+): boolean {
+  if (room.memberIds.length) return Boolean(userId && room.memberIds.includes(userId));
   if (!room.roleIds.length) return true;
-  if (permissions.includes("*")) return true;
+  if (permissions.includes("*") || permissions.includes("**")) return true;
   return room.roleIds.includes(roleId);
 }
 
@@ -1343,7 +1355,9 @@ export async function createRoom(input: {
   name: string;
   description?: string;
   color?: string;
+  icon?: string;
   roleIds?: string[];
+  memberIds?: string[];
 }): Promise<ChatRoom> {
   const row = await prisma.chatRoom.create({
     data: {
@@ -1351,7 +1365,9 @@ export async function createRoom(input: {
       name: input.name,
       description: input.description ?? "",
       color: input.color ?? "#0046d9",
+      icon: input.icon ?? "hash",
       roleIds: input.roleIds ?? [],
+      memberIds: input.memberIds ?? [],
     },
   });
   return toRoom(row);
@@ -1363,8 +1379,10 @@ export async function updateRoom(
     name?: string;
     description?: string;
     color?: string;
+    icon?: string;
     archived?: boolean;
     roleIds?: string[];
+    memberIds?: string[];
   },
 ): Promise<ChatRoom | null> {
   const existe = await prisma.chatRoom.findUnique({ where: { id }, select: { id: true } });

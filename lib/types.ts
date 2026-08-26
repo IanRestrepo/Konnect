@@ -261,9 +261,13 @@ export type ChatRoom = {
   name: string;
   description: string;
   color: string;
+  /** Nombre del icono de Lucide; ver `lib/chat-icons`. */
+  icon: string;
   archived: boolean;
   /** Vacío = entra todo el equipo. Con roles = solo esos y administración. */
   roleIds: string[];
+  /** Sala privada: solo estas personas, ni siquiera administración. */
+  memberIds: string[];
   createdAt: string;
   /** Para ordenar por actividad y marcar salas sin estrenar. */
   lastMessageAt: string | null;

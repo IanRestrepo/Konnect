@@ -11,8 +11,11 @@ const schema = z.object({
   name: z.string({ error: "Falta el nombre de la sala." }).min(1, "Falta el nombre de la sala."),
   description: z.string().default(""),
   color: z.string().default("#0046d9"),
+  icon: z.string().default("hash"),
   /** Vacío = la sala es del equipo entero. */
   roleIds: z.array(z.string()).default([]),
+  /** Con miembros la sala es privada: solo ellos entran. */
+  memberIds: z.array(z.string()).default([]),
 });
 
 export async function GET() {
@@ -22,7 +25,7 @@ export async function GET() {
   }
 
   const rooms = (await listRooms()).filter((r) =>
-    canSeeRoom(r, session.roleId, session.permissions),
+    canSeeRoom(r, session.roleId, session.permissions, session.userId),
   );
   return NextResponse.json({ rooms });
 }

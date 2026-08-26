@@ -20,10 +20,13 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { FieldHint, Input, Label, Textarea } from "@/components/ui/field";
 import { useCan } from "@/components/session-provider";
+import { CHAT_ICON_NAMES } from "@/lib/chat-icons";
+import { RoomIcon } from "@/components/chat/room-icon";
 import type { ChatMessage, ChatRoom } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type RolOpcion = { id: string; name: string; color: string };
+type PersonaOpcion = { id: string; name: string };
 
 /** Cada cuánto se pregunta por mensajes nuevos con la pestaña a la vista. */
 const SONDEO_MS = 5000;
@@ -50,12 +53,14 @@ export function ChatView({
   activeRoomId,
   initialMessages,
   roles,
+  users,
   me,
 }: {
   rooms: ChatRoom[];
   activeRoomId: string | null;
   initialMessages: ChatMessage[];
   roles: RolOpcion[];
+  users: PersonaOpcion[];
   me: { id: string; name: string };
 }) {
   const router = useRouter();
@@ -74,7 +79,9 @@ export function ChatView({
     name: "",
     description: "",
     color: COLORES[0],
+    icon: "hash",
     roleIds: [] as string[],
+    memberIds: [] as string[],
   });
 
   const finRef = useRef<HTMLDivElement | null>(null);
@@ -187,7 +194,14 @@ export function ChatView({
 
   function abrirNueva() {
     setEditando(null);
-    setForm({ name: "", description: "", color: COLORES[0], roleIds: [] });
+    setForm({
+      name: "",
+      description: "",
+      color: COLORES[0],
+      icon: "hash",
+      roleIds: [],
+      memberIds: [],
+    });
     setError(null);
     setSalaOpen(true);
   }
@@ -198,7 +212,9 @@ export function ChatView({
       name: room.name,
       description: room.description,
       color: room.color,
+      icon: room.icon,
       roleIds: room.roleIds,
+      memberIds: room.memberIds,
     });
     setError(null);
     setSalaOpen(true);
@@ -360,9 +376,7 @@ export function ChatView({
                       : "text-[var(--text-muted)]",
                   )}
                 >
-                  <span aria-hidden className="text-[var(--text-subtle)]">
-                    {room.roleIds.length ? "•" : "#"}
-                  </span>
+                  <RoomIcon name={room.icon} size={12} className="shrink-0" />
                   {room.name}
                 </a>
               ))}
@@ -378,13 +392,12 @@ export function ChatView({
             </div>
 
             <header className="flex items-center gap-3 border-b border-[var(--line)] px-4 py-3">
-              <span
-                className="shrink-0 text-[20px] leading-none font-semibold"
+              <RoomIcon
+                name={activa.icon}
+                size={19}
                 style={{ color: activa.color }}
-                aria-hidden
-              >
-                {activa.roleIds.length ? "•" : "#"}
-              </span>
+                className="shrink-0"
+              />
               <div className="min-w-0 flex-1">
                 <h1 className="truncate text-[15px] font-semibold">{activa.name}</h1>
                 {activa.description && (
@@ -393,10 +406,10 @@ export function ChatView({
                   </p>
                 )}
               </div>
-              {activa.roleIds.length > 0 && (
+              {(activa.memberIds.length > 0 || activa.roleIds.length > 0) && (
                 <Badge plain>
                   <Lock size={11} />
-                  Privada
+                  {activa.memberIds.length > 0 ? "Privada" : "Por rol"}
                 </Badge>
               )}
               {activa.archived && <Badge tone="warn">Archivada</Badge>}
@@ -620,6 +633,33 @@ export function ChatView({
           </div>
 
           <div>
+            <Label>Icono</Label>
+            <div className="mt-1.5 grid grid-cols-8 gap-1 rounded-[var(--r-control)] border border-[var(--line)] bg-[var(--surface-2)] p-2 sm:grid-cols-11">
+              {CHAT_ICON_NAMES.map((nombre) => {
+                const elegido = form.icon === nombre;
+                return (
+                  <button
+                    key={nombre}
+                    type="button"
+                    onClick={() => setForm({ ...form, icon: nombre })}
+                    aria-label={nombre}
+                    aria-pressed={elegido}
+                    className={cn(
+                      "grid h-8 w-8 place-items-center rounded-[var(--r-chip)] transition",
+                      elegido
+                        ? "bg-[var(--surface)] shadow-[var(--shadow-soft)]"
+                        : "text-[var(--text-subtle)] hover:bg-[var(--surface-3)] hover:text-[var(--text)]",
+                    )}
+                    style={elegido ? { color: form.color } : undefined}
+                  >
+                    <RoomIcon name={nombre} size={15} />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
             <Label>Color</Label>
             <div className="flex flex-wrap gap-1.5">
               {COLORES.map((c) => (
@@ -640,8 +680,48 @@ export function ChatView({
           </div>
 
           <div>
-            <Label>Quién entra</Label>
-            <FieldHint>Sin marcar nada, la sala es del equipo entero.</FieldHint>
+            <Label>Personas concretas</Label>
+            <FieldHint>
+              Al elegir personas la sala se vuelve privada: solo entran ellas, ni siquiera
+              administración. Elige a una para tener una conversación de dos.
+            </FieldHint>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {users.map((persona) => {
+                const activo = form.memberIds.includes(persona.id);
+                return (
+                  <button
+                    key={persona.id}
+                    type="button"
+                    onClick={() =>
+                      setForm({
+                        ...form,
+                        memberIds: activo
+                          ? form.memberIds.filter((u) => u !== persona.id)
+                          : [...form.memberIds, persona.id],
+                      })
+                    }
+                    aria-pressed={activo}
+                    className={cn(
+                      "h-8 rounded-[var(--r-pill)] border px-3 text-[12.5px] font-medium transition",
+                      activo
+                        ? "border-transparent bg-[var(--accent-soft)] text-[var(--accent)]"
+                        : "border-[var(--line)] bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)]",
+                    )}
+                  >
+                    {persona.id === me.id ? `${persona.name} (tú)` : persona.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className={cn(form.memberIds.length > 0 && "opacity-40")}>
+            <Label>Quién entra por rol</Label>
+            <FieldHint>
+              {form.memberIds.length > 0
+                ? "No se usa: la sala ya es privada por personas."
+                : "Sin marcar nada, la sala es del equipo entero."}
+            </FieldHint>
             <div className="mt-1.5 flex flex-wrap gap-1.5">
               {roles.map((rol) => {
                 const activo = form.roleIds.includes(rol.id);
@@ -649,6 +729,7 @@ export function ChatView({
                   <button
                     key={rol.id}
                     type="button"
+                    disabled={form.memberIds.length > 0}
                     onClick={() =>
                       setForm({
                         ...form,
@@ -697,16 +778,12 @@ function RoomRow({
             : "hover:bg-[var(--surface-3)]",
         )}
       >
-        <span
-          className={cn(
-            "w-3 shrink-0 text-center text-[15px] leading-none",
-            activa ? "font-semibold" : "text-[var(--text-subtle)]",
-          )}
+<RoomIcon
+          name={room.icon}
+          size={15}
+          className={cn("shrink-0", !activa && "text-[var(--text-subtle)]")}
           style={activa ? { color: room.color } : undefined}
-          aria-hidden
-        >
-          {room.roleIds.length ? "•" : "#"}
-        </span>
+        />
         <span
           className={cn(
             "min-w-0 flex-1 truncate text-[13px]",

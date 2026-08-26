@@ -11,8 +11,10 @@ const schema = z.object({
   name: z.string().min(1).optional(),
   description: z.string().optional(),
   color: z.string().optional(),
+  icon: z.string().optional(),
   archived: z.boolean().optional(),
   roleIds: z.array(z.string()).optional(),
+  memberIds: z.array(z.string()).optional(),
 });
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {

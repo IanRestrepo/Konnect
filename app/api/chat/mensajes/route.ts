@@ -29,7 +29,9 @@ async function permitido(id: string) {
 
   const room = await getRoom(id);
   if (!room) return { error: 404 } as const;
-  if (!canSeeRoom(room, session.roleId, session.permissions)) return { error: 403 } as const;
+  if (!canSeeRoom(room, session.roleId, session.permissions, session.userId)) {
+    return { error: 403 } as const;
+  }
 
   return { session, room } as const;
 }

@@ -457,8 +457,14 @@ model ChatRoom {
   color       String  @default("#0046d9")
   archived    Boolean @default(false)
 
+  /// Icono de Lucide que elige quien crea la sala.
+  icon String @default("hash")
+
   /// Vacío = entra todo el equipo. Con roles = solo esos roles y administración.
   roleIds String[]
+
+  /// Sala privada: solo estas personas entran, ni siquiera administración.
+  memberIds String[]
 
   messages ChatMessage[]
 
