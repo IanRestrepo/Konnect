@@ -2,17 +2,21 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getSession } from "@/lib/session";
-import { DEVELOPER_ROLE_ID, hasPermission, isDeveloper, PERMISSIONS } from "@/lib/permissions";
+import {
+  DEVELOPER_ROLE_ID,
+  hasPermission,
+  isDeveloper,
+  normalizeRolePermissions,
+} from "@/lib/permissions";
+import { grantError, rolePermissionsSchema } from "@/lib/role-schema";
 import { deleteRole, updateRole } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
-const VALID = PERMISSIONS.map((p) => p.id) as [string, ...string[]];
-
 const schema = z.object({
-  name: z.string().min(2).optional(),
+  name: z.string().min(2, "Falta el nombre del rol.").optional(),
   color: z.string().optional(),
-  permissions: z.array(z.enum(VALID)).optional(),
+  permissions: rolePermissionsSchema.optional(),
 });
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -35,7 +39,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     );
   }
 
-  const role = await updateRole(id, parsed.data);
+  // Los roles del sistema conservan sus permisos: lo que llegue se ignora, y
+  // así editarles el nombre o el color nunca choca con su comodín.
+  const permissions =
+    parsed.data.permissions && normalizeRolePermissions(parsed.data.permissions);
+
+  if (permissions) {
+    const denegado = grantError(session.permissions, permissions);
+    if (denegado) return NextResponse.json({ error: denegado }, { status: 403 });
+  }
+
+  const role = await updateRole(id, { ...parsed.data, permissions });
   if (!role) return NextResponse.json({ error: "Rol no encontrado." }, { status: 404 });
 
   revalidatePath("/configuracion");

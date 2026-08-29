@@ -8,7 +8,12 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { Modal } from "@/components/ui/modal";
 import { FieldHint, Input, Label, Select } from "@/components/ui/field";
-import { ALL_PERMISSIONS, PERMISSIONS, PERMISSION_GROUPS } from "@/lib/permissions";
+import {
+  catalogPermissions,
+  grantsEverything,
+  PERMISSIONS,
+  PERMISSION_GROUPS,
+} from "@/lib/permissions";
 import { useSession } from "@/components/session-provider";
 import type { PublicUser, Role } from "@/lib/types";
 import { cn, formatDate } from "@/lib/utils";
@@ -205,7 +210,7 @@ export function TeamPanel({ tab }: { tab: "usuarios" | "roles" }) {
 
           <div className="divide-y divide-[var(--line)] border-t border-[var(--line)]">
             {roles.map((role) => {
-              const todos = role.permissions.includes(ALL_PERMISSIONS);
+              const todos = grantsEverything(role.permissions);
               const cuantos = todos ? PERMISSIONS.length : role.permissions.length;
               const miembros = users.filter((u) => u.roleId === role.id).length;
               return (
@@ -415,7 +420,9 @@ function RoleDialog({
     setHydratedFor(key);
     setName(role?.name ?? "");
     setColor(role?.color ?? COLORS[0]);
-    setPermissions(role?.permissions.filter((p) => p !== ALL_PERMISSIONS) ?? []);
+    // Solo llaves del catálogo: los comodines ("*" y "**") no son casillas y
+    // reenviarlos al guardar hacía que la API rechazara el rol entero.
+    setPermissions(catalogPermissions(role?.permissions));
     setError(null);
   }
   if (!open && hydratedFor !== null) setHydratedFor(null);

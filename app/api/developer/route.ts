@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getSession } from "@/lib/session";
-import { isDeveloper, PERMISSIONS } from "@/lib/permissions";
+import { isDeveloper, isPermissionId } from "@/lib/permissions";
 import {
   createAnnouncement,
   deleteAnnouncement,
@@ -13,8 +13,6 @@ import {
 } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
-
-const VALID = PERMISSIONS.map((p) => p.id) as [string, ...string[]];
 
 const aviso = z.object({
   accion: z.literal("aviso"),
@@ -30,7 +28,9 @@ const borrarAviso = z.object({ accion: z.literal("borrar_aviso"), id: z.string()
 
 const modulos = z.object({
   accion: z.literal("modulos"),
-  disabled: z.array(z.enum(VALID)).default([]),
+  disabled: z
+    .array(z.string().refine(isPermissionId, "Ese módulo no existe."))
+    .default([]),
 });
 
 const schema = z.discriminatedUnion("accion", [aviso, borrarAviso, modulos]);

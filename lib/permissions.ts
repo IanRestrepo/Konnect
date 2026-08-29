@@ -140,13 +140,52 @@ export type RolePermissions =
   | [typeof ALL_PERMISSIONS]
   | [typeof DEVELOPER];
 
+/** Las llaves del catálogo, en el orden en que se muestran. */
+export const PERMISSION_IDS = PERMISSIONS.map((p) => p.id) as [PermissionId, ...PermissionId[]];
+
+export function isPermissionId(value: string): value is PermissionId {
+  return (PERMISSION_IDS as readonly string[]).includes(value);
+}
+
+/**
+ * Lo que un rol puede tener guardado: una llave del catálogo o uno de los dos
+ * comodines. Los roles del sistema guardan comodines, así que validar solo
+ * contra el catálogo los daba por inválidos.
+ */
+export function isRolePermission(value: string): boolean {
+  return value === ALL_PERMISSIONS || value === DEVELOPER || isPermissionId(value);
+}
+
+/** Concede el catálogo entero: administración o desarrollador. */
+export function grantsEverything(permissions: readonly string[] | undefined): boolean {
+  return Boolean(
+    permissions?.includes(ALL_PERMISSIONS) || permissions?.includes(DEVELOPER),
+  );
+}
+
+/**
+ * Forma canónica de la lista: un comodín manda solo, y lo repetido o
+ * desconocido se cae. Así nunca se guarda ["*", "ver_panel"].
+ */
+export function normalizeRolePermissions(permissions: readonly string[]): string[] {
+  if (permissions.includes(DEVELOPER)) return [DEVELOPER];
+  if (permissions.includes(ALL_PERMISSIONS)) return [ALL_PERMISSIONS];
+  return catalogPermissions(permissions);
+}
+
+/** Solo las llaves del catálogo, sin comodines: lo que marca la interfaz. */
+export function catalogPermissions(
+  permissions: readonly string[] | undefined,
+): PermissionId[] {
+  return PERMISSION_IDS.filter((id) => permissions?.includes(id) ?? false);
+}
+
 export function hasPermission(
   permissions: readonly string[] | undefined,
   permission: PermissionId,
 ): boolean {
   if (!permissions) return false;
-  if (permissions.includes(DEVELOPER)) return true;
-  return permissions.includes(ALL_PERMISSIONS) || permissions.includes(permission);
+  return grantsEverything(permissions) || permissions.includes(permission);
 }
 
 /** Quien lo tenga manda sobre todo lo demás, incluidos los administradores. */
