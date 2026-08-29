@@ -143,19 +143,6 @@ export type RolePermissions =
 /** Las llaves del catálogo, en el orden en que se muestran. */
 export const PERMISSION_IDS = PERMISSIONS.map((p) => p.id) as [PermissionId, ...PermissionId[]];
 
-export function isPermissionId(value: string): value is PermissionId {
-  return (PERMISSION_IDS as readonly string[]).includes(value);
-}
-
-/**
- * Lo que un rol puede tener guardado: una llave del catálogo o uno de los dos
- * comodines. Los roles del sistema guardan comodines, así que validar solo
- * contra el catálogo los daba por inválidos.
- */
-export function isRolePermission(value: string): boolean {
-  return value === ALL_PERMISSIONS || value === DEVELOPER || isPermissionId(value);
-}
-
 /** Concede el catálogo entero: administración o desarrollador. */
 export function grantsEverything(permissions: readonly string[] | undefined): boolean {
   return Boolean(
@@ -178,6 +165,20 @@ export function catalogPermissions(
   permissions: readonly string[] | undefined,
 ): PermissionId[] {
   return PERMISSION_IDS.filter((id) => permissions?.includes(id) ?? false);
+}
+
+/** Lo único que tiene sentido apagar: las páginas. */
+export const MODULE_IDS = PERMISSIONS.filter((p) => p.group === "Páginas").map(
+  (p) => p.id,
+) as PermissionId[];
+
+/**
+ * Deja la lista de módulos apagados en lo que hoy existe. La interfaz devuelve
+ * lo que el servidor le dio, así que una llave vieja guardada en la base
+ * bloqueaba todos los interruptores; aquí se cae sola en el siguiente guardado.
+ */
+export function normalizeModules(keys: readonly string[]): PermissionId[] {
+  return MODULE_IDS.filter((id) => keys.includes(id));
 }
 
 export function hasPermission(

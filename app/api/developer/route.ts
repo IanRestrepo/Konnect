@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getSession } from "@/lib/session";
-import { isDeveloper, isPermissionId } from "@/lib/permissions";
+import { isDeveloper, normalizeModules } from "@/lib/permissions";
 import {
   createAnnouncement,
   deleteAnnouncement,
@@ -26,11 +26,12 @@ const aviso = z.object({
 
 const borrarAviso = z.object({ accion: z.literal("borrar_aviso"), id: z.string().min(1) });
 
+// Lo que llega es la lista entera de módulos apagados, no un cambio suelto: se
+// limpia en vez de rechazarse, porque una llave que ya no existe dejaría al
+// desarrollador sin poder encender ni apagar nada.
 const modulos = z.object({
   accion: z.literal("modulos"),
-  disabled: z
-    .array(z.string().refine(isPermissionId, "Ese módulo no existe."))
-    .default([]),
+  disabled: z.array(z.string()).default([]),
 });
 
 const schema = z.discriminatedUnion("accion", [aviso, borrarAviso, modulos]);
@@ -71,7 +72,7 @@ export async function POST(request: Request) {
   const datos = parsed.data;
 
   if (datos.accion === "modulos") {
-    const disabled = await setDisabledModules(datos.disabled);
+    const disabled = await setDisabledModules(normalizeModules(datos.disabled));
     revalidatePath("/", "layout");
     return NextResponse.json({ disabled });
   }

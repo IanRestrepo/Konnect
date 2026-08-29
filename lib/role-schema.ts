@@ -4,17 +4,15 @@ import {
   DEVELOPER,
   grantsEverything,
   isDeveloper,
-  isRolePermission,
 } from "@/lib/permissions";
 
 /**
- * Permisos que acepta la API de roles: las llaves del catálogo y los dos
- * comodines. Los roles del sistema guardan "*" y "**", y la interfaz reenvía
- * lo que le llega, así que una lista cerrada al catálogo los rechazaba.
+ * La interfaz reenvía los permisos que le dio el servidor, comodines incluidos
+ * ("*" para la administración, "**" para el desarrollador). Por eso aquí no se
+ * rechaza nada: `normalizeRolePermissions` deja solo lo que el catálogo
+ * reconoce, que además es lo que menos poder concede.
  */
-export const rolePermissionsSchema = z.array(
-  z.string().refine(isRolePermission, "Hay un permiso que no existe en el catálogo."),
-);
+export const rolePermissionsSchema = z.array(z.string());
 
 /**
  * Nadie reparte más poder del que tiene: `gestionar_usuarios` deja crear roles,
