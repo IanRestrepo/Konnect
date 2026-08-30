@@ -1,4 +1,4 @@
-import type { SocialPlatform } from "@/lib/types";
+import type { DeliverableType, SocialPlatform } from "@/lib/types";
 
 /** Cómo se muestra y cómo se arma el enlace de cada plataforma. */
 export const PLATFORMS: { id: SocialPlatform; label: string; placeholder: string }[] = [
@@ -96,3 +96,67 @@ export const PLATFORM_METRICS: Record<
     content: "Publicaciones",
   },
 };
+
+/* ---------------- Tareas por plataforma ---------------- */
+
+/**
+ * Qué se le puede encargar a un creador en cada red, y cómo se llama allí.
+ *
+ * El mismo formato cambia de nombre según dónde se publique: un vertical corto
+ * es un Reel en Instagram, un Short en YouTube y sencillamente un video en
+ * TikTok. Encargar «short» sin más obliga al equipo a traducir mentalmente.
+ */
+export const TAREAS: Record<SocialPlatform, { type: DeliverableType; label: string }[]> = {
+  youtube: [
+    { type: "video", label: "Video dedicado" },
+    { type: "integracion", label: "Mención dentro de un video" },
+    { type: "short", label: "Short" },
+    { type: "directo", label: "Directo" },
+  ],
+  instagram: [
+    { type: "short", label: "Reel" },
+    { type: "post", label: "Publicación" },
+    { type: "directo", label: "Historia en vivo" },
+  ],
+  tiktok: [
+    { type: "short", label: "Video" },
+    { type: "integracion", label: "Mención en un video" },
+    { type: "directo", label: "Directo" },
+  ],
+  x: [
+    { type: "post", label: "Publicación" },
+    { type: "video", label: "Video" },
+  ],
+  twitch: [
+    { type: "directo", label: "Directo patrocinado" },
+    { type: "integracion", label: "Mención durante el directo" },
+  ],
+  kick: [
+    { type: "directo", label: "Directo patrocinado" },
+    { type: "integracion", label: "Mención durante el directo" },
+  ],
+  discord: [
+    { type: "post", label: "Anuncio en el servidor" },
+    { type: "directo", label: "Evento en vivo" },
+  ],
+  roblox: [
+    { type: "integracion", label: "Integración en la experiencia" },
+    { type: "video", label: "Video del juego" },
+  ],
+  web: [{ type: "post", label: "Publicación" }],
+};
+
+/** Cómo se llama esa tarea en esa red. Cae en un nombre genérico si no encaja. */
+export function tareaLabel(platform: SocialPlatform, type: DeliverableType): string {
+  const encontrada = TAREAS[platform]?.find((t) => t.type === type);
+  if (encontrada) return encontrada.label;
+
+  const generico: Record<DeliverableType, string> = {
+    video: "Video",
+    short: "Vertical corto",
+    integracion: "Mención",
+    directo: "Directo",
+    post: "Publicación",
+  };
+  return generico[type];
+}

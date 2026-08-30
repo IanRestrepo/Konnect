@@ -1,7 +1,7 @@
 import {
+  NotebookPen,
   Building2,
   FolderKanban,
-  MessagesSquare,
   House,
   Mail,
   Megaphone,
@@ -23,8 +23,8 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/creadores", label: "Creadores", icon: Users, permission: "ver_creadores" },
   { href: "/campanas", label: "Campañas", icon: Megaphone, permission: "ver_campanas" },
   { href: "/empresas", label: "Empresas", icon: Building2, permission: "ver_empresas" },
+  { href: "/notas", label: "Notas", icon: NotebookPen, permission: "ver_notas" },
   { href: "/sesiones", label: "Sesiones", icon: FolderKanban, permission: "ver_sesiones" },
-  { href: "/chat", label: "Chat", icon: MessagesSquare, permission: "ver_chat" },
   { href: "/mensajes", label: "Mensajes", icon: Mail, permission: "ver_mensajes" },
   { href: "/finanzas", label: "Finanzas", icon: Wallet, permission: "ver_finanzas" },
 ];

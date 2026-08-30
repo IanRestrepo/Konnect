@@ -47,11 +47,11 @@ export const PERMISSIONS = [
     href: "/finanzas",
   },
   {
-    id: "ver_chat",
-    label: "Chat",
-    description: "Salas de conversación del equipo",
+    id: "ver_notas",
+    label: "Notas",
+    description: "Documentos y carpetas de proyecto del equipo",
     group: "Páginas",
-    href: "/chat",
+    href: "/notas",
   },
   {
     id: "ver_sesiones",
@@ -89,10 +89,10 @@ export const PERMISSIONS = [
     href: null,
   },
   {
-    id: "gestionar_chat",
-    label: "Gestionar salas de chat",
-    description: "Crear, renombrar y archivar salas, y borrar cualquier mensaje",
-    group: "Administración",
+    id: "editar_notas",
+    label: "Editar notas",
+    description: "Crear, editar y borrar notas y carpetas",
+    group: "Acciones",
     href: null,
   },
   {
@@ -202,7 +202,7 @@ const ROUTE_PERMISSION: { prefix: string; permission: PermissionId }[] = [
   { prefix: "/mensajes", permission: "ver_mensajes" },
   { prefix: "/finanzas", permission: "ver_finanzas" },
   { prefix: "/sesiones", permission: "ver_sesiones" },
-  { prefix: "/chat", permission: "ver_chat" },
+  { prefix: "/notas", permission: "ver_notas" },
   { prefix: "/configuracion", permission: "gestionar_ajustes" },
 ];
 

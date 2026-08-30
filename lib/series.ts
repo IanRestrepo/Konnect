@@ -1,3 +1,4 @@
+import { campaignTotals } from "@/lib/pricing";
 import type { Campaign } from "@/lib/types";
 
 /**
@@ -84,7 +85,7 @@ export function budgetSeries(campaigns: Campaign[]): number[] {
   const buckets = new Map<string, number>();
   campaigns.forEach((campaign) => {
     const key = keyOf(campaign.startDate);
-    buckets.set(key, (buckets.get(key) ?? 0) + campaign.budget);
+    buckets.set(key, (buckets.get(key) ?? 0) + campaignTotals(campaign).creatorTotal);
   });
   return toSeries(buckets, true);
 }

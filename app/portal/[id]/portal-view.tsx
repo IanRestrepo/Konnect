@@ -2,101 +2,61 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  ExternalLink,
-  FileText,
-  Link2,
-  LoaderCircle,
-  LogOut,
-  Plus,
-  TriangleAlert,
-  Upload,
-} from "lucide-react";
-import { Card, CardHeader, CardTitle } from "@/components/ui/card";
-import { SectionHead } from "@/components/ui/section";
-import { ListBox, ListRow, RowIcon } from "@/components/ui/list";
-import { EmptyState } from "@/components/ui/empty-state";
-import { Stat, StatBand } from "@/components/ui/stat";
-import { Badge } from "@/components/ui/badge";
-import { Avatar } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
-import { Modal } from "@/components/ui/modal";
-import { MATERIAL_VACIO, MaterialFields, type MaterialDraft } from "@/components/sessions/material-fields";
-import { PORTAL_ROLE, SESSION_ITEM_KIND, SESSION_STATUS } from "@/lib/labels";
-import type { PortalRole, SessionItem, SessionItemKind, SessionStatus } from "@/lib/types";
-import { formatCompact, formatDate } from "@/lib/utils";
+import { Check, LoaderCircle, LogOut, Upload } from "lucide-react";
+import { KonnectMark } from "@/components/brand/logo";
+import type { PortalRole, RequirementStatus, SessionRequirement } from "@/lib/types";
+import { formatDate } from "@/lib/utils";
 
-type CreatorResumen = {
-  name: string;
-  handle: string;
-  avatarUrl: string | null;
-  subscribers: number;
-  totalViews: number;
-  videoCount: number;
+/**
+ * Panel del creador.
+ *
+ * Responde a tres preguntas y nada más: qué me piden, qué ya entregué y
+ * cuándo cobro. No comparte componentes con la aplicación interna a
+ * propósito: aquí no hay tablas densas ni filtros, y se abre desde el móvil.
+ */
+
+export type PortalPago = {
+  /** Lo que recibe el creador por esta campaña. */
+  total: number;
+  moneda: string;
+  estado: "pendiente" | "aprobado" | "pagado";
+  piezas: { titulo: string; importe: number; estado: string }[];
 };
 
-const ICONO_ITEM: Record<SessionItemKind, typeof FileText> = {
-  entregable: Link2,
-  guion: FileText,
-  borrador: FileText,
-  referencia: Link2,
-  nota: FileText,
+const ESTADO_PAGO: Record<PortalPago["estado"], { texto: string; nota: string }> = {
+  pendiente: { texto: "Pendiente", nota: "Se aprueba cuando la agencia valide tus entregas." },
+  aprobado: { texto: "Aprobado", nota: "Aprobado para pago. Entra en el próximo ciclo." },
+  pagado: { texto: "Pagado", nota: "El pago ya salió." },
 };
 
-/** Lo que ve quien entró con un código. Sin navegación ni datos de la agencia. */
+const ESTADO_CHECK: Record<RequirementStatus, string> = {
+  pendiente: "Pendiente",
+  enviado: "En revisión",
+  cambios: "Cambios pedidos",
+  aprobado: "Aprobado",
+};
+
 export function PortalView({
   sessionId,
   name,
-  notes,
-  status,
   role,
   label,
   canUpload,
-  items,
-  creator,
+  requirements,
+  pago,
 }: {
   sessionId: string;
   name: string;
-  notes: string;
-  status: SessionStatus;
   role: PortalRole;
   label: string;
   canUpload: boolean;
-  items: SessionItem[];
-  creator: CreatorResumen | null;
+  requirements: SessionRequirement[];
+  pago: PortalPago | null;
 }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
-  const [ocupado, setOcupado] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState<MaterialDraft>({ ...MATERIAL_VACIO });
 
-  const estado = SESSION_STATUS[status];
-
-  async function subir() {
-    if (!form.title.trim()) {
-      setError("Falta el título.");
-      return;
-    }
-    setOcupado(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/portal/${sessionId}/items`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, title: form.title.trim(), url: form.url.trim() || null }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? "No se pudo subir.");
-      setForm({ ...MATERIAL_VACIO });
-      setOpen(false);
-      router.refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Error inesperado");
-    } finally {
-      setOcupado(false);
-    }
-  }
+  const hechos = requirements.filter((r) => r.status === "aprobado").length;
+  const pendientes = requirements.filter((r) => r.status !== "aprobado");
 
   async function salir() {
     await fetch(`/api/portal/${sessionId}/salir`, { method: "POST" });
@@ -104,150 +64,248 @@ export function PortalView({
   }
 
   return (
-    <div className="min-h-dvh bg-[var(--canvas)]">
-      <header className="sticky top-0 z-10 border-b border-[var(--line)] bg-[var(--surface)]/85 backdrop-blur">
-        <div className="mx-auto flex max-w-4xl items-center gap-3 px-5 py-3.5">
-          <div className="min-w-0 flex-1">
-            <p className="eyebrow">Portal de entregas</p>
-            <h1 className="truncate text-[16px] font-semibold tracking-tight">{name}</h1>
-          </div>
-          <Badge plain>
-            {PORTAL_ROLE[role]} · {label}
-          </Badge>
-          <Button variant="ghost" size="sm" onClick={salir}>
-            <LogOut size={14} />
-            Salir
-          </Button>
-        </div>
+    <div className="portal-app">
+      <header className="portal-top">
+        <KonnectMark className="h-6 w-auto" />
+        <span className="portal-top__quien">
+          {label} · {role === "creador" ? "Creador" : role === "cliente" ? "Cliente" : "Invitado"}
+        </span>
+        <button className="portal-salir" onClick={salir}>
+          <LogOut size={13} style={{ display: "inline", marginRight: 5, verticalAlign: -2 }} />
+          Salir
+        </button>
       </header>
 
-      <main className="mx-auto max-w-4xl space-y-6 px-5 py-7">
-        {(notes || !canUpload || status === "cerrada") && (
-          <Card className="px-4 py-3.5">
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge tone={estado.tone}>{estado.label}</Badge>
-              {!canUpload && <Badge>Solo lectura</Badge>}
+      <div className="portal-wrap">
+        <h1 className="portal-hero__titulo">{name}</h1>
+        <p className="portal-hero__sub">
+          {requirements.length === 0
+            ? "Todavía no hay nada que entregar."
+            : hechos === requirements.length
+              ? "Todo entregado y aprobado. No queda nada por hacer."
+              : `${hechos} de ${requirements.length} aprobados · ${pendientes.length} por resolver`}
+        </p>
+
+        {/* ---------------- Lo que se pide ---------------- */}
+        <section className="portal-seccion">
+          <div className="portal-seccion__cabeza">
+            <h2 className="portal-seccion__titulo">Lo que te pedimos</h2>
+            <span className="portal-seccion__contador">{requirements.length}</span>
+          </div>
+
+          {requirements.length === 0 ? (
+            <p className="portal-vacio">
+              La agencia aún no cargó las peticiones. Te avisará cuando estén.
+            </p>
+          ) : (
+            requirements.map((req) => (
+              <Peticion
+                key={req.id}
+                sessionId={sessionId}
+                req={req}
+                puedeSubir={canUpload}
+                onListo={() => router.refresh()}
+              />
+            ))
+          )}
+        </section>
+
+        {/* ---------------- El pago ---------------- */}
+        {pago && (
+          <section className="portal-seccion">
+            <div className="portal-seccion__cabeza">
+              <h2 className="portal-seccion__titulo">Tu pago</h2>
             </div>
-            {notes && (
-              <p className="mt-2 text-[13px] leading-relaxed text-[var(--text-muted)]">{notes}</p>
-            )}
-          </Card>
+
+            <div className="portal-pago">
+              <span className={`portal-tag ${pago.estado === "pagado" ? "pagado" : pago.estado}`}>
+                {ESTADO_PAGO[pago.estado].texto}
+              </span>
+              <p className="portal-pago__cifra">
+                {pago.moneda} {pago.total.toLocaleString("es", { maximumFractionDigits: 2 })}
+              </p>
+              <p className="portal-hero__sub" style={{ fontSize: 13 }}>
+                {ESTADO_PAGO[pago.estado].nota}
+              </p>
+
+              {pago.piezas.map((p, i) => (
+                <div className="portal-pago__linea" key={i}>
+                  <span className="portal-pago__etiqueta">{p.titulo}</span>
+                  <span>
+                    {pago.moneda} {p.importe.toLocaleString("es", { maximumFractionDigits: 2 })}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Una petición del checklist ---------------- */
+
+function Peticion({
+  sessionId,
+  req,
+  puedeSubir,
+  onListo,
+}: {
+  sessionId: string;
+  req: SessionRequirement;
+  puedeSubir: boolean;
+  onListo: () => void;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const [url, setUrl] = useState(req.url ?? "");
+  const [notas, setNotas] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const aprobado = req.status === "aprobado";
+  const marca =
+    req.status === "aprobado"
+      ? "is-aprobado"
+      : req.status === "enviado"
+        ? "is-enviado"
+        : req.status === "cambios"
+          ? "is-cambios"
+          : "";
+
+  async function enviar() {
+    if (!url.trim()) {
+      setError("Pega el enlace de lo que entregas.");
+      return;
+    }
+    setEnviando(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/portal/${sessionId}/peticiones`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requirementId: req.id, url: url.trim(), notes: notas.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "No pudimos guardar la entrega.");
+      setAbierto(false);
+      onListo();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error inesperado");
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <article
+      className={`portal-check ${req.status === "aprobado" ? "is-aprobado" : req.status === "cambios" ? "is-cambios" : ""}`}
+    >
+      <span className={`portal-check__marca ${marca}`}>
+        {aprobado && <Check size={14} strokeWidth={3} />}
+      </span>
+
+      <div className="portal-check__cuerpo">
+        <h3 className={`portal-check__titulo ${aprobado ? "is-hecho" : ""}`}>{req.title}</h3>
+
+        {req.instructions && <p className="portal-check__nota">{req.instructions}</p>}
+
+        {req.steps.length > 0 && (
+          <ul className="portal-pasos">
+            {req.steps.map((paso, i) => (
+              <li key={i}>{paso}</li>
+            ))}
+          </ul>
         )}
 
-        {error && (
-          <p className="flex items-start gap-2 rounded-[var(--r-control)] bg-[var(--danger-soft)] px-3 py-2 text-[12.5px] text-[var(--danger)]">
-            <TriangleAlert size={14} className="mt-px shrink-0" />
-            {error}
+        {req.status === "cambios" && req.reviewNotes && (
+          <p className="portal-revision">
+            <strong>Cambios pedidos:</strong> {req.reviewNotes}
           </p>
         )}
 
-        {creator && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Creador</CardTitle>
-            </CardHeader>
-            <div className="flex items-center gap-3 border-t border-[var(--line)] px-4 py-3">
-              <Avatar src={creator.avatarUrl} name={creator.name} size={40} />
-              <div className="min-w-0">
-                <p className="truncate text-[13.5px] font-medium">{creator.name}</p>
-                <p className="truncate text-[12px] text-[var(--text-muted)]">{creator.handle}</p>
-              </div>
-            </div>
-            <StatBand>
-              <Stat label="Suscriptores" value={formatCompact(creator.subscribers)} />
-              <Stat label="Vistas del canal" value={formatCompact(creator.totalViews)} />
-              <Stat label="Videos" value={formatCompact(creator.videoCount)} />
-            </StatBand>
-          </Card>
-        )}
+        <div className="portal-check__pie">
+          <span className={`portal-tag ${req.status}`}>{ESTADO_CHECK[req.status]}</span>
 
-        <section>
-          <SectionHead
-            title="Material"
-            hint={items.length ? `${items.length} elementos` : undefined}
-            action={
-              canUpload && (
-                <Button variant="accent" size="sm" onClick={() => setOpen(true)}>
-                  <Plus size={14} />
-                  Subir
-                </Button>
-              )
-            }
-          />
-
-          {items.length === 0 ? (
-            <EmptyState
-              icon={Link2}
-              title="Todavía no hay nada"
-              description={
-                canUpload
-                  ? "Sube el enlace de tu guion, tu borrador o el corte final."
-                  : "Cuando se comparta material aparecerá aquí."
-              }
-              action={
-                canUpload && (
-                  <Button variant="accent" onClick={() => setOpen(true)}>
-                    <Plus size={16} />
-                    Subir material
-                  </Button>
-                )
-              }
-            />
-          ) : (
-            <ListBox>
-              {items.map((it) => {
-                const kind = SESSION_ITEM_KIND[it.kind];
-                const Icono = ICONO_ITEM[it.kind];
-                return (
-                  <ListRow
-                    key={it.id}
-                    href={it.url ?? undefined}
-                    chevron={false}
-                    leading={
-                      <RowIcon>
-                        <Icono size={17} strokeWidth={1.75} />
-                      </RowIcon>
-                    }
-                    title={it.title}
-                    subtitle={[
-                      it.authorLabel,
-                      it.authorRole ? PORTAL_ROLE[it.authorRole] : "Agencia",
-                      formatDate(it.createdAt),
-                    ].join(" · ")}
-                    trailing={
-                      <span className="flex items-center gap-2">
-                        <Badge tone={kind.tone}>{kind.label}</Badge>
-                        {it.url && <ExternalLink size={14} className="text-[var(--text-subtle)]" />}
-                      </span>
-                    }
-                  />
-                );
-              })}
-            </ListBox>
+          {req.url && (
+            <a className="portal-enlace" href={req.url} target="_blank" rel="noreferrer">
+              {req.url}
+            </a>
           )}
-        </section>
-      </main>
 
-      <Modal
-        open={open}
-        onClose={() => setOpen(false)}
-        icon={Upload}
-        title="Subir material"
-        description="Comparte el enlace de donde lo tengas subido."
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => setOpen(false)}>
-              Cancelar
-            </Button>
-            <Button variant="primary" onClick={subir} disabled={ocupado}>
-              {ocupado && <LoaderCircle size={14} className="animate-spin" />}
-              Subir
-            </Button>
-          </>
-        }
-      >
-        <MaterialFields value={form} onChange={setForm} />
-      </Modal>
-    </div>
+          {req.submittedAt && !req.url && (
+            <span className="portal-seccion__contador">
+              Enviado el {formatDate(req.submittedAt)}
+            </span>
+          )}
+
+          {puedeSubir && !aprobado && !abierto && (
+            <button
+              className="portal-btn portal-btn--chico"
+              style={{ marginLeft: "auto" }}
+              onClick={() => setAbierto(true)}
+            >
+              <Upload size={13} style={{ display: "inline", marginRight: 6, verticalAlign: -2 }} />
+              {req.url ? "Volver a enviar" : "Subir"}
+            </button>
+          )}
+        </div>
+
+        {abierto && (
+          <div style={{ marginTop: 12 }}>
+            <label className="portal-etiqueta" htmlFor={`url-${req.id}`}>
+              Enlace
+            </label>
+            <input
+              id={`url-${req.id}`}
+              className="portal-campo"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://…"
+              autoFocus
+            />
+
+            <label className="portal-etiqueta" htmlFor={`nota-${req.id}`} style={{ marginTop: 10 }}>
+              Comentario (opcional)
+            </label>
+            <input
+              id={`nota-${req.id}`}
+              className="portal-campo"
+              value={notas}
+              onChange={(e) => setNotas(e.target.value)}
+              placeholder="Algo que la agencia deba saber"
+            />
+
+            {error && <p className="portal-aviso">{error}</p>}
+
+            <div className="portal-check__pie">
+              <button
+                className="portal-btn portal-btn--chico"
+                onClick={enviar}
+                disabled={enviando}
+              >
+                {enviando && (
+                  <LoaderCircle
+                    size={13}
+                    className="animate-spin"
+                    style={{ display: "inline", marginRight: 6, verticalAlign: -2 }}
+                  />
+                )}
+                Enviar
+              </button>
+              <button
+                className="portal-btn portal-btn--chico portal-btn--fantasma"
+                onClick={() => {
+                  setAbierto(false);
+                  setError(null);
+                }}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </article>
   );
 }

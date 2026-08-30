@@ -13,6 +13,9 @@ import { Button } from "@/components/ui/button";
 import { BankingPanel } from "@/components/creators/banking-panel";
 import { ChannelsPanel } from "@/components/creators/channels-panel";
 import { SocialsPanel } from "@/components/creators/socials-panel";
+import { ApiConnectionsPanel } from "@/components/creators/api-connections-panel";
+import { ContactsPanel } from "@/components/companies/contacts-panel";
+import { LinkedNotes } from "@/components/notes/linked-notes";
 import { EditCreatorButton } from "@/components/creators/edit-creator-dialog";
 import { creatorCampaigns, getCampaigns, getCreator } from "@/lib/data";
 import {
@@ -212,6 +215,23 @@ export default async function CreadorPage({ params }: { params: Promise<{ id: st
           />
 
           <SocialsPanel creatorId={creator.id} socials={creator.socials} />
+
+          <ApiConnectionsPanel
+            creatorId={creator.id}
+            connections={creator.apiConnections}
+          />
+
+          <LinkedNotes creatorId={creator.id} />
+
+          {/* Con quién se habla: el creador, su mánager o su agencia. */}
+          <ContactsPanel
+            endpoint={`/api/creadores/${creator.id}/contactos`}
+            permiso="editar_creadores"
+            contacts={creator.contacts}
+            titulo="Personas de contacto"
+            vacio="Solo el contacto de la ficha. Añade mánager o representante si los hay."
+            exigeUno={false}
+          />
 
           <BankingPanel
             creatorId={creator.id}

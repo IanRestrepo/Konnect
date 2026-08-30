@@ -1,3 +1,4 @@
+import { campaignTotals } from "@/lib/pricing";
 import { read } from "@/lib/store";
 import type { Campaign, CampaignMetrics, Company, Creator } from "@/lib/types";
 
@@ -27,6 +28,11 @@ export async function getCampaign(id: string): Promise<Campaign | null> {
   return (await read()).campaigns.find((c) => c.id === id) ?? null;
 }
 
+/** El creador conectó su cuenta de YouTube: puede leerse su analítica propia. */
+export function creatorHasYoutubeAnalytics(creator: Creator): boolean {
+  return creator.apiConnections.some((c) => c.platform === "youtube");
+}
+
 /* ---------- Cálculos derivados ---------- */
 
 export function campaignMetrics(campaign: Campaign): CampaignMetrics {
@@ -34,15 +40,15 @@ export function campaignMetrics(campaign: Campaign): CampaignMetrics {
   const views = published.reduce((s, d) => s + (d.views ?? 0), 0);
   const likes = published.reduce((s, d) => s + (d.likes ?? 0), 0);
   const comments = published.reduce((s, d) => s + (d.comments ?? 0), 0);
-  const spent = campaign.deliverables
-    .filter((d) => d.status !== "cancelado")
-    .reduce((s, d) => s + d.agreedFee, 0);
+  const { creatorTotal: spent, clientTotal, grossProfit } = campaignTotals(campaign);
 
   return {
     views,
     likes,
     comments,
     spent,
+    clientTotal,
+    grossProfit,
     cpm: views > 0 ? (spent / views) * 1000 : null,
     engagementRate: views > 0 ? ((likes + comments) / views) * 100 : null,
     published: published.length,

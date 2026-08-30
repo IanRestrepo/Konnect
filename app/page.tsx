@@ -35,7 +35,7 @@ export default async function DashboardPage() {
 
   const totalViews = rows.reduce((s, r) => s + r.metrics.views, 0);
   const totalSpent = rows.reduce((s, r) => s + r.metrics.spent, 0);
-  const committed = active.reduce((s, c) => s + c.budget, 0);
+  const committed = active.reduce((s, c) => s + campaignMetrics(c).spent, 0);
   const blendedCpm = totalViews > 0 ? (totalSpent / totalViews) * 1000 : null;
 
   // Series calculadas de las fechas reales de publicación y de campaña.

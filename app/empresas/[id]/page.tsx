@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { ContactsPanel } from "@/components/companies/contacts-panel";
+import { LinkedNotes } from "@/components/notes/linked-notes";
 import { EditCompanyButton } from "@/components/companies/edit-company-dialog";
 import { campaignMetrics, companyCampaigns, getCampaigns, getCompany } from "@/lib/data";
 import { CAMPAIGN_OBJECTIVE, CAMPAIGN_STATUS, COMPANY_STATUS } from "@/lib/labels";
@@ -31,7 +32,7 @@ export default async function EmpresaPage({ params }: { params: Promise<{ id: st
 
   const own = companyCampaigns(campaigns, company.id);
   const status = COMPANY_STATUS[company.status];
-  const invested = own.reduce((s, c) => s + c.budget, 0);
+  const invested = own.reduce((s, c) => s + campaignMetrics(c).clientTotal, 0);
   const views = own.reduce((s, c) => s + campaignMetrics(c).views, 0);
   const serieInversion = companyInvestmentSeries(own);
   const serieVistas = viewsSeries(own);
@@ -140,7 +141,13 @@ export default async function EmpresaPage({ params }: { params: Promise<{ id: st
         </section>
 
         <div className="space-y-6">
-          <ContactsPanel companyId={company.id} contacts={company.contacts} />
+          <LinkedNotes companyId={company.id} />
+
+          <ContactsPanel
+            endpoint={`/api/empresas/${company.id}/contactos`}
+            permiso="editar_empresas"
+            contacts={company.contacts}
+          />
 
           <Card>
             <CardHeader>

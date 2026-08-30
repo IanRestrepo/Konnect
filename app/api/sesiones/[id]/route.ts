@@ -12,6 +12,9 @@ const schema = z.object({
   status: z.enum(["abierta", "cerrada"]).optional(),
   notes: z.string().optional(),
   showMetrics: z.boolean().optional(),
+  /** Cadena vacía = desvincular. Sirve para recolocar sesiones sueltas. */
+  campaignId: z.string().nullable().optional(),
+  creatorId: z.string().nullable().optional(),
 });
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {

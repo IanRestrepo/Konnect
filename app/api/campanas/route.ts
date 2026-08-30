@@ -1,24 +1,71 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { createCampaign, newId } from "@/lib/store";
+import { createCampaign, createCollabSession, newId, read } from "@/lib/store";
+import { IMPORTE_MAXIMO } from "@/lib/pricing";
 import type { Deliverable } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
+const PLATAFORMAS = [
+  "youtube",
+  "instagram",
+  "tiktok",
+  "x",
+  "twitch",
+  "kick",
+  "discord",
+  "roblox",
+  "web",
+] as const;
+
+/**
+ * Una línea de la campaña: un creador, en una red, con un tipo de pieza y su
+ * precio. El presupuesto de campaña ya no reparte nada; aquí está el dinero.
+ */
+const linea = z.object({
+  creatorId: z.string().min(1),
+  platform: z.enum(PLATAFORMAS),
+  type: z.enum(["video", "short", "integracion", "directo", "post"]),
+  /** Lo que paga el cliente por esta pieza. */
+  clientPrice: z
+    .number()
+    .min(0)
+    .max(IMPORTE_MAXIMO, "Ese importe es demasiado grande. El máximo es 9.999.999.999,99.")
+    .default(0),
+  /** Comisión propia de esta línea. Si falta, hereda el % de la campaña. */
+  commissionPct: z.number().min(0).max(100).nullable().default(null),
+  commissionFixed: z
+    .number()
+    .min(0)
+    .max(IMPORTE_MAXIMO, "Esa comisión es demasiado grande.")
+    .nullable()
+    .default(null),
+});
+
 const schema = z.object({
-  name: z.string({ error: "Falta el nombre de la campaña." }).min(1, "Falta el nombre de la campaña."),
+  name: z
+    .string({ error: "Falta el nombre de la campaña." })
+    .min(1, "Falta el nombre de la campaña."),
   companyId: z.string({ error: "Selecciona un cliente." }).min(1, "Selecciona un cliente."),
   status: z.enum(["borrador", "activa", "pausada", "finalizada"]).default("borrador"),
   objective: z.enum(["awareness", "trafico", "conversiones", "lanzamiento"]).default("awareness"),
   currency: z.enum(["USD", "MXN", "COP", "EUR"]).default("USD"),
-  budget: z.number().default(0),
+  /** Tope de referencia, opcional. Null = sin tope. */
+  budget: z
+    .number()
+    .min(0)
+    .max(IMPORTE_MAXIMO, "El tope es demasiado grande.")
+    .nullable()
+    .default(null),
+  /** Margen por defecto de la agencia, en % sobre el pago al creador. */
+  agencyFee: z.number().min(0).nullable().default(null),
   startDate: z.string().default(() => new Date().toISOString()),
   endDate: z.string().nullable().default(null),
   notes: z.string().default(""),
-  /** Creadores elegidos: se crean como entregables pendientes. */
-  creatorIds: z.array(z.string()).default([]),
-  fees: z.record(z.string(), z.number()).default({}),
+  lineas: z.array(linea).default([]),
+  /** Crear la sesión de entregas junto con la campaña. */
+  crearSesion: z.boolean().default(true),
 });
 
 export async function POST(request: Request) {
@@ -32,13 +79,27 @@ export async function POST(request: Request) {
     );
   }
 
-  const { creatorIds, fees, ...rest } = parsed.data;
+  const { lineas, crearSesion, ...rest } = parsed.data;
 
-  const deliverables: Deliverable[] = creatorIds.map((creatorId) => ({
+  const deliverables: Deliverable[] = lineas.map((l) => {
+    // El pago al creador se deriva aquí para que quede guardado y los informes
+    // no dependan de rehacer la cuenta con un porcentaje que pudo cambiar.
+    const comision =
+      l.commissionFixed !== null
+        ? Math.min(l.commissionFixed, l.clientPrice)
+        : l.clientPrice * ((l.commissionPct ?? rest.agencyFee ?? 0) / 100);
+
+    return {
     id: newId("dl"),
-    creatorId,
-    type: "video",
+    creatorId: l.creatorId,
+    type: l.type,
     status: "pendiente",
+    platform: l.platform,
+    clientPrice: l.clientPrice,
+    commissionPct: l.commissionPct,
+    commissionFixed: l.commissionFixed,
+    paymentStatus: "pendiente",
+    paidAt: null,
     videoUrl: null,
     videoId: null,
     title: null,
@@ -49,12 +110,38 @@ export async function POST(request: Request) {
     likes: null,
     comments: null,
     metricsUpdatedAt: null,
-    agreedFee: fees[creatorId] ?? 0,
-  }));
+    agreedFee: l.clientPrice - comision,
+    };
+  });
 
   const campaign = await createCampaign({ ...rest, deliverables });
 
+  /**
+   * Cada creador de la campaña recibe su propia sesión con su código: es su
+   * espacio de entregas, y no debe ver lo pactado con los demás.
+   */
+  if (crearSesion && lineas.length > 0) {
+    const { creators } = await read();
+    const unicos = [...new Set(lineas.map((l) => l.creatorId))];
+
+    await Promise.all(
+      unicos.map((creatorId) => {
+        const creador = creators.find((c) => c.id === creatorId);
+        return createCollabSession({
+          name: `${campaign.name} · ${creador?.name ?? "Creador"}`,
+          campaignId: campaign.id,
+          creatorId,
+          accesses: [
+            { role: "creador", label: creador?.name ?? "Creador", canUpload: true },
+          ],
+        });
+      }),
+    );
+  }
+
   revalidatePath("/campanas");
+  revalidatePath("/sesiones");
   revalidatePath("/");
-  return NextResponse.json({ campaign }, { status: 201 });
+
+  return NextResponse.json(campaign, { status: 201 });
 }

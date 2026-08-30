@@ -88,6 +88,8 @@ export async function POST(request: Request) {
   const creator = await createCreator({
     ...datos,
     channels: [],
+    rates: [],
+    contacts: [],
     socials: socials.map((s) => ({
       id: newId("so"),
       platform: s.platform,

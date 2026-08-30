@@ -30,10 +30,13 @@ export const CAMPAIGN_OBJECTIVE: Record<CampaignObjective, string> = {
   lanzamiento: "Lanzamiento",
 };
 
+/** Nombre genérico, sin red. Para nombrarlo dentro de una red usa `tareaLabel`. */
 export const DELIVERABLE_TYPE: Record<DeliverableType, string> = {
   video: "Video dedicado",
   short: "Reel / Short",
   integracion: "Fracción publicitaria",
+  directo: "Directo",
+  post: "Publicación",
 };
 
 export const DELIVERABLE_STATUS: Record<DeliverableStatus, { label: string; tone: Tone }> = {

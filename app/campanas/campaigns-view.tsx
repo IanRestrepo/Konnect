@@ -55,7 +55,7 @@ export function CampaignsView({ rows }: { rows: CampaignRow[] }) {
     () =>
       filtered.reduce(
         (acc, { campaign, metrics }) => ({
-          budget: acc.budget + campaign.budget,
+          budget: acc.budget + metrics.clientTotal,
           spent: acc.spent + metrics.spent,
           views: acc.views + metrics.views,
         }),
@@ -76,7 +76,7 @@ export function CampaignsView({ rows }: { rows: CampaignRow[] }) {
         "Interacciones",
         "CPM",
         "Comprometido",
-        "Presupuesto",
+        "Facturado",
         "Moneda",
         "Inicio",
         "Fin",
@@ -91,7 +91,7 @@ export function CampaignsView({ rows }: { rows: CampaignRow[] }) {
         metrics.likes + metrics.comments,
         metrics.cpm ? metrics.cpm.toFixed(2) : "",
         metrics.spent,
-        campaign.budget,
+        metrics.clientTotal,
         campaign.currency,
         campaign.startDate.slice(0, 10),
         campaign.endDate ? campaign.endDate.slice(0, 10) : "",
@@ -192,7 +192,7 @@ export function CampaignsView({ rows }: { rows: CampaignRow[] }) {
                 <Th>Estado</Th>
                 <Th align="right">Vistas</Th>
                 <Th align="right">CPM</Th>
-                <Th align="right">Presupuesto</Th>
+                <Th align="right">Facturado</Th>
                 <Th>Periodo</Th>
               </tr>
             </thead>
@@ -247,7 +247,7 @@ export function CampaignsView({ rows }: { rows: CampaignRow[] }) {
                       {metrics.cpm ? `$${metrics.cpm.toFixed(2)}` : "—"}
                     </Td>
                     <Td align="right" className="tabular">
-                      {formatMoney(campaign.budget, campaign.currency)}
+                      {formatMoney(metrics.clientTotal, campaign.currency)}
                     </Td>
                     <Td className="whitespace-nowrap text-[12.5px] text-[var(--text-muted)]">
                       {formatDate(campaign.startDate)}

@@ -13,6 +13,8 @@ import type { Creator } from "@/lib/types";
 
 type VideoPreview = {
   videoId: string;
+  /** Canal que publicó el video; sirve para reconocer al creador. */
+  channelId?: string;
   title: string;
   channelTitle: string;
   thumbnail: string | null;
@@ -25,6 +27,25 @@ type VideoPreview = {
   videoUrl: string;
   source: "api" | "demo";
 };
+
+/**
+ * Lee la respuesta sin dar por hecho que trae JSON.
+ *
+ * Un 500 del servidor puede llegar con cuerpo vacío o con una página de error,
+ * y `res.json()` a secas convierte eso en «Unexpected end of JSON input», que
+ * no le dice nada a nadie. Preferimos el estado real.
+ */
+async function leerRespuesta(res: Response, fallo: string) {
+  const texto = await res.text();
+  let data: { error?: string } = {};
+  try {
+    data = texto ? JSON.parse(texto) : {};
+  } catch {
+    // El cuerpo no era JSON: nos quedamos con el código de estado.
+  }
+  if (!res.ok) throw new Error(data.error ?? `${fallo} (error ${res.status})`);
+  return data;
+}
 
 function duration(seconds: number) {
   const h = Math.floor(seconds / 3600);
@@ -53,6 +74,7 @@ export function AddDeliverableDialog({
   const [error, setError] = useState<string | null>(null);
   const [video, setVideo] = useState<VideoPreview | null>(null);
   const [creatorId, setCreatorId] = useState(creators[0]?.id ?? "");
+  const [autodetectado, setAutodetectado] = useState(false);
   const [type, setType] = useState("video");
   const [fee, setFee] = useState("");
 
@@ -62,6 +84,7 @@ export function AddDeliverableDialog({
     setError(null);
     setSaving(false);
     setFee("");
+    setAutodetectado(false);
     onClose();
   }
 
@@ -71,15 +94,29 @@ export function AddDeliverableDialog({
     setError(null);
     try {
       const res = await fetch(`/api/youtube/video?url=${encodeURIComponent(url)}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "No pudimos leer el video.");
-      const found = data.video as VideoPreview;
+      const data = (await leerRespuesta(res, "No pudimos leer el video.")) as {
+        video: VideoPreview;
+      };
+      const found = data.video;
       setVideo(found);
       setType(found.isShort ? "short" : "video");
 
+      // El canal del video identifica al creador: mira el canal principal, los
+      // secundarios y, si nada cuadra, el nombre del canal.
+      const detectado = detectarCreador(found, creators);
+      if (detectado) {
+        setCreatorId(detectado.id);
+        setAutodetectado(true);
+      } else {
+        setAutodetectado(false);
+      }
+
       // Precarga la tarifa acordada del creador según el tipo de pieza.
-      const creator = creators.find((c) => c.id === creatorId);
-      if (creator) setFee(String(found.isShort ? creator.rateShort : creator.rateVideo));
+      const creator = detectado ?? creators.find((c) => c.id === creatorId);
+      if (creator) {
+        const tarifa = found.isShort ? creator.rateShort : creator.rateVideo;
+        setFee(tarifa > 0 ? String(tarifa) : "");
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error inesperado");
     } finally {
@@ -111,8 +148,7 @@ export function AddDeliverableDialog({
           comments: video.comments,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "No se pudo guardar.");
+      await leerRespuesta(res, "No se pudo guardar el entregable.");
       router.refresh();
       close();
     } catch (e) {
@@ -231,7 +267,10 @@ export function AddDeliverableDialog({
                 <Select
                   id="deliverable-creator"
                   value={creatorId}
-                  onChange={(e) => setCreatorId(e.target.value)}
+                  onChange={(e) => {
+                    setCreatorId(e.target.value);
+                    setAutodetectado(false);
+                  }}
                 >
                   {creators.map((c) => (
                     <option key={c.id} value={c.id}>
@@ -239,6 +278,15 @@ export function AddDeliverableDialog({
                     </option>
                   ))}
                 </Select>
+                {autodetectado ? (
+                  <FieldHint className="text-[var(--ok)]">
+                    Reconocido por el canal del video.
+                  </FieldHint>
+                ) : (
+                  <FieldHint>
+                    No reconocimos el canal. Elige a quién corresponde.
+                  </FieldHint>
+                )}
               </div>
               <div>
                 <Label htmlFor="deliverable-type">Tipo</Label>
@@ -267,5 +315,34 @@ export function AddDeliverableDialog({
         )}
       </div>
     </Modal>
+  );
+}
+
+/**
+ * Reconoce al creador a partir del canal del video.
+ *
+ * Primero por identificador de canal, que es exacto: el principal y los
+ * secundarios que tenga cargados. Solo si eso falla compara el nombre del
+ * canal, que puede coincidir por casualidad y por eso va al final.
+ */
+function detectarCreador(video: VideoPreview, creators: Creator[]): Creator | null {
+  if (video.channelId) {
+    const porCanal = creators.find(
+      (c) =>
+        c.channelId === video.channelId ||
+        c.channels.some((ch) => ch.channelId === video.channelId),
+    );
+    if (porCanal) return porCanal;
+  }
+
+  const titulo = video.channelTitle?.trim().toLowerCase();
+  if (!titulo) return null;
+
+  return (
+    creators.find(
+      (c) =>
+        c.name.toLowerCase() === titulo ||
+        c.handle.replace(/^@/, "").toLowerCase() === titulo.replace(/^@/, ""),
+    ) ?? null
   );
 }

@@ -37,10 +37,16 @@ enum CampaignObjective {
   lanzamiento
 }
 
+/// Qué se le encarga al creador. El nombre que ve el equipo depende también de
+/// la red: un `short` es un Reel en Instagram y un Short en YouTube.
 enum DeliverableType {
   video
   short
   integracion
+  /// Emisión en vivo: stream patrocinado o mención durante el directo.
+  directo
+  /// Publicación estática: carrusel, foto o hilo.
+  post
 }
 
 enum DeliverableStatus {
@@ -48,6 +54,13 @@ enum DeliverableStatus {
   en_revision
   publicado
   cancelado
+}
+
+/// Estado del pago de una pieza. Lo ve la agencia y también el creador.
+enum PaymentStatus {
+  pendiente
+  aprobado
+  pagado
 }
 
 enum PaymentMethod {
@@ -116,11 +129,14 @@ model Creator {
 
   notes String @default("")
 
-  channels     CreatorChannel[]
-  socials      SocialLink[]
-  deliverables Deliverable[]
-  accessLogs   SensitiveAccessLog[]
-  sessions     CollabSession[]
+  rates          CreatorRate[]
+  contacts       CreatorContact[]
+  channels       CreatorChannel[]
+  socials        SocialLink[]
+  deliverables   Deliverable[]
+  accessLogs     SensitiveAccessLog[]
+  sessions       CollabSession[]
+  apiConnections CreatorApiConnection[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -128,6 +144,27 @@ model Creator {
   @@index([status])
   @@index([category])
   @@index([createdAt])
+}
+
+/// Persona con la que se habla de un creador: él mismo, su mánager, su agencia.
+/// Aparte de `Contact`, que cuelga de una empresa.
+model CreatorContact {
+  id        String  @id
+  creatorId String
+  creator   Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  name    String
+  /// Mánager, representante, editor… quién es respecto al creador.
+  role    String  @default("")
+  email   String  @default("")
+  phone   String  @default("")
+  /// El principal es con quien se habla por defecto.
+  primary Boolean @default(false)
+  notes   String  @default("")
+
+  createdAt DateTime @default(now())
+
+  @@index([creatorId])
 }
 
 /// Canal adicional de un creador: secundario, de shorts, de clips…
@@ -173,6 +210,35 @@ model SocialLink {
 
   createdAt DateTime @default(now())
 
+  @@index([creatorId])
+}
+
+/// Credencial del creador para leer SU PROPIA analítica en cada plataforma
+/// (YouTube Analytics API y, más adelante, Instagram y TikTok).
+///
+/// El secreto se guarda cifrado en reposo (AES-256-GCM, lib/crypto.ts) y nunca
+/// se devuelve al cliente: la ficha sólo muestra los últimos 4 caracteres.
+/// Por ahora la única plataforma funcional es `youtube`; el modelo ya admite el
+/// resto para no volver a migrar cuando se activen.
+model CreatorApiConnection {
+  id        String  @id
+  creatorId String
+  creator   Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  platform    SocialPlatform
+  secretEnc   String
+  secretLast4 String         @default("")
+  /// Id externo asociado a la credencial (channelId de YouTube, etc.).
+  externalId  String         @default("")
+  status      String         @default("conectada")
+
+  connectedAt DateTime  @default(now())
+  checkedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([creatorId, platform])
   @@index([creatorId])
 }
 
@@ -232,7 +298,10 @@ model Campaign {
   status    CampaignStatus    @default(borrador)
   objective CampaignObjective @default(awareness)
   currency  String            @default("USD")
-  budget    Decimal           @default(0) @db.Decimal(12, 2)
+  /// Opcional, al estilo CBO: si se define, es un tope de referencia. El precio
+  /// real de la campaña es la suma de lo pactado con cada creador (ABO).
+  budget    Decimal?          @db.Decimal(12, 2)
+  /// Margen por defecto de la agencia, en % sobre el pago al creador.
   agencyFee Decimal?          @db.Decimal(5, 2)
   startDate DateTime
   endDate   DateTime?
@@ -257,7 +326,26 @@ model Deliverable {
   creator    Creator           @relation(fields: [creatorId], references: [id], onDelete: Restrict)
   type       DeliverableType
   status     DeliverableStatus @default(pendiente)
-  agreedFee  Decimal           @default(0) @db.Decimal(12, 2)
+
+  /// Red social en la que se publica. Determina qué tarifa del creador aplica.
+  platform SocialPlatform @default(youtube)
+
+  /// Lo que paga el cliente por esta pieza. Es el número base del que salen
+  /// la comisión de la agencia y el pago al creador.
+  clientPrice Decimal @default(0) @db.Decimal(12, 2)
+
+  /// Comisión de la agencia, en % del cobro al cliente. Null = hereda el de la
+  /// campaña. Se ignora si hay comisión fija.
+  commissionPct   Decimal? @db.Decimal(5, 2)
+  /// Comisión en cantidad fija, cuando no se pacta por porcentaje.
+  commissionFixed Decimal? @db.Decimal(12, 2)
+
+  /// Lo que recibe el creador: cobro al cliente menos comisión. Se guarda ya
+  /// calculado para que los informes no dependan de rehacer la cuenta.
+  agreedFee Decimal @default(0) @db.Decimal(12, 2)
+
+  paymentStatus PaymentStatus @default(pendiente)
+  paidAt        DateTime?
 
   // Datos públicos del video
   videoId         String?
@@ -311,13 +399,13 @@ model SensitiveAccessLog {
 model Role {
   id String @id
 
-  name String
+  name        String
   /// Color de la etiqueta, como en Discord.
-  color String @default("#0046d9")
+  color       String   @default("#0046d9")
   /// Llaves de lib/permissions, o ["*"] para el rol de administración.
   permissions String[]
   /// Los roles del sistema no se pueden borrar ni quedarse sin permisos.
-  system Boolean @default(false)
+  system      Boolean  @default(false)
 
   users User[]
 
@@ -329,9 +417,9 @@ model Role {
 model User {
   id String @id
 
-  name String
+  name         String
   /// Foto de perfil. Por ahora una URL; cuando haya almacenamiento, se sube.
-  avatarUrl String?
+  avatarUrl    String?
   /// Siempre en minúsculas: es la llave de acceso.
   email        String    @unique
   passwordHash String
@@ -339,8 +427,6 @@ model User {
   role         Role      @relation(fields: [roleId], references: [id], onDelete: Restrict)
   active       Boolean   @default(true)
   lastLoginAt  DateTime?
-
-  messages ChatMessage[]
 
   createdAt DateTime @default(now())
 
@@ -359,7 +445,9 @@ model Settings {
   updatedAt DateTime @updatedAt
 }
 
-/* ---------------- Sesiones de entrega (portal externo) ---------------- */
+/**
+ * ---------------- Sesiones de entrega (portal externo) ----------------
+ */
 
 enum SessionStatus {
   abierta
@@ -396,8 +484,10 @@ model CollabSession {
   /// Si está apagado, nadie de fuera ve métricas aunque tenga acceso.
   showMetrics Boolean @default(true)
 
-  accesses SessionAccess[]
-  items    SessionItem[]
+  accesses     SessionAccess[]
+  items        SessionItem[]
+  requirements SessionRequirement[]
+  events       SessionEvent[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -418,6 +508,15 @@ model SessionAccess {
 
   codeEnc  String
   codeHint String
+
+  /// PIN de 4 dígitos que elige quien entra la primera vez. Se guarda hasheado
+  /// (scrypt), nunca en claro: a partir de entonces sustituye al código largo.
+  pinHash  String?
+  pinSetAt DateTime?
+
+  /// Freno a la fuerza bruta sobre este acceso concreto.
+  failedAttempts Int       @default(0)
+  lockedUntil    DateTime?
 
   canUpload Boolean @default(true)
   revoked   Boolean @default(false)
@@ -448,57 +547,9 @@ model SessionItem {
   @@index([sessionId, createdAt])
 }
 
-/* ---------------- Chat interno del equipo ---------------- */
-
-/// Sala de conversación del equipo. Las crea quien gestiona el chat.
-model ChatRoom {
-  id          String  @id
-  name        String
-  description String  @default("")
-  /// Color de la etiqueta, como en los roles.
-  color       String  @default("#0046d9")
-  archived    Boolean @default(false)
-
-  /// Icono de Lucide que elige quien crea la sala.
-  icon String @default("hash")
-
-  /// Quién la creó. Se queda en null si esa cuenta se elimina.
-  createdById String?
-
-  /// Vacío = entra todo el equipo. Con roles = solo esos roles y administración.
-  roleIds String[]
-
-  /// Sala privada: solo estas personas entran, ni siquiera administración.
-  memberIds String[]
-
-  messages ChatMessage[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([archived, createdAt])
-}
-
-model ChatMessage {
-  id     String   @id
-  roomId String
-  room   ChatRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
-
-  /// Se queda en null si la cuenta se elimina: el hilo no debe perder mensajes.
-  authorId String?
-  author   User?   @relation(fields: [authorId], references: [id], onDelete: SetNull)
-  /// Nombre en el momento de enviar, para que el hilo siga legible después.
-  authorName String
-
-  body     String
-  editedAt DateTime?
-
-  createdAt DateTime @default(now())
-
-  @@index([roomId, createdAt])
-}
-
-/* ---------------- Avisos del desarrollador ---------------- */
+/**
+ * ---------------- Avisos del desarrollador ----------------
+ */
 
 enum AnnouncementTone {
   info
@@ -515,12 +566,244 @@ model Announcement {
   active  Boolean          @default(true)
 
   /// Vacío = lo ve todo el mundo. Con roles = solo esos roles.
-  roleIds String[]
+  roleIds     String[]
   /// Si se puede cerrar, cada quien lo oculta en su navegador.
-  dismissible Boolean @default(true)
+  dismissible Boolean  @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([active, createdAt])
+}
+
+/**
+ * ---------------- Tarifas por red social ----------------
+ */
+
+/// Lo que cobra un creador por un tipo de pieza en una plataforma concreta.
+/// Reemplaza a las tarifas globales del creador: un short de TikTok no vale lo
+/// mismo que uno de YouTube.
+model CreatorRate {
+  id        String  @id
+  creatorId String
+  creator   Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  platform SocialPlatform
+  type     DeliverableType
+  amount   Decimal         @default(0) @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([creatorId, platform, type])
+  @@index([creatorId])
+}
+
+/**
+ * ---------------- Peticiones a la sesión ----------------
+ */
+
+enum RequirementStatus {
+  pendiente
+  enviado
+  cambios
+  aprobado
+}
+
+/// Lo que la agencia le pide al creador dentro de una sesión: guion, borrador,
+/// entregable final… Cada uno se marca como un check que el creador completa.
+model SessionRequirement {
+  id        String        @id
+  sessionId String
+  session   CollabSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  kind         SessionItemKind @default(entregable)
+  title        String
+  instructions String          @default("")
+  /// Pasos concretos, p. ej. «añadir el enlace en la descripción».
+  steps        String[]
+  position     Int             @default(0)
+  required     Boolean         @default(true)
+
+  status      RequirementStatus @default(pendiente)
+  /// Lo que entrega el creador: un enlace por ahora.
+  url         String?
+  notes       String            @default("")
+  submittedAt DateTime?
+
+  reviewedAt  DateTime?
+  reviewNotes String    @default("")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([sessionId, position])
+}
+
+enum SessionEventKind {
+  entrega
+  aprobacion
+  cambios
+  pago
+  nota
+}
+
+/// Novedades de una sesión, para que cada lado vea qué pasó sin recargar a ciegas.
+model SessionEvent {
+  id        String        @id @default(cuid())
+  sessionId String
+  session   CollabSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  kind       SessionEventKind
+  message    String
+  /// Quién lo provocó: el nombre del acceso o del usuario de la agencia.
+  actorLabel String
+
+  /// Pendiente de leer por cada lado, para el punto de aviso.
+  unreadAgency  Boolean @default(true)
+  unreadCreator Boolean @default(true)
+
+  createdAt DateTime @default(now())
+
+  @@index([sessionId, createdAt])
+}
+
+/// Intentos fallidos en la puerta del portal. Sirve para frenar la fuerza bruta
+/// sin guardar la dirección IP en claro.
+model PortalAttempt {
+  id        String @id @default(cuid())
+  sessionId String
+  ipHash    String
+
+  createdAt DateTime @default(now())
+
+  @@index([sessionId, ipHash, createdAt])
+  @@index([createdAt])
+}
+
+/**
+ * ---------------- Notas y documentos ----------------
+ */
+
+/// Carpeta de proyecto. Se anidan entre sí para agrupar como convenga:
+/// por cliente, por campaña o por temporada.
+model Folder {
+  id    String @id
+  name  String
+  /// Icono de Lucide y color de la etiqueta, como en los roles.
+  icon  String @default("folder")
+  color String @default("#4f7cff")
+
+  parentId String?
+  parent   Folder?  @relation("FolderTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children Folder[] @relation("FolderTree")
+
+  /// Orden manual dentro de su carpeta madre.
+  position Int @default(0)
+
+  docs Doc[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([parentId, position])
+}
+
+/// Una nota. El contenido vive dos veces a propósito:
+///
+///  - `content` es el documento de Tiptap, sin pérdida, y es lo que edita.
+///  - `plainText` es el mismo texto aplanado al guardar, y es lo único
+///    que Postgres sabe buscar: un árbol de ProseMirror no se puede indexar.
+model Doc {
+  id    String @id
+  title String @default("Sin título")
+
+  content   Json?
+  plainText String @default("")
+
+  /// Resumen corto para la lista, derivado del texto al guardar.
+  excerpt String @default("")
+
+  icon String @default("file-text")
+
+  folderId String?
+  folder   Folder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+
+  /// Quién la creó. Null si esa cuenta se elimina: la nota no se pierde.
+  createdById String?
+  updatedById String?
+
+  archived Boolean @default(false)
+  /// Fijada arriba en la lista de su carpeta.
+  pinned   Boolean @default(false)
+
+  links DocLink[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([folderId, updatedAt])
+  @@index([archived, updatedAt])
+}
+
+/// Enlace de una nota con algo de la agencia.
+///
+/// Va en tabla aparte para que una misma nota pueda colgar de una campaña y
+/// de dos creadores a la vez, y para poder listarla desde cualquiera de esas
+/// fichas sin duplicar el contenido.
+model DocLink {
+  id    String @id
+  docId String
+  doc   Doc    @relation(fields: [docId], references: [id], onDelete: Cascade)
+
+  campaignId String?
+  creatorId  String?
+  companyId  String?
+
+  createdAt DateTime @default(now())
+
+  @@index([docId])
+  @@index([campaignId])
+  @@index([creatorId])
+  @@index([companyId])
+}
+
+/**
+ * ---------------- Métricas personalizadas ----------------
+ */
+
+enum MetricScope {
+  campana
+  entregable
+}
+
+/// Cómo se presenta el resultado de una fórmula.
+enum MetricFormat {
+  numero
+  porcentaje
+  moneda
+}
+
+/// Métrica que define el equipo con una fórmula sobre los datos de la campaña.
+/// La expresión se evalúa con `lib/formulas.ts`, nunca como JavaScript.
+model MetricFormula {
+  id         String       @id
+  name       String
+  /// Expresión aritmética: «interacciones / vistas * 100».
+  expression String
+  scope      MetricScope  @default(campana)
+  format     MetricFormat @default(numero)
+  /// Decimales a mostrar.
+  decimals   Int          @default(2)
+  /// Texto corto bajo la cifra, para recordar qué mide.
+  hint       String       @default("")
+
+  /// Fijada en la banda superior de la campaña.
+  featured Boolean @default(false)
+  position Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([scope, position])
 }

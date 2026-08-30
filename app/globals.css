@@ -251,3 +251,251 @@ button:disabled,
 [aria-disabled="true"] {
   cursor: not-allowed;
 }
+
+/* ---------------- Prosa de las notas ---------------- */
+
+/**
+ * Cuerpo del editor y de la lectura. Tiptap no trae estilos: la tipografía se
+ * define aquí con los mismos tokens que el resto de la aplicación, para que
+ * una nota no parezca de otra herramienta.
+ */
+/**
+ * La prosa usa dos tonos propios, no el `--text` del resto de la aplicación.
+ *
+ * En un panel, el texto es corto y conviene que sea el más brillante. En un
+ * documento largo se lee mejor un cuerpo ligeramente atenuado, y así la
+ * negrita puede destacar por color además de por peso: con un solo tono, la
+ * diferencia dependía solo del grosor y se perdía a tamaño de lectura.
+ */
+:root,
+[data-theme="light"] {
+  --prosa-cuerpo: #33333d;
+  --prosa-fuerte: #0d0d12;
+}
+
+[data-theme="dark"] {
+  --prosa-cuerpo: #c6c6d2;
+  --prosa-fuerte: #ffffff;
+}
+
+.nota-prosa {
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--prosa-cuerpo);
+}
+
+.nota-prosa > * + * {
+  margin-top: 0.75em;
+}
+
+.nota-prosa h1,
+.nota-prosa h2,
+.nota-prosa h3 {
+  color: var(--prosa-fuerte);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+.nota-prosa h1 {
+  margin-top: 1.4em;
+  font-size: 24px;
+}
+.nota-prosa h2 {
+  margin-top: 1.3em;
+  font-size: 19px;
+}
+.nota-prosa h3 {
+  margin-top: 1.2em;
+  font-size: 16px;
+}
+
+.nota-prosa a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.nota-prosa strong {
+  color: var(--prosa-fuerte);
+  font-weight: 700;
+}
+
+.nota-prosa ul,
+.nota-prosa ol {
+  padding-left: 1.35em;
+}
+.nota-prosa ul {
+  list-style: disc;
+}
+.nota-prosa ol {
+  list-style: decimal;
+}
+.nota-prosa li::marker {
+  color: var(--text-subtle);
+}
+.nota-prosa li p {
+  margin: 0;
+}
+
+.nota-prosa blockquote {
+  padding-left: 1em;
+  border-left: 2px solid var(--line-strong);
+  color: var(--text-muted);
+}
+
+.nota-prosa code {
+  padding: 0.15em 0.35em;
+  border-radius: var(--r-chip);
+  background: var(--surface-2);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.88em;
+}
+
+.nota-prosa pre {
+  padding: 12px 14px;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
+  background: var(--surface-2);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.nota-prosa pre code {
+  padding: 0;
+  background: none;
+  font-size: inherit;
+}
+
+.nota-prosa hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+
+/* Casillas: la lista pierde su viñeta porque la marca es la casilla. */
+.nota-prosa ul[data-type="taskList"] {
+  padding-left: 0;
+  list-style: none;
+}
+
+.nota-prosa ul[data-type="taskList"] li {
+  display: flex;
+  gap: 0.6em;
+  align-items: flex-start;
+}
+
+.nota-prosa ul[data-type="taskList"] input[type="checkbox"] {
+  margin-top: 0.42em;
+  accent-color: var(--accent);
+}
+
+/* Marcador de posición: solo en el primer párrafo, y solo si está vacío. */
+.nota-prosa p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: var(--text-subtle);
+  pointer-events: none;
+}
+
+/* Imágenes dentro de una nota. */
+.nota-prosa img {
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
+}
+
+/* Seleccionada con clic: se marca sin desplazar el texto. */
+.nota-prosa img.ProseMirror-selectednode {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* ---------------- Animación de arranque ---------------- */
+
+.splash {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-content: center;
+  gap: 22px;
+  justify-items: center;
+  background: var(--canvas);
+  animation: splash-entrada 0.4s ease-out;
+  /* Es decorativo y no tiene nada pulsable: aunque se quedara colgado por un
+     fallo, no debe interceptar un solo clic de la aplicación. */
+  pointer-events: none;
+}
+
+.splash.is-saliendo {
+  animation: splash-salida 0.4s ease-in forwards;
+  pointer-events: none;
+}
+
+/* La marca entra creciendo apenas: un salto grande se siente barato. */
+.splash__marca {
+  animation: splash-marca 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Una línea que se llena: da sensación de carga sin fingir un porcentaje. */
+.splash__linea {
+  position: relative;
+  width: 132px;
+  height: 2px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--line);
+}
+
+.splash__linea::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--accent);
+  transform-origin: left;
+  animation: splash-barra 1.1s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes splash-entrada {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes splash-salida {
+  to {
+    opacity: 0;
+    /* Se aleja un pelo al irse: parece que da paso, no que desaparece. */
+    scale: 1.04;
+  }
+}
+
+@keyframes splash-marca {
+  from {
+    opacity: 0;
+    scale: 0.94;
+    translate: 0 6px;
+  }
+}
+
+@keyframes splash-barra {
+  from {
+    scale: 0 1;
+  }
+  to {
+    scale: 1 1;
+  }
+}
+
+/* Quien pidió menos movimiento no llega a ver esto, pero por si acaso. */
+@media (prefers-reduced-motion: reduce) {
+  .splash,
+  .splash__marca,
+  .splash__linea::after {
+    animation: none;
+  }
+}

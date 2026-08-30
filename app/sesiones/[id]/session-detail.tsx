@@ -10,9 +10,11 @@ import {
   ExternalLink,
   FileText,
   Link2,
+  ListChecks,
   LoaderCircle,
   Plus,
   RefreshCw,
+  RotateCcw,
   Trash2,
   TriangleAlert,
   Upload,
@@ -30,12 +32,29 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
-import { Input, Label, Select } from "@/components/ui/field";
+import { FieldHint, Input, Label, Select, Textarea } from "@/components/ui/field";
+import { Picker } from "@/components/ui/picker";
 import { MATERIAL_VACIO, MaterialFields, type MaterialDraft } from "@/components/sessions/material-fields";
 import { useCan } from "@/components/session-provider";
 import { PORTAL_ROLE, SESSION_ITEM_KIND, SESSION_STATUS } from "@/lib/labels";
 import type { CollabSession, PortalRole, SessionItemKind } from "@/lib/types";
 import { formatCompact, formatDate } from "@/lib/utils";
+
+/** Estado de una petición, con el tono del badge que le corresponde. */
+const ESTADO_PETICION = {
+  pendiente: { label: "Pendiente", tone: "neutral" as const },
+  enviado: { label: "En revisión", tone: "accent" as const },
+  cambios: { label: "Cambios pedidos", tone: "warn" as const },
+  aprobado: { label: "Aprobado", tone: "ok" as const },
+};
+
+const PETICION_VACIA = {
+  kind: "entregable" as SessionItemKind,
+  title: "",
+  instructions: "",
+  /** Un paso por línea; se parten al guardar. */
+  steps: "",
+};
 
 type CreatorResumen = {
   id: string;
@@ -59,12 +78,16 @@ export function SessionDetail({
   session,
   portalUrl,
   campaignName,
+  campanas,
+  creadores,
   creator,
 }: {
   session: CollabSession;
   /** Se arma en el servidor para que servidor y cliente pinten lo mismo. */
   portalUrl: string;
   campaignName: string | null;
+  campanas: { id: string; name: string }[];
+  creadores: { id: string; name: string }[];
   creator: CreatorResumen | null;
 }) {
   const router = useRouter();
@@ -84,6 +107,9 @@ export function SessionDetail({
     label: "",
     canUpload: false,
   });
+
+  const [peticionOpen, setPeticionOpen] = useState(false);
+  const [peticion, setPeticion] = useState({ ...PETICION_VACIA });
 
   const abierta = session.status === "abierta";
   const enlace = portalUrl;
@@ -121,6 +147,15 @@ export function SessionDetail({
     body: JSON.stringify(body),
   });
 
+  /** Aprueba o pide cambios sobre lo que el creador entregó. */
+  async function revisar(requirementId: string, accion: "aprobar" | "cambios", reviewNotes = "") {
+    await llamar(
+      `/api/sesiones/${session.id}/peticiones`,
+      json({ requirementId, accion, reviewNotes }, "PATCH"),
+      "No se pudo revisar.",
+    );
+  }
+
   async function guardarItem() {
     if (!item.title.trim()) {
       setError("Falta el título.");
@@ -134,6 +169,31 @@ export function SessionDetail({
     if (ok) {
       setItem({ ...MATERIAL_VACIO });
       setItemOpen(false);
+    }
+  }
+
+  async function guardarPeticion() {
+    if (!peticion.title.trim()) {
+      setError("Ponle un título a la petición.");
+      return;
+    }
+    const ok = await llamar(
+      `/api/sesiones/${session.id}/peticiones`,
+      json({
+        kind: peticion.kind,
+        title: peticion.title.trim(),
+        instructions: peticion.instructions.trim(),
+        // Una línea por paso; las vacías se descartan.
+        steps: peticion.steps
+          .split("\n")
+          .map((s) => s.trim())
+          .filter(Boolean),
+      }),
+      "No se pudo crear la petición.",
+    );
+    if (ok) {
+      setPeticion({ ...PETICION_VACIA });
+      setPeticionOpen(false);
     }
   }
 
@@ -221,6 +281,125 @@ export function SessionDetail({
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
         <section>
+          {/* Lo que la agencia le pide al creador. Es lo primero que él ve al
+              entrar al portal, así que encabeza también aquí. */}
+          <SectionHead
+            title="Peticiones"
+            hint={
+              session.requirements.length
+                ? `${session.requirements.filter((r) => r.status === "aprobado").length} de ${session.requirements.length} aprobadas`
+                : "Guion, borrador, entregable final… lo que deba completar."
+            }
+            action={
+              puedeEditar && session.requirements.length > 0 ? (
+                <Button variant="secondary" size="sm" onClick={() => setPeticionOpen(true)}>
+                  <Plus size={15} />
+                  Añadir
+                </Button>
+              ) : undefined
+            }
+          />
+
+          {session.requirements.length === 0 ? (
+            <EmptyState
+              icon={ListChecks}
+              title="Sin peticiones"
+              description="Define qué tiene que entregar el creador. Le aparecerá como una lista de casillas en su portal."
+              action={
+                puedeEditar && (
+                  <Button variant="accent" onClick={() => setPeticionOpen(true)}>
+                    <Plus size={16} />
+                    Crear petición
+                  </Button>
+                )
+              }
+            />
+          ) : (
+            <ListBox>
+              {session.requirements.map((req) => {
+                const kind = SESSION_ITEM_KIND[req.kind];
+                const estado = ESTADO_PETICION[req.status];
+                return (
+                  <ListRow
+                    key={req.id}
+                    chevron={false}
+                    leading={
+                      <RowIcon>
+                        <ListChecks size={17} strokeWidth={1.75} />
+                      </RowIcon>
+                    }
+                    title={req.title}
+                    subtitle={
+                      [
+                        kind.label,
+                        req.steps.length ? `${req.steps.length} pasos` : null,
+                        req.submittedAt ? `entregado ${formatDate(req.submittedAt)}` : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ") || undefined
+                    }
+                    trailing={
+                      <span className="flex items-center gap-2">
+                        {req.url && (
+                          <a
+                            href={req.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[var(--text-subtle)] hover:text-[var(--accent)]"
+                            aria-label="Abrir lo entregado"
+                          >
+                            <ExternalLink size={14} />
+                          </a>
+                        )}
+                        <Badge tone={estado.tone}>{estado.label}</Badge>
+
+                        {puedeEditar && req.status === "enviado" && (
+                          <>
+                            <button
+                              onClick={() => revisar(req.id, "aprobar")}
+                              aria-label={`Aprobar ${req.title}`}
+                              title="Aprobar"
+                              className="grid h-8 w-8 place-items-center rounded-[var(--r-control)] text-[var(--text-subtle)] transition hover:bg-[var(--ok-soft)] hover:text-[var(--ok)]"
+                            >
+                              <Check size={15} />
+                            </button>
+                            <button
+                              onClick={() => {
+                                const nota = window.prompt("¿Qué hay que cambiar?");
+                                if (nota) revisar(req.id, "cambios", nota);
+                              }}
+                              aria-label={`Pedir cambios en ${req.title}`}
+                              title="Pedir cambios"
+                              className="grid h-8 w-8 place-items-center rounded-[var(--r-control)] text-[var(--text-subtle)] transition hover:bg-[var(--warn-soft,var(--danger-soft))] hover:text-[var(--warn)]"
+                            >
+                              <RotateCcw size={14} />
+                            </button>
+                          </>
+                        )}
+
+                        {puedeEditar && (
+                          <button
+                            onClick={() =>
+                              llamar(
+                                `/api/sesiones/${session.id}/peticiones?requirementId=${req.id}`,
+                                { method: "DELETE" },
+                                "No se pudo borrar.",
+                              )
+                            }
+                            aria-label={`Borrar ${req.title}`}
+                            className="grid h-8 w-8 place-items-center rounded-[var(--r-control)] text-[var(--text-subtle)] transition hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </span>
+                    }
+                  />
+                );
+              })}
+            </ListBox>
+          )}
+
           <SectionHead
             title="Material"
             hint={
@@ -426,6 +605,57 @@ export function SessionDetail({
             </DefList>
           </Card>
 
+          {/* Recolocar la sesión. Una campaña borrada deja su sesión suelta
+              con todo el material dentro: esto la devuelve a su sitio en vez
+              de obligar a tirarla. */}
+          {puedeEditar && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Asignación</CardTitle>
+              </CardHeader>
+              <div className="space-y-3 px-4 pb-4">
+                <div>
+                  <Label htmlFor="asig-campana">Campaña</Label>
+                  <Picker
+                    id="asig-campana"
+                    value={session.campaignId ?? ""}
+                    onChange={(v) =>
+                      llamar(
+                        `/api/sesiones/${session.id}`,
+                        json({ campaignId: v || null }, "PATCH"),
+                        "No se pudo cambiar la campaña.",
+                      )
+                    }
+                    placeholder="Sin campaña"
+                    options={[
+                      { id: "", label: "Sin campaña" },
+                      ...campanas.map((c) => ({ id: c.id, label: c.name })),
+                    ]}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="asig-creador">Creador</Label>
+                  <Picker
+                    id="asig-creador"
+                    value={session.creatorId ?? ""}
+                    onChange={(v) =>
+                      llamar(
+                        `/api/sesiones/${session.id}`,
+                        json({ creatorId: v || null }, "PATCH"),
+                        "No se pudo cambiar el creador.",
+                      )
+                    }
+                    placeholder="Sin creador"
+                    options={[
+                      { id: "", label: "Sin creador" },
+                      ...creadores.map((c) => ({ id: c.id, label: c.name })),
+                    ]}
+                  />
+                </div>
+              </div>
+            </Card>
+          )}
+
           {creator && (
             <Card>
               <CardHeader>
@@ -519,6 +749,77 @@ export function SessionDetail({
             />
             Puede subir material
           </label>
+        </div>
+      </Modal>
+
+      <Modal
+        open={peticionOpen}
+        onClose={() => setPeticionOpen(false)}
+        icon={ListChecks}
+        title="Nueva petición"
+        description="Le aparecerá al creador como una casilla que debe completar."
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setPeticionOpen(false)}>
+              Cancelar
+            </Button>
+            <Button variant="primary" onClick={guardarPeticion} disabled={ocupado}>
+              {ocupado && <LoaderCircle size={14} className="animate-spin" />}
+              Crear petición
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <div>
+            <Label htmlFor="pt-kind">Tipo</Label>
+            <Select
+              id="pt-kind"
+              value={peticion.kind}
+              onChange={(e) =>
+                setPeticion({ ...peticion, kind: e.target.value as SessionItemKind })
+              }
+            >
+              <option value="guion">Guion</option>
+              <option value="borrador">Borrador</option>
+              <option value="entregable">Entregable final</option>
+              <option value="referencia">Referencia</option>
+              <option value="nota">Nota</option>
+            </Select>
+          </div>
+
+          <div>
+            <Label htmlFor="pt-title">Título</Label>
+            <Input
+              id="pt-title"
+              value={peticion.title}
+              onChange={(e) => setPeticion({ ...peticion, title: e.target.value })}
+              placeholder="Guion del video dedicado"
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="pt-inst">Instrucciones</Label>
+            <Textarea
+              id="pt-inst"
+              rows={2}
+              value={peticion.instructions}
+              onChange={(e) => setPeticion({ ...peticion, instructions: e.target.value })}
+              placeholder="Qué esperas recibir y con qué criterio se aprueba."
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="pt-steps">Pasos</Label>
+            <Textarea
+              id="pt-steps"
+              rows={3}
+              value={peticion.steps}
+              onChange={(e) => setPeticion({ ...peticion, steps: e.target.value })}
+              placeholder={"Añadir el enlace en la descripción\nMencionar la marca en los primeros 30s"}
+            />
+            <FieldHint>Uno por línea. Se le muestran como lista.</FieldHint>
+          </div>
         </div>
       </Modal>
     </div>

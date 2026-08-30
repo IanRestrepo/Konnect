@@ -30,17 +30,32 @@ const VACIO: Borrador = {
   notes: "",
 };
 
-/** Todas las personas de contacto de una empresa. Una es la principal. */
+/**
+ * Personas de contacto de una ficha. Una es la principal.
+ *
+ * Sirve igual para una empresa y para un creador: cambia a quién se apunta y
+ * qué permiso hace falta, no la mecánica de editar la lista.
+ */
 export function ContactsPanel({
-  companyId,
+  endpoint,
+  permiso,
   contacts,
+  titulo = "Contactos",
+  vacio = "Sin contactos todavía.",
+  exigeUno = true,
 }: {
-  companyId: string;
+  /** Ruta que recibe el PUT con la lista completa. */
+  endpoint: string;
+  permiso: "editar_empresas" | "editar_creadores";
   contacts: Contact[];
+  titulo?: string;
+  vacio?: string;
+  /** Una empresa necesita al menos uno; un creador puede quedarse sin ninguno. */
+  exigeUno?: boolean;
 }) {
   const router = useRouter();
   const can = useCan();
-  const puedeEditar = can("editar_empresas");
+  const puedeEditar = can(permiso);
 
   const [editando, setEditando] = useState(false);
   const [borrador, setBorrador] = useState<Borrador[]>([]);
@@ -67,7 +82,7 @@ export function ContactsPanel({
 
   async function guardar() {
     const limpio = borrador.filter((c) => c.name.trim());
-    if (limpio.length === 0) {
+    if (exigeUno && limpio.length === 0) {
       setError("Deja al menos un contacto con nombre.");
       return;
     }
@@ -75,7 +90,7 @@ export function ContactsPanel({
     setGuardando(true);
     setError(null);
     try {
-      const res = await fetch(`/api/empresas/${companyId}/contactos`, {
+      const res = await fetch(endpoint, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ contacts: limpio }),
@@ -94,7 +109,7 @@ export function ContactsPanel({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Contactos</CardTitle>
+        <CardTitle>{titulo}</CardTitle>
         {puedeEditar &&
           (editando ? (
             <div className="flex items-center gap-1.5">
@@ -217,7 +232,7 @@ export function ContactsPanel({
         </div>
       ) : contacts.length === 0 ? (
         <p className="border-t border-[var(--line)] px-4 py-3 text-[12.5px] text-[var(--text-muted)]">
-          Sin contactos registrados.
+          {vacio}
         </p>
       ) : (
         <div className="divide-y divide-[var(--line)] border-t border-[var(--line)]">

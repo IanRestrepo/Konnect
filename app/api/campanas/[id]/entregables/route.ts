@@ -7,9 +7,16 @@ export const dynamic = "force-dynamic";
 
 const schema = z.object({
   creatorId: z.string({ error: "Selecciona un creador." }).min(1, "Selecciona un creador."),
-  type: z.enum(["video", "short", "integracion"]),
+  type: z.enum(["video", "short", "integracion", "directo", "post"]),
   status: z.enum(["pendiente", "en_revision", "publicado", "cancelado"]).default("publicado"),
   agreedFee: z.number().default(0),
+  platform: z
+    .enum(["youtube", "instagram", "tiktok", "x", "twitch", "kick", "discord", "roblox", "web"])
+    .default("youtube"),
+  clientPrice: z.number().min(0).default(0),
+  commissionPct: z.number().min(0).max(100).nullable().default(null),
+  commissionFixed: z.number().min(0).nullable().default(null),
+  paymentStatus: z.enum(["pendiente", "aprobado", "pagado"]).default("pendiente"),
   videoId: z.string().nullable().default(null),
   videoUrl: z.string().nullable().default(null),
   title: z.string().nullable().default(null),
@@ -36,6 +43,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const deliverable = await addDeliverable(id, {
     ...parsed.data,
     metricsUpdatedAt: parsed.data.views !== null ? new Date().toISOString() : null,
+    paidAt: null,
   });
 
   if (!deliverable) {

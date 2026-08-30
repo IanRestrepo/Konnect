@@ -15,7 +15,7 @@ export default async function EmpresasPage() {
         company.id,
         {
           campaigns: own.length,
-          invested: own.reduce((s, c) => s + c.budget, 0),
+          invested: own.reduce((s, c) => s + campaignMetrics(c).clientTotal, 0),
           views: own.reduce((s, c) => s + campaignMetrics(c).views, 0),
         },
       ];
