@@ -131,6 +131,8 @@ model Creator {
 
   rates          CreatorRate[]
   contacts       CreatorContact[]
+  contactFields  CreatorContactField[]
+  bankAccounts   CreatorBankAccount[]
   channels       CreatorChannel[]
   socials        SocialLink[]
   deliverables   Deliverable[]
@@ -163,6 +165,61 @@ model CreatorContact {
   notes   String  @default("")
 
   createdAt DateTime @default(now())
+
+  @@index([creatorId])
+}
+
+/// Dato de contacto que no cabe en los campos fijos de la ficha: Discord,
+/// Telegram, el correo del mánager… La agencia le pone el nombre que quiera.
+///
+/// Es una tabla y no una columna porque cada creador usa unos distintos y la
+/// lista crece: fijar columnas obligaría a migrar cada vez que aparece una red
+/// nueva por la que se le escribe.
+model CreatorContactField {
+  id        String  @id
+  creatorId String
+  creator   Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  /// Cómo lo llama la agencia: "Discord", "Telegram", "Correo del mánager".
+  label String
+  value String @default("")
+  /// Orden en la ficha, tal y como lo dejó quien editó.
+  position Int @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@index([creatorId])
+}
+
+/// Una forma concreta de pagarle a un creador: su cuenta de banco, su PayPal,
+/// su Binance… Un creador puede tener varias y cobrar por la que convenga.
+///
+/// Los campos que sirven para mover dinero van cifrados igual que los de la
+/// ficha; los `*Last4` permiten la vista censurada sin descifrar nada.
+model CreatorBankAccount {
+  id        String  @id
+  creatorId String
+  creator   Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  method PaymentMethod
+  /// Cómo la llama la agencia: "Bancolombia principal", "PayPal personal".
+  label  String @default("")
+  holder String @default("")
+  /// Solo tiene sentido en transferencia.
+  bankName String @default("")
+
+  /// Lo que hace falta para pagar: número de cuenta, correo o billetera.
+  referenceEnc   String?
+  referenceLast4 String?
+  /// SWIFT, routing o red de la billetera.
+  routingEnc   String?
+  routingLast4 String?
+  notesEnc     String?
+
+  position Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([creatorId])
 }

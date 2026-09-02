@@ -20,6 +20,40 @@ export type BankingInfo = {
   notes?: string;
 };
 
+/**
+ * Una forma concreta de pagarle al creador. Un creador cobra por donde le
+ * conviene —banco en su país, PayPal para el extranjero, Binance si corre
+ * prisa— y cada método pide datos distintos, así que se guardan por separado
+ * en vez de aplastarlos en los campos únicos de `BankingInfo`.
+ *
+ * `reference`, `routing` y `notes` van cifrados: en la vista censurada llegan
+ * como últimos dígitos o vacíos.
+ */
+export type BankingAccount = {
+  id: string;
+  method: PaymentMethod;
+  /** Cómo la llama la agencia: "Bancolombia principal", "PayPal personal". */
+  label: string;
+  holder: string;
+  /** Solo en transferencia. */
+  bankName: string;
+  /** Lo que hace falta para pagar: cuenta, correo o billetera. */
+  reference: string;
+  /** SWIFT, routing o red de la billetera. */
+  routing: string;
+  notes: string;
+};
+
+/**
+ * Dato de contacto que no cabe en los campos fijos: Discord, Telegram, el
+ * correo del mánager… La agencia le pone el nombre que quiera.
+ */
+export type ContactField = {
+  id: string;
+  label: string;
+  value: string;
+};
+
 export type Creator = {
   id: string;
   name: string;
@@ -53,9 +87,13 @@ export type Creator = {
   rates: CreatorRate[];
   /** Con quién se habla: el creador, su mánager, su agencia. */
   contacts: Contact[];
+  /** Contactos sueltos con nombre libre: Discord, Telegram, lo que haga falta. */
+  contactFields: ContactField[];
   paymentMethods: PaymentMethod[];
   /* Confidencial: cifrado en BD, revelado con código */
   banking: BankingInfo;
+  /** Sus cuentas de cobro, una por método. Censuradas hasta revelarlas. */
+  bankAccounts: BankingAccount[];
   notes: string;
   /** Canales adicionales del mismo creador. */
   channels: CreatorChannel[];

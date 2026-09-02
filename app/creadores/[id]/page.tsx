@@ -11,6 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { BankingPanel } from "@/components/creators/banking-panel";
+import { ContactCard } from "@/components/creators/contact-card";
+import { RatesPanel } from "@/components/creators/rates-panel";
 import { ChannelsPanel } from "@/components/creators/channels-panel";
 import { SocialsPanel } from "@/components/creators/socials-panel";
 import { ApiConnectionsPanel } from "@/components/creators/api-connections-panel";
@@ -26,7 +28,7 @@ import {
 } from "@/lib/labels";
 import { PLATFORM_METRICS } from "@/lib/socials";
 import { creatorViewsSeries, trend } from "@/lib/series";
-import { formatCompact, formatDate, formatMoney } from "@/lib/utils";
+import { formatCompact, formatMoney } from "@/lib/utils";
 
 export default async function CreadorPage({ params }: { params: Promise<{ id: string }> }) {
   await requirePermission("ver_creadores");
@@ -137,6 +139,15 @@ export default async function CreadorPage({ params }: { params: Promise<{ id: st
             </DefList>
           </Card>
 
+          {/* Lo que de verdad manda al armar una campaña: el precio por red. */}
+          <RatesPanel
+            creatorId={creator.id}
+            rates={creator.rates}
+            currency={creator.currency}
+            socials={creator.socials.map((s) => s.platform)}
+            mainPlatform={creator.mainPlatform}
+          />
+
           <section>
             <SectionLabel>Entregables</SectionLabel>
             {deliverables.length === 0 ? (
@@ -180,27 +191,13 @@ export default async function CreadorPage({ params }: { params: Promise<{ id: st
         </div>
 
         <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Contacto</CardTitle>
-            </CardHeader>
-            <DefList className="border-t border-[var(--line)]">
-              <DefRow label="Correo">
-                <a href={`mailto:${creator.email}`} className="hover:text-[var(--accent)]">
-                  {creator.email}
-                </a>
-              </DefRow>
-              <DefRow label="Teléfono">
-                <a
-                  href={`tel:${creator.phone.replace(/\s/g, "")}`}
-                  className="tabular hover:text-[var(--accent)]"
-                >
-                  {creator.phone}
-                </a>
-              </DefRow>
-              <DefRow label="En cartera desde">{formatDate(creator.createdAt)}</DefRow>
-            </DefList>
-          </Card>
+          <ContactCard
+            creatorId={creator.id}
+            email={creator.email}
+            phone={creator.phone}
+            createdAt={creator.createdAt}
+            fields={creator.contactFields}
+          />
 
           <ChannelsPanel
             creatorId={creator.id}
@@ -235,11 +232,9 @@ export default async function CreadorPage({ params }: { params: Promise<{ id: st
 
           <BankingPanel
             creatorId={creator.id}
-            hints={{
-              accountNumber: creator.banking.accountNumber,
-              routing: creator.banking.routing,
-              taxId: creator.banking.taxId,
-            }}
+            banking={creator.banking}
+            accounts={creator.bankAccounts}
+            methods={creator.paymentMethods}
           />
 
           <Card>

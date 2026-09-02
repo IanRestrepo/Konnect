@@ -4,14 +4,17 @@ import { decrypt, encrypt } from "@/lib/crypto";
 import { codeHint, generateAccessCode, normalizeAccessCode } from "@/lib/portal";
 import type {
   Announcement,
+  BankingAccount,
   BankingInfo,
   Campaign,
   CollabSession,
   Company,
   Contact,
+  ContactField,
   Creator,
   CreatorApiConnection,
   CreatorChannel,
+  CreatorRate,
   Deliverable,
   Doc,
   DocLink,
@@ -160,6 +163,64 @@ function fullBanking(row: BankingColumns): BankingInfo {
   };
 }
 
+type BankAccountColumns = {
+  id: string;
+  method: BankingAccount["method"];
+  label: string;
+  holder: string;
+  bankName: string;
+  referenceEnc: string | null;
+  referenceLast4: string | null;
+  routingEnc: string | null;
+  routingLast4: string | null;
+  notesEnc: string | null;
+};
+
+/** Cuenta de cobro censurada: lo justo para reconocerla en la lista. */
+function maskedAccount(row: BankAccountColumns): BankingAccount {
+  return {
+    id: row.id,
+    method: row.method,
+    label: row.label,
+    holder: row.holder,
+    bankName: row.bankName,
+    reference: row.referenceLast4 ?? "",
+    routing: row.routingLast4 ?? "",
+    notes: "",
+  };
+}
+
+function fullAccount(row: BankAccountColumns): BankingAccount {
+  return {
+    id: row.id,
+    method: row.method,
+    label: row.label,
+    holder: row.holder,
+    bankName: row.bankName,
+    reference: unseal(row.referenceEnc),
+    routing: unseal(row.routingEnc),
+    notes: unseal(row.notesEnc),
+  };
+}
+
+/** Columnas de una cuenta de cobro, con lo sensible ya cifrado. */
+function accountToColumns(account: BankingAccount, creatorId: string, position: number) {
+  return {
+    id: account.id || newId("ba"),
+    creatorId,
+    method: account.method,
+    label: account.label ?? "",
+    holder: account.holder ?? "",
+    bankName: account.bankName ?? "",
+    referenceEnc: seal(account.reference),
+    referenceLast4: last4(account.reference ?? "") || null,
+    routingEnc: seal(account.routing),
+    routingLast4: last4(account.routing ?? "") || null,
+    notesEnc: seal(account.notes),
+    position,
+  };
+}
+
 /* ---------------- Mapeo de filas a tipos de la app ---------------- */
 
 const creatorInclude = {
@@ -167,6 +228,8 @@ const creatorInclude = {
   socials: { orderBy: { createdAt: "asc" } },
   rates: { orderBy: [{ platform: "asc" }, { type: "asc" }] },
   contacts: { orderBy: [{ primary: "desc" }, { createdAt: "asc" }] },
+  contactFields: { orderBy: [{ position: "asc" }, { createdAt: "asc" }] },
+  bankAccounts: { orderBy: [{ position: "asc" }, { createdAt: "asc" }] },
 } satisfies Prisma.CreatorInclude;
 
 type CreatorRow = Prisma.CreatorGetPayload<{ include: typeof creatorInclude }>;
@@ -223,8 +286,14 @@ function toCreator(row: CreatorRow, apiConnections: CreatorApiConnection[] = [])
       primary: c.primary,
       notes: c.notes,
     })),
+    contactFields: row.contactFields.map((f) => ({
+      id: f.id,
+      label: f.label,
+      value: f.value,
+    })),
     paymentMethods: row.paymentMethods,
     banking: maskedBanking(row),
+    bankAccounts: row.bankAccounts.map(maskedAccount),
     notes: row.notes,
     channels: row.channels.map(toChannel),
     socials: row.socials.map((s) => ({
@@ -526,6 +595,32 @@ export async function createCreator(
           metricsUpdatedAt: toDate(s.metricsUpdatedAt),
         })),
       },
+      contactFields: {
+        create: (input.contactFields ?? []).map((f, i) => ({
+          id: f.id || newId("cf"),
+          label: f.label,
+          value: f.value,
+          position: i,
+        })),
+      },
+      bankAccounts: {
+        create: (input.bankAccounts ?? []).map((a, i) => {
+          // `creatorId` lo pone Prisma al anidar la creación; aquí estorba.
+          const columnas = accountToColumns(a, "", i);
+          delete (columnas as Partial<typeof columnas>).creatorId;
+          return columnas;
+        }),
+      },
+      rates: {
+        create: (input.rates ?? [])
+          .filter((r) => r.amount > 0)
+          .map((r) => ({
+            id: r.id || newId("rt"),
+            platform: r.platform,
+            type: r.type,
+            amount: r.amount,
+          })),
+      },
     },
     include: creatorInclude,
   });
@@ -565,7 +660,12 @@ export async function updateCreator(id: string, patch: Partial<Creator>): Promis
   const row = await prisma.creator.update({ where: { id }, data, include: creatorInclude });
 
   // Las listas anidadas se reemplazan enteras, como hacía la versión en archivo.
-  if (patch.channels !== undefined || patch.socials !== undefined) {
+  if (
+    patch.channels !== undefined ||
+    patch.socials !== undefined ||
+    patch.contactFields !== undefined ||
+    patch.bankAccounts !== undefined
+  ) {
     return (await replaceCreatorLists(id, patch)) ?? toCreator(row);
   }
   return toCreator(row);
@@ -612,6 +712,26 @@ async function replaceCreatorLists(id: string, patch: Partial<Creator>): Promise
         });
       }
     }
+    if (patch.contactFields !== undefined) {
+      await tx.creatorContactField.deleteMany({ where: { creatorId: id } });
+      for (const [i, campo] of patch.contactFields.entries()) {
+        await tx.creatorContactField.create({
+          data: {
+            id: campo.id || newId("cf"),
+            creatorId: id,
+            label: campo.label,
+            value: campo.value,
+            position: i,
+          },
+        });
+      }
+    }
+    if (patch.bankAccounts !== undefined) {
+      await tx.creatorBankAccount.deleteMany({ where: { creatorId: id } });
+      for (const [i, cuenta] of patch.bankAccounts.entries()) {
+        await tx.creatorBankAccount.create({ data: accountToColumns(cuenta, id, i) });
+      }
+    }
   });
 
   const row = await prisma.creator.findUnique({ where: { id }, include: creatorInclude });
@@ -619,7 +739,9 @@ async function replaceCreatorLists(id: string, patch: Partial<Creator>): Promise
 }
 
 /** Datos bancarios completos. Solo para la ruta que exige el código de acceso. */
-export async function revealBanking(creatorId: string): Promise<BankingInfo | null> {
+export async function revealBanking(
+  creatorId: string,
+): Promise<{ banking: BankingInfo; accounts: BankingAccount[] } | null> {
   const row = await prisma.creator.findUnique({
     where: { id: creatorId },
     select: {
@@ -633,9 +755,11 @@ export async function revealBanking(creatorId: string): Promise<BankingInfo | nu
       taxIdLast4: true,
       paypalEmailEnc: true,
       bankNotesEnc: true,
+      bankAccounts: { orderBy: [{ position: "asc" }, { createdAt: "asc" }] },
     },
   });
-  return row ? fullBanking(row) : null;
+  if (!row) return null;
+  return { banking: fullBanking(row), accounts: row.bankAccounts.map(fullAccount) };
 }
 
 /** Añade un canal adicional al creador, sin duplicar por `channelId`. */
@@ -1511,6 +1635,30 @@ export async function setCreatorContacts(
   return row ? toCreator(row) : null;
 }
 
+/** Reemplaza los contactos de nombre libre (Discord, Telegram…) del creador. */
+export async function setCreatorContactFields(
+  creatorId: string,
+  fields: Omit<ContactField, "id">[],
+): Promise<Creator | null> {
+  const existe = await prisma.creator.findUnique({ where: { id: creatorId }, select: { id: true } });
+  if (!existe) return null;
+  return replaceCreatorLists(creatorId, {
+    contactFields: fields.map((f) => ({ id: "", label: f.label, value: f.value })),
+  });
+}
+
+/** Reemplaza las cuentas de cobro del creador. Cifra al escribir. */
+export async function setCreatorBankAccounts(
+  creatorId: string,
+  accounts: Omit<BankingAccount, "id">[],
+): Promise<Creator | null> {
+  const existe = await prisma.creator.findUnique({ where: { id: creatorId }, select: { id: true } });
+  if (!existe) return null;
+  return replaceCreatorLists(creatorId, {
+    bankAccounts: accounts.map((a) => ({ ...a, id: "" })),
+  });
+}
+
 /* ---------------- Estado de pago ---------------- */
 
 /**
@@ -1880,6 +2028,40 @@ export async function setCreatorRate(
       update: { amount },
     });
   }
+
+  const row = await prisma.creator.findUnique({
+    where: { id: creatorId },
+    include: creatorInclude,
+  });
+  return row ? toCreator(row) : null;
+}
+
+/**
+ * Reemplaza el tarifario completo del creador.
+ *
+ * La ficha edita todas las tarifas de una vez, así que se borra y se vuelve a
+ * escribir: si se fuera haciendo `upsert` fila a fila, quitar una tarifa en la
+ * pantalla no la borraría de la base y volvería a aparecer al recargar.
+ *
+ * Las de importe cero no se guardan: equivalen a no tener tarifa y hacen que
+ * `rateFor` caiga en la de respaldo.
+ */
+export async function setCreatorRates(
+  creatorId: string,
+  rates: Omit<CreatorRate, "id">[],
+): Promise<Creator | null> {
+  const existe = await prisma.creator.findUnique({ where: { id: creatorId }, select: { id: true } });
+  if (!existe) return null;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.creatorRate.deleteMany({ where: { creatorId } });
+    for (const r of rates) {
+      if (r.amount <= 0) continue;
+      await tx.creatorRate.create({
+        data: { id: newId("rt"), creatorId, platform: r.platform, type: r.type, amount: r.amount },
+      });
+    }
+  });
 
   const row = await prisma.creator.findUnique({
     where: { id: creatorId },

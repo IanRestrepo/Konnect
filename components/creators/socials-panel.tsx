@@ -6,7 +6,8 @@ import Link from "next/link";
 import { ExternalLink, LoaderCircle, Plus, Trash2, TriangleAlert } from "lucide-react";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input, Select } from "@/components/ui/field";
+import { Input } from "@/components/ui/field";
+import { Picker } from "@/components/ui/picker";
 import { useCan } from "@/components/session-provider";
 import { PLATFORMS, PLATFORM_LABEL } from "@/lib/socials";
 import type { SocialLink, SocialPlatform } from "@/lib/types";
@@ -31,7 +32,13 @@ export function SocialsPanel({
   const [error, setError] = useState<string | null>(null);
 
   function empezar() {
-    setBorrador(socials.map((s) => ({ id: s.id, platform: s.platform, handle: s.handle })));
+    // Sin redes, se abre con una fila lista: pulsar «Añadir» y encontrarse un
+    // panel vacío obligaba a pulsar otra vez para escribir algo.
+    setBorrador(
+      socials.length
+        ? socials.map((s) => ({ id: s.id, platform: s.platform, handle: s.handle }))
+        : [{ platform: "instagram", handle: "" }],
+    );
     setError(null);
     setEditando(true);
   }
@@ -58,7 +65,10 @@ export function SocialsPanel({
   }
 
   return (
-    <Card>
+    // La tarjeta recorta lo que se sale de ella, y la lista del desplegable se
+    // sale por abajo. Mientras se edita se deja asomar; el resto del tiempo
+    // vuelve a recortar, que es lo que mantiene el radio limpio.
+    <Card style={editando ? { overflow: "visible" } : undefined}>
       <CardHeader>
         <CardTitle>Redes sociales</CardTitle>
         {puedeEditar &&
@@ -90,25 +100,17 @@ export function SocialsPanel({
         <div className="space-y-2 border-t border-[var(--line)] p-4">
           {borrador.map((fila, i) => (
             <div key={fila.id ?? `nueva-${i}`} className="flex gap-2">
-              <Select
+              <Picker
                 value={fila.platform}
-                onChange={(e) =>
-                  setBorrador((prev) =>
-                    prev.map((f, j) =>
-                      j === i ? { ...f, platform: e.target.value as SocialPlatform } : f,
-                    ),
-                  )
+                onChange={(platform) =>
+                  setBorrador((prev) => prev.map((f, j) => (j === i ? { ...f, platform } : f)))
                 }
-                className="w-36 shrink-0"
-                aria-label="Plataforma"
-              >
-                {PLATFORMS.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.label}
-                  </option>
-                ))}
-              </Select>
+                options={PLATFORMS.map((p) => ({ id: p.id, label: p.label }))}
+                className="w-32 shrink-0"
+              />
 
+              {/* `min-w-0` es lo que impide que el ancho natural del campo
+                  empuje la fila fuera de la tarjeta en la columna estrecha. */}
               <Input
                 value={fila.handle}
                 onChange={(e) =>
@@ -118,6 +120,7 @@ export function SocialsPanel({
                 }
                 placeholder={PLATFORMS.find((p) => p.id === fila.platform)?.placeholder}
                 aria-label="Usuario"
+                className="min-w-0 flex-1"
               />
 
               <button

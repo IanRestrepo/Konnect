@@ -55,6 +55,83 @@ export const PAYMENT_METHOD: Record<PaymentMethod, string> = {
   efectivo: "Efectivo",
 };
 
+/**
+ * Cómo se llama en cada método el dato con el que se paga.
+ *
+ * Pedir «número de cuenta» para un PayPal, o «SWIFT» para un Binance, hace
+ * que quien rellena la ficha tenga que adivinar dónde va cada cosa. Cada
+ * método nombra sus campos y esconde los que no usa.
+ */
+export const PAYMENT_FIELDS: Record<
+  PaymentMethod,
+  {
+    /** Etiqueta del dato principal. */
+    reference: string;
+    referencePlaceholder: string;
+    /** Nombre del banco: solo tiene sentido en una transferencia. */
+    bank: boolean;
+    /** Segundo dato (SWIFT, red de la billetera). Null si el método no lo usa. */
+    routing: string | null;
+    routingPlaceholder: string;
+  }
+> = {
+  transferencia: {
+    reference: "Cuenta / CLABE / IBAN",
+    referencePlaceholder: "0000 0000 0000 0000",
+    bank: true,
+    routing: "SWIFT / Routing",
+    routingPlaceholder: "BCOLCOBM",
+  },
+  paypal: {
+    reference: "Correo de PayPal",
+    referencePlaceholder: "creador@correo.com",
+    bank: false,
+    routing: null,
+    routingPlaceholder: "",
+  },
+  wise: {
+    reference: "Correo o etiqueta de Wise",
+    referencePlaceholder: "creador@correo.com",
+    bank: false,
+    routing: null,
+    routingPlaceholder: "",
+  },
+  binance: {
+    reference: "Pay ID, correo o billetera",
+    referencePlaceholder: "123456789",
+    bank: false,
+    routing: "Red",
+    routingPlaceholder: "TRC20, BEP20…",
+  },
+  deel: {
+    reference: "Correo de la cuenta Deel",
+    referencePlaceholder: "creador@correo.com",
+    bank: false,
+    routing: null,
+    routingPlaceholder: "",
+  },
+  efectivo: {
+    reference: "Referencia de entrega",
+    referencePlaceholder: "Quién entrega y dónde",
+    bank: false,
+    routing: null,
+    routingPlaceholder: "",
+  },
+};
+
+/**
+ * Contactos que se piden a menudo y no tienen campo propio. Son sugerencias
+ * para el editor: la etiqueta se puede escribir a mano igual.
+ */
+export const CONTACT_FIELD_SUGGESTIONS = [
+  "Discord",
+  "Telegram",
+  "WhatsApp",
+  "X / Twitter",
+  "Correo del mánager",
+  "Skype",
+] as const;
+
 export const COMPANY_STATUS: Record<string, { label: string; tone: Tone }> = {
   activo: { label: "Activo", tone: "ok" },
   prospecto: { label: "Prospecto", tone: "info" },

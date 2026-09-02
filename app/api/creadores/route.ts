@@ -3,16 +3,29 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createCreator, newId } from "@/lib/store";
 import { PLATFORM_URL } from "@/lib/socials";
+import { IMPORTE_MAXIMO } from "@/lib/pricing";
 
 export const dynamic = "force-dynamic";
+
+const plataforma = z.enum([
+  "youtube",
+  "instagram",
+  "tiktok",
+  "x",
+  "twitch",
+  "kick",
+  "discord",
+  "roblox",
+  "web",
+]);
+
+const metodo = z.enum(["transferencia", "paypal", "wise", "binance", "deel", "efectivo"]);
 
 const schema = z.object({
   name: z.string({ error: "Falta el nombre." }).min(1, "Falta el nombre."),
   handle: z.string().default(""),
   /** Dónde vive el creador. Solo YouTube trae datos de la API. */
-  mainPlatform: z
-    .enum(["youtube", "instagram", "tiktok", "x", "twitch", "kick", "discord", "roblox", "web"])
-    .default("youtube"),
+  mainPlatform: plataforma.default("youtube"),
   channelId: z.string().default(""),
   channelUrl: z.string().default(""),
   avatarUrl: z.string().nullable().default(null),
@@ -28,9 +41,17 @@ const schema = z.object({
   rateVideo: z.number().default(0),
   rateShort: z.number().default(0),
   rateIntegration: z.number().default(0),
-  paymentMethods: z
-    .array(z.enum(["transferencia", "paypal", "wise", "binance", "deel", "efectivo"]))
+  /** Precio base por red y tipo de pieza. Lo que manda al armar una campaña. */
+  rates: z
+    .array(
+      z.object({
+        platform: plataforma,
+        type: z.enum(["video", "short", "integracion", "directo", "post"]),
+        amount: z.number().min(0).max(IMPORTE_MAXIMO, "Ese importe no cabe.").default(0),
+      }),
+    )
     .default([]),
+  paymentMethods: z.array(metodo).default([]),
   banking: z
     .object({
       holder: z.string().default(""),
@@ -48,22 +69,35 @@ const schema = z.object({
       routing: "",
       taxId: "",
     }),
+  /** Una cuenta de cobro por método: banco, PayPal, Binance… */
+  bankAccounts: z
+    .array(
+      z.object({
+        method: metodo,
+        label: z.string().default(""),
+        holder: z.string().default(""),
+        bankName: z.string().default(""),
+        reference: z.string().default(""),
+        routing: z.string().default(""),
+        notes: z.string().default(""),
+      }),
+    )
+    .default([]),
+  /** Contactos de nombre libre: Discord, Telegram, el correo del mánager… */
+  contactFields: z
+    .array(
+      z.object({
+        label: z.string().min(1, "Cada contacto necesita un nombre de campo."),
+        value: z.string().default(""),
+      }),
+    )
+    .default([]),
   notes: z.string().default(""),
   /** Perfiles del creador, cada uno con sus propias métricas. */
   socials: z
     .array(
       z.object({
-        platform: z.enum([
-          "youtube",
-          "instagram",
-          "tiktok",
-          "x",
-          "twitch",
-          "kick",
-          "discord",
-          "roblox",
-          "web",
-        ]),
+        platform: plataforma,
         handle: z.string().min(1),
         url: z.string().default(""),
         followers: z.number().min(0).default(0),
@@ -83,13 +117,16 @@ export async function POST(request: Request) {
     );
   }
 
-  const { socials, ...datos } = parsed.data;
+  const { socials, rates, bankAccounts, contactFields, ...datos } = parsed.data;
 
   const creator = await createCreator({
     ...datos,
     channels: [],
-    rates: [],
+    // Los ids los pone la base; aquí sólo hace falta que el tipo cuadre.
+    rates: rates.map((r) => ({ ...r, id: "" })),
     contacts: [],
+    contactFields: contactFields.map((f) => ({ ...f, id: "", label: f.label.trim() })),
+    bankAccounts: bankAccounts.map((a) => ({ ...a, id: "" })),
     socials: socials.map((s) => ({
       id: newId("so"),
       platform: s.platform,

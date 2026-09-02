@@ -48,15 +48,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   // Se descifra solo aquí: `read()` nunca saca de la base los datos completos.
-  const banking = await revealBanking(id);
-  if (!banking) {
+  const revelado = await revealBanking(id);
+  if (!revelado) {
     return NextResponse.json({ error: "Creador no encontrado." }, { status: 404 });
   }
 
   clearFailures(actor);
   console.info(
-    `[auditoría] datos bancarios revelados — creador= usuario= ()`,
+    `[auditoría] datos bancarios revelados — creador=${id} usuario=${session.userId} (${session.email})`,
   );
 
-  return NextResponse.json({ banking, revealedAt: new Date().toISOString() });
+  return NextResponse.json({
+    banking: revelado.banking,
+    accounts: revelado.accounts,
+    revealedAt: new Date().toISOString(),
+  });
 }
