@@ -35,6 +35,23 @@ const schema = z.object({
       notes: z.string().optional(),
     })
     .optional(),
+  /**
+   * Las cuentas de cobro se reemplazan enteras. Si no vienen, se dejan como
+   * están: así el formulario de la ficha puede guardar sólo lo suyo.
+   */
+  bankAccounts: z
+    .array(
+      z.object({
+        method: z.enum(["transferencia", "paypal", "wise", "binance", "deel", "efectivo"]),
+        label: z.string().default(""),
+        holder: z.string().default(""),
+        bankName: z.string().default(""),
+        reference: z.string().default(""),
+        routing: z.string().default(""),
+        notes: z.string().default(""),
+      }),
+    )
+    .optional(),
 });
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -54,14 +71,20 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     );
   }
 
-  if (parsed.data.banking && !hasPermission(session.permissions, "ver_datos_bancarios")) {
+  const tocaDinero = parsed.data.banking !== undefined || parsed.data.bankAccounts !== undefined;
+  if (tocaDinero && !hasPermission(session.permissions, "ver_datos_bancarios")) {
     return NextResponse.json(
       { error: "Tu rol no permite cambiar la información de pago." },
       { status: 403 },
     );
   }
 
-  const creator = await updateCreator(id, parsed.data);
+  const { bankAccounts, ...resto } = parsed.data;
+  const creator = await updateCreator(id, {
+    ...resto,
+    // Los ids los pone la base al reescribir la lista completa.
+    ...(bankAccounts ? { bankAccounts: bankAccounts.map((a) => ({ ...a, id: "" })) } : {}),
+  });
   if (!creator) return NextResponse.json({ error: "Creador no encontrado." }, { status: 404 });
 
   revalidatePath("/creadores");

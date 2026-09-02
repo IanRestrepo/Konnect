@@ -7,13 +7,14 @@ import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select, Textarea } from "@/components/ui/field";
 import { useCan } from "@/components/session-provider";
-import { CATEGORIES, CURRENCIES, PAYMENT_METHOD } from "@/lib/labels";
-import type { Creator, PaymentMethod } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { CATEGORIES, CURRENCIES } from "@/lib/labels";
+import type { Creator } from "@/lib/types";
 
-const METODOS = Object.keys(PAYMENT_METHOD) as PaymentMethod[];
-
-/** Los datos bancarios no se tocan aquí: se editan tras revelarlos. */
+/**
+ * Ni los datos bancarios ni los métodos de pago se tocan aquí: van juntos en
+ * el panel de información de pago, que los edita tras pedir el código. Tenerlos
+ * en dos sitios dejaba métodos marcados sin cuenta y cuentas sin método.
+ */
 type Campos = {
   name: string;
   handle: string;
@@ -52,7 +53,6 @@ export function EditCreatorButton({ creator }: { creator: Creator }) {
   const can = useCan();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<Campos>(() => desde(creator));
-  const [methods, setMethods] = useState<PaymentMethod[]>(creator.paymentMethods);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -65,13 +65,8 @@ export function EditCreatorButton({ creator }: { creator: Creator }) {
   function abrir() {
     // Siempre se parte de lo que hay guardado, no de un borrador anterior.
     setForm(desde(creator));
-    setMethods(creator.paymentMethods);
     setError(null);
     setOpen(true);
-  }
-
-  function alternarMetodo(m: PaymentMethod) {
-    setMethods((prev) => (prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]));
   }
 
   async function guardar() {
@@ -97,7 +92,6 @@ export function EditCreatorButton({ creator }: { creator: Creator }) {
           rateVideo: Number(form.rateVideo) || 0,
           rateShort: Number(form.rateShort) || 0,
           rateIntegration: Number(form.rateIntegration) || 0,
-          paymentMethods: methods,
           notes: form.notes,
         }),
       });
@@ -275,28 +269,6 @@ export function EditCreatorButton({ creator }: { creator: Creator }) {
               value={form.rateIntegration}
               onChange={(e) => set("rateIntegration", e.target.value)}
             />
-          </div>
-        </div>
-
-        <div className="mt-3">
-          <Label>Métodos de pago</Label>
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {METODOS.map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => alternarMetodo(m)}
-                aria-pressed={methods.includes(m)}
-                className={cn(
-                  "rounded-[var(--r-control)] border px-2.5 py-1.5 text-[12.5px] transition",
-                  methods.includes(m)
-                    ? "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent)]"
-                    : "border-[var(--line)] text-[var(--text-muted)] hover:border-[var(--text-subtle)]",
-                )}
-              >
-                {PAYMENT_METHOD[m]}
-              </button>
-            ))}
           </div>
         </div>
 

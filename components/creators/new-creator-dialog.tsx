@@ -8,9 +8,11 @@ import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { FieldHint, Input, InputWithIcon, Label, Select, Textarea } from "@/components/ui/field";
-import { CATEGORIES, CURRENCIES, PAYMENT_METHOD } from "@/lib/labels";
+import { ContactFieldsEditor } from "@/components/creators/contact-fields-editor";
+import { PaymentAccountsEditor } from "@/components/creators/payment-accounts-editor";
+import { CATEGORIES, CURRENCIES } from "@/lib/labels";
 import { PLATFORMS, PLATFORM_URL } from "@/lib/socials";
-import type { PaymentMethod, SocialPlatform } from "@/lib/types";
+import type { BankingAccount, ContactField, PaymentMethod, SocialPlatform } from "@/lib/types";
 import { cn, formatCompact } from "@/lib/utils";
 
 type ChannelPreview = {
@@ -38,17 +40,28 @@ const EMPTY = {
   rateVideo: "",
   rateShort: "",
   rateIntegration: "",
+  /** Identidad fiscal: es del creador, no de una cuenta concreta. */
   holder: "",
-  bankName: "",
-  accountNumber: "",
-  routing: "",
   taxId: "",
-  paypalEmail: "",
   notes: "",
 };
 
 /** Datos que en YouTube llegan de la API y en el resto se escriben a mano. */
 const PERFIL_VACIO = { name: "", handle: "", url: "", followers: "" };
+
+/** Una transferencia bancaria en blanco: el método con el que se empieza. */
+const CUENTA_INICIAL: BankingAccount[] = [
+  {
+    id: "",
+    method: "transferencia",
+    label: "",
+    holder: "",
+    bankName: "",
+    reference: "",
+    routing: "",
+    notes: "",
+  },
+];
 
 export function NewCreatorDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const router = useRouter();
@@ -60,6 +73,8 @@ export function NewCreatorDialog({ open, onClose }: { open: boolean; onClose: ()
   const [channel, setChannel] = useState<ChannelPreview | null>(null);
   const [perfil, setPerfil] = useState({ ...PERFIL_VACIO });
   const [methods, setMethods] = useState<PaymentMethod[]>(["transferencia"]);
+  const [accounts, setAccounts] = useState<BankingAccount[]>(CUENTA_INICIAL);
+  const [contactFields, setContactFields] = useState<ContactField[]>([]);
   const [form, setForm] = useState({ ...EMPTY });
 
   const esYoutube = platform === "youtube";
@@ -79,6 +94,8 @@ export function NewCreatorDialog({ open, onClose }: { open: boolean; onClose: ()
     setLoading(false);
     setSaving(false);
     setMethods(["transferencia"]);
+    setAccounts(CUENTA_INICIAL);
+    setContactFields([]);
     setForm({ ...EMPTY });
     onClose();
   }
@@ -145,12 +162,26 @@ export function NewCreatorDialog({ open, onClose }: { open: boolean; onClose: ()
           paymentMethods: methods,
           banking: {
             holder: form.holder.trim(),
-            bankName: form.bankName.trim(),
-            accountNumber: form.accountNumber.trim(),
-            routing: form.routing.trim(),
+            bankName: "",
+            accountNumber: "",
+            routing: "",
             taxId: form.taxId.trim(),
-            paypalEmail: form.paypalEmail.trim() || undefined,
           },
+          // Sin referencia no hay cuenta: una fila vacía sólo estorba en la ficha.
+          bankAccounts: accounts
+            .filter((c) => c.reference.trim())
+            .map((c) => ({
+              method: c.method,
+              label: c.label.trim(),
+              holder: c.holder.trim() || form.holder.trim(),
+              bankName: c.bankName.trim(),
+              reference: c.reference.trim(),
+              routing: c.routing.trim(),
+              notes: c.notes.trim(),
+            })),
+          contactFields: contactFields
+            .filter((f) => f.label.trim())
+            .map((f) => ({ label: f.label.trim(), value: f.value.trim() })),
           notes: form.notes.trim(),
         }),
       });
@@ -163,10 +194,6 @@ export function NewCreatorDialog({ open, onClose }: { open: boolean; onClose: ()
     } finally {
       setSaving(false);
     }
-  }
-
-  function toggleMethod(id: PaymentMethod) {
-    setMethods((prev) => (prev.includes(id) ? prev.filter((m) => m !== id) : [...prev, id]));
   }
 
   const etiqueta = PLATFORMS.find((p) => p.id === platform)?.label ?? platform;
@@ -377,29 +404,7 @@ export function NewCreatorDialog({ open, onClose }: { open: boolean; onClose: ()
               </div>
             </div>
 
-            <div>
-              <Label>Métodos de pago</Label>
-              <div className="flex flex-wrap gap-1.5">
-                {(Object.keys(PAYMENT_METHOD) as PaymentMethod[]).map((id) => {
-                  const active = methods.includes(id);
-                  return (
-                    <button
-                      key={id}
-                      type="button"
-                      onClick={() => toggleMethod(id)}
-                      className={cn(
-                        "h-8 rounded-[var(--r-pill)] border px-3 text-[12.5px] font-medium transition",
-                        active
-                          ? "border-transparent bg-[var(--accent-soft)] text-[var(--accent)]"
-                          : "border-[var(--line)] bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)]",
-                      )}
-                    >
-                      {PAYMENT_METHOD[id]}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+            <ContactFieldsEditor fields={contactFields} onChange={setContactFields} />
 
             <div>
               <Label>Tarifas mínimas acordadas</Label>
@@ -443,42 +448,33 @@ export function NewCreatorDialog({ open, onClose }: { open: boolean; onClose: ()
             <div>
               <div className="mb-1.5 flex items-center gap-2">
                 <Lock size={13} className="text-[var(--text-subtle)]" />
-                <Label className="mb-0">Información bancaria (confidencial)</Label>
+                <Label className="mb-0">Información de pago (confidencial)</Label>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <Input
                   value={form.holder}
                   onChange={(e) => set("holder", e.target.value)}
-                  placeholder="Titular de la cuenta"
-                />
-                <Input
-                  value={form.bankName}
-                  onChange={(e) => set("bankName", e.target.value)}
-                  placeholder="Banco"
-                />
-                <Input
-                  value={form.accountNumber}
-                  onChange={(e) => set("accountNumber", e.target.value)}
-                  placeholder="Número de cuenta / CLABE / IBAN"
-                />
-                <Input
-                  value={form.routing}
-                  onChange={(e) => set("routing", e.target.value)}
-                  placeholder="SWIFT / routing"
+                  placeholder="Titular fiscal"
+                  aria-label="Titular fiscal"
                 />
                 <Input
                   value={form.taxId}
                   onChange={(e) => set("taxId", e.target.value)}
                   placeholder="RFC / NIT / CUIT"
-                />
-                <Input
-                  value={form.paypalEmail}
-                  onChange={(e) => set("paypalEmail", e.target.value)}
-                  placeholder="Correo de PayPal (opcional)"
+                  aria-label="Identificación fiscal"
                 />
               </div>
               <FieldHint>Solo se muestra tras introducir el código de acceso.</FieldHint>
             </div>
+
+            <PaymentAccountsEditor
+              methods={methods}
+              accounts={accounts}
+              onChange={(m, c) => {
+                setMethods(m);
+                setAccounts(c);
+              }}
+            />
 
             <div>
               <Label htmlFor="notes">Notas internas</Label>
