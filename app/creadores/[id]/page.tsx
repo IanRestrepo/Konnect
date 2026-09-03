@@ -151,6 +151,7 @@ export default async function CreadorPage({ params }: { params: Promise<{ id: st
             currency={creator.currency}
             socials={creator.socials.map((s) => s.platform)}
             mainPlatform={creator.mainPlatform}
+            channels={creator.channels}
           />
 
           <section>

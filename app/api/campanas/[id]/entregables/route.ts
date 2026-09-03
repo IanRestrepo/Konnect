@@ -13,6 +13,8 @@ const schema = z.object({
   platform: z
     .enum(["youtube", "instagram", "tiktok", "x", "twitch", "kick", "discord", "roblox", "web"])
     .default("youtube"),
+  /** Canal secundario en el que se publica. Vacío = el principal. */
+  channelId: z.string().default(""),
   clientPrice: z.number().min(0).default(0),
   commissionPct: z.number().min(0).max(100).nullable().default(null),
   commissionFixed: z.number().min(0).nullable().default(null),

@@ -277,6 +277,7 @@ function toCreator(row: CreatorRow, apiConnections: CreatorApiConnection[] = [])
       platform: r.platform as SocialPlatform,
       type: r.type,
       amount: num(r.amount),
+      channelId: r.channelId,
     })),
     contacts: row.contacts.map((c) => ({
       id: c.id,
@@ -396,6 +397,7 @@ function toDeliverable(row: CampaignRow["deliverables"][number]): Deliverable {
     type: row.type,
     status: row.status,
     platform: row.platform as SocialPlatform,
+    channelId: row.channelId,
     clientPrice: num(row.clientPrice),
     commissionPct: row.commissionPct === null ? null : num(row.commissionPct),
     commissionFixed: row.commissionFixed === null ? null : num(row.commissionFixed),
@@ -808,10 +810,15 @@ export async function removeCreatorChannel(
   creatorId: string,
   channelId: string,
 ): Promise<boolean> {
-  const { count } = await prisma.creatorChannel.deleteMany({
-    where: { creatorId, id: channelId },
-  });
-  return count > 0;
+  // Las tarifas del canal van detrás. No hay cascada que las arrastre: en
+  // `CreatorRate` el canal es texto suelto, no una relación, y quedarse con
+  // tarifas de un canal que ya no existe es dejar precios fantasma que nadie
+  // vuelve a ver ni a corregir.
+  const [, borrado] = await prisma.$transaction([
+    prisma.creatorRate.deleteMany({ where: { creatorId, channelId } }),
+    prisma.creatorChannel.deleteMany({ where: { creatorId, id: channelId } }),
+  ]);
+  return borrado.count > 0;
 }
 
 export async function setCreatorSocials(
@@ -982,6 +989,7 @@ function deliverableData(input: Omit<Deliverable, "id">) {
     type: input.type,
     status: input.status,
     platform: input.platform ?? "youtube",
+    channelId: input.channelId ?? "",
     clientPrice: input.clientPrice ?? 0,
     commissionPct: input.commissionPct,
     commissionFixed: input.commissionFixed,
@@ -2086,33 +2094,6 @@ export async function markEventsRead(sessionId: string, lado: "agencia" | "cread
 
 /* ---------------- Tarifas por red social ---------------- */
 
-export async function setCreatorRate(
-  creatorId: string,
-  platform: SocialPlatform,
-  type: Deliverable["type"],
-  amount: number,
-): Promise<Creator | null> {
-  const existe = await prisma.creator.findUnique({ where: { id: creatorId }, select: { id: true } });
-  if (!existe) return null;
-
-  if (amount <= 0) {
-    // Una tarifa en cero es lo mismo que no tenerla: se borra y cae en la de respaldo.
-    await prisma.creatorRate.deleteMany({ where: { creatorId, platform, type } });
-  } else {
-    await prisma.creatorRate.upsert({
-      where: { creatorId_platform_type: { creatorId, platform, type } },
-      create: { id: newId("rt"), creatorId, platform, type, amount },
-      update: { amount },
-    });
-  }
-
-  const row = await prisma.creator.findUnique({
-    where: { id: creatorId },
-    include: creatorInclude,
-  });
-  return row ? toCreator(row) : null;
-}
-
 /**
  * Reemplaza el tarifario completo del creador.
  *
@@ -2135,7 +2116,14 @@ export async function setCreatorRates(
     for (const r of rates) {
       if (r.amount <= 0) continue;
       await tx.creatorRate.create({
-        data: { id: newId("rt"), creatorId, platform: r.platform, type: r.type, amount: r.amount },
+        data: {
+          id: newId("rt"),
+          creatorId,
+          platform: r.platform,
+          type: r.type,
+          amount: r.amount,
+          channelId: r.channelId ?? "",
+        },
       });
     }
   });

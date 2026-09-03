@@ -132,6 +132,8 @@ export type CreatorRate = {
   platform: SocialPlatform;
   type: DeliverableType;
   amount: number;
+  /** Canal secundario al que aplica. Vacío = toda la red. */
+  channelId: string;
 };
 
 export type Deliverable = {
@@ -141,6 +143,8 @@ export type Deliverable = {
   status: DeliverableStatus;
   /** Red social donde se publica; define qué tarifa del creador se aplicó. */
   platform: SocialPlatform;
+  /** Canal secundario donde se publica. Vacío = su canal principal. */
+  channelId: string;
   /** Lo que paga el cliente por esta pieza. Número base del cálculo. */
   clientPrice: number;
   /** Comisión de la agencia en % del cobro. Null = hereda el de la campaña. */

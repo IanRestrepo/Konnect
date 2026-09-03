@@ -390,6 +390,10 @@ model Deliverable {
   /// Red social en la que se publica. Determina qué tarifa del creador aplica.
   platform SocialPlatform @default(youtube)
 
+  /// Canal secundario en el que se publica, si se pactó uno concreto. Vacío =
+  /// su canal principal. Elige qué tarifa del creador se aplicó.
+  channelId String @default("")
+
   /// Lo que paga el cliente por esta pieza. Es el número base del que salen
   /// la comisión de la agencia y el pago al creador.
   clientPrice Decimal @default(0) @db.Decimal(12, 2)
@@ -667,10 +671,19 @@ model CreatorRate {
   type     DeliverableType
   amount   Decimal         @default(0) @db.Decimal(12, 2)
 
+  /// Canal secundario al que aplica esta tarifa. Vacío = toda la red.
+  ///
+  /// Es texto suelto y no una relación porque forma parte de la clave única, y
+  /// en Postgres dos filas con la columna en NULL no chocan entre sí: la
+  /// restricción no serviría de nada justo en el caso más común, el de la
+  /// tarifa general. Con cadena vacía sí protege. Al borrar un canal, sus
+  /// tarifas se limpian a mano en `removeCreatorChannel`.
+  channelId String @default("")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([creatorId, platform, type])
+  @@unique([creatorId, platform, type, channelId])
   @@index([creatorId])
 }
 

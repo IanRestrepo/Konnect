@@ -28,6 +28,8 @@ const schema = z.object({
         .min(0, "Una tarifa no puede ser negativa.")
         .max(IMPORTE_MAXIMO, "Ese importe no cabe en la base.")
         .default(0),
+      /** Canal secundario al que aplica. Vacío = toda la red. */
+      channelId: z.string().default(""),
     }),
   ),
 });

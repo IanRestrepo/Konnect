@@ -99,8 +99,22 @@ export function rateFor(
   creator: Pick<Creator, "rates" | "rateVideo" | "rateShort" | "rateIntegration">,
   platform: SocialPlatform,
   type: DeliverableType,
+  /** Canal secundario concreto. Vacío = su canal principal. */
+  channelId = "",
 ): number {
-  const exacta = creator.rates?.find((r) => r.platform === platform && r.type === type);
+  // Tres escalones: la tarifa de ese canal, la de la red, y las antiguas. Un
+  // canal secundario suele cobrar menos que el principal, pero si nadie le
+  // puso precio propio lo justo es cobrar el de la red, no cero.
+  if (channelId) {
+    const delCanal = creator.rates?.find(
+      (r) => r.platform === platform && r.type === type && r.channelId === channelId,
+    );
+    if (delCanal) return delCanal.amount;
+  }
+
+  const exacta = creator.rates?.find(
+    (r) => r.platform === platform && r.type === type && !r.channelId,
+  );
   if (exacta) return exacta.amount;
 
   // Las tarifas antiguas solo cubrían tres formatos. Los nuevos —directo,
@@ -118,8 +132,16 @@ export function hasRateFor(
   creator: Pick<Creator, "rates">,
   platform: SocialPlatform,
   type: DeliverableType,
+  channelId = "",
 ): boolean {
-  return Boolean(creator.rates?.some((r) => r.platform === platform && r.type === type));
+  return Boolean(
+    creator.rates?.some(
+      (r) =>
+        r.platform === platform &&
+        r.type === type &&
+        (r.channelId === channelId || !r.channelId),
+    ),
+  );
 }
 
 /**

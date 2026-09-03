@@ -27,6 +27,8 @@ const linea = z.object({
   creatorId: z.string().min(1),
   platform: z.enum(PLATAFORMAS),
   type: z.enum(["video", "short", "integracion", "directo", "post"]),
+  /** Canal secundario en el que se publica. Vacío = el principal. */
+  channelId: z.string().default(""),
   /** Lo que paga el cliente por esta pieza. */
   clientPrice: z
     .number()
@@ -95,6 +97,7 @@ export async function POST(request: Request) {
     type: l.type,
     status: "pendiente",
     platform: l.platform,
+    channelId: l.channelId,
     clientPrice: l.clientPrice,
     commissionPct: l.commissionPct,
     commissionFixed: l.commissionFixed,

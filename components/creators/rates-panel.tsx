@@ -11,10 +11,25 @@ import { Badge } from "@/components/ui/badge";
 import { useCan } from "@/components/session-provider";
 import { PLATFORMS, PLATFORM_LABEL, TAREAS, tareaLabel } from "@/lib/socials";
 import { IMPORTE_MAXIMO } from "@/lib/pricing";
-import type { Creator, CreatorRate, DeliverableType, SocialPlatform } from "@/lib/types";
+import type {
+  Creator,
+  CreatorChannel,
+  CreatorRate,
+  DeliverableType,
+  SocialPlatform,
+} from "@/lib/types";
 import { formatMoney } from "@/lib/utils";
 
-type Fila = { platform: SocialPlatform; type: DeliverableType; amount: string };
+type Fila = {
+  platform: SocialPlatform;
+  type: DeliverableType;
+  amount: string;
+  /** Canal secundario al que aplica. Vacío = toda la red. */
+  channelId: string;
+};
+
+/** Opción de «toda la red», que es lo que vale si no se elige canal. */
+const TODA_LA_RED = "";
 
 /** Primera tarea que ofrece esa red: lo que se propone al añadir una fila. */
 function primeraTarea(platform: SocialPlatform): DeliverableType {
@@ -38,12 +53,15 @@ export function RatesPanel({
   currency,
   socials,
   mainPlatform,
+  channels,
 }: {
   creatorId: string;
   rates: CreatorRate[];
   currency: Creator["currency"];
   socials: SocialPlatform[];
   mainPlatform: SocialPlatform;
+  /** Canales secundarios, para poder ponerles un mínimo propio. */
+  channels: CreatorChannel[];
 }) {
   const router = useRouter();
   const can = useCan();
@@ -64,11 +82,25 @@ export function RatesPanel({
   function empezar() {
     setBorrador(
       rates.length
-        ? rates.map((r) => ({ platform: r.platform, type: r.type, amount: String(r.amount) }))
-        : [{ platform: mainPlatform, type: primeraTarea(mainPlatform), amount: "" }],
+        ? rates.map((r) => ({
+            platform: r.platform,
+            type: r.type,
+            amount: String(r.amount),
+            channelId: r.channelId,
+          }))
+        : [filaNueva()],
     );
     setError(null);
     setEditando(true);
+  }
+
+  function filaNueva(): Fila {
+    return {
+      platform: mainPlatform,
+      type: primeraTarea(mainPlatform),
+      amount: "",
+      channelId: TODA_LA_RED,
+    };
   }
 
   function cambiar(i: number, patch: Partial<Fila>) {
@@ -77,17 +109,23 @@ export function RatesPanel({
 
   async function guardar() {
     const limpio = borrador
-      .map((f) => ({ platform: f.platform, type: f.type, amount: Number(f.amount) || 0 }))
+      .map((f) => ({
+        platform: f.platform,
+        type: f.type,
+        amount: Number(f.amount) || 0,
+        channelId: f.channelId,
+      }))
       .filter((f) => f.amount > 0);
 
     if (limpio.some((f) => f.amount > IMPORTE_MAXIMO)) {
       setError("Alguna tarifa es demasiado grande para guardarla.");
       return;
     }
-    // La base tiene una tarifa por red y tipo: dos filas iguales se pisarían.
-    const llaves = limpio.map((f) => `${f.platform}-${f.type}`);
+    // La base tiene una tarifa por red, tipo y canal: dos filas iguales se
+    // pisarían, y el error de Postgres no le diría nada a quien la escribió.
+    const llaves = limpio.map((f) => `${f.platform}-${f.type}-${f.channelId}`);
     if (new Set(llaves).size !== llaves.length) {
-      setError("Hay dos tarifas para la misma red y el mismo tipo de pieza.");
+      setError("Hay dos tarifas para la misma red, pieza y canal.");
       return;
     }
 
@@ -145,17 +183,18 @@ export function RatesPanel({
 
       {editando ? (
         <div className="space-y-2 border-t border-[var(--line)] p-4">
-          <div className="hidden gap-2 sm:grid sm:grid-cols-[1fr_1fr_7rem_2.5rem]">
+          <div className="hidden gap-2 sm:grid sm:grid-cols-[1fr_1fr_1fr_6rem_2.5rem]">
             <Label className="mb-0">Red</Label>
             <Label className="mb-0">Pieza</Label>
+            <Label className="mb-0">Canal</Label>
             <Label className="mb-0">Precio</Label>
             <span />
           </div>
 
           {borrador.map((fila, i) => (
             <div
-              key={`${fila.platform}-${fila.type}-${i}`}
-              className="grid gap-2 sm:grid-cols-[1fr_1fr_7rem_2.5rem]"
+              key={`${fila.platform}-${fila.type}-${fila.channelId}-${i}`}
+              className="grid gap-2 sm:grid-cols-[1fr_1fr_1fr_6rem_2.5rem]"
             >
               <Picker
                 value={fila.platform}
@@ -167,6 +206,8 @@ export function RatesPanel({
                     type: TAREAS[platform].some((t) => t.type === fila.type)
                       ? fila.type
                       : primeraTarea(platform),
+                    // Un canal es de YouTube: fuera de ahí no significa nada.
+                    channelId: platform === "youtube" ? fila.channelId : TODA_LA_RED,
                   })
                 }
                 options={opcionesRed}
@@ -176,6 +217,22 @@ export function RatesPanel({
                 value={fila.type}
                 onChange={(type) => cambiar(i, { type })}
                 options={TAREAS[fila.platform].map((t) => ({ id: t.type, label: t.label }))}
+              />
+
+              <Picker
+                value={fila.channelId}
+                onChange={(channelId) => cambiar(i, { channelId })}
+                // Los canales adicionales son de YouTube; en otras redes solo
+                // cabe la tarifa de toda la red.
+                disabled={fila.platform !== "youtube" || channels.length === 0}
+                options={[
+                  { id: TODA_LA_RED, label: "Toda la red" },
+                  ...channels.map((c) => ({
+                    id: c.id,
+                    label: c.label || c.handle || "Canal",
+                    hint: c.handle,
+                  })),
+                ]}
               />
 
               <Input
@@ -203,14 +260,7 @@ export function RatesPanel({
             variant="secondary"
             size="sm"
             onClick={() =>
-              setBorrador((prev) => [
-                ...prev,
-                {
-                  platform: mainPlatform,
-                  type: primeraTarea(mainPlatform),
-                  amount: "",
-                },
-              ])
+              setBorrador((prev) => [...prev, filaNueva()])
             }
           >
             <Plus size={14} />
@@ -227,17 +277,30 @@ export function RatesPanel({
         </p>
       ) : (
         <div className="divide-y divide-[var(--line)] border-t border-[var(--line)]">
-          {rates.map((rate) => (
-            <div key={rate.id} className="flex items-center gap-3 px-4 py-2.5">
-              <Badge plain>{PLATFORM_LABEL[rate.platform]}</Badge>
-              <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--text-muted)]">
-                {tareaLabel(rate.platform, rate.type)}
-              </span>
-              <span className="tabular shrink-0 text-[13px] font-semibold">
-                {formatMoney(rate.amount, currency)}
-              </span>
-            </div>
-          ))}
+          {rates.map((rate) => {
+            const canal = rate.channelId
+              ? channels.find((c) => c.id === rate.channelId)
+              : null;
+            return (
+              <div key={rate.id} className="flex items-center gap-3 px-4 py-2.5">
+                <Badge plain>{PLATFORM_LABEL[rate.platform]}</Badge>
+                <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--text-muted)]">
+                  {tareaLabel(rate.platform, rate.type)}
+                  {/* Una tarifa de canal secundario no se distingue de la
+                      general si no se dice de cuál es. */}
+                  {rate.channelId && (
+                    <span className="text-[var(--text-subtle)]">
+                      {" · "}
+                      {canal?.label || canal?.handle || "Canal borrado"}
+                    </span>
+                  )}
+                </span>
+                <span className="tabular shrink-0 text-[13px] font-semibold">
+                  {formatMoney(rate.amount, currency)}
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
     </Card>

@@ -78,6 +78,8 @@ type Linea = {
   creatorId: string;
   platform: SocialPlatform;
   type: DeliverableType;
+  /** Canal secundario pactado. Vacío = su canal principal. */
+  channelId: string;
   /** Lo que paga el cliente por esta pieza. */
   clientPrice: string;
   /** Lo que cuesta el influencer. La resta es la ganancia bruta. */
@@ -192,10 +194,37 @@ export function NewCampaignForm({
         creatorId: creator.id,
         platform,
         type: tipo,
+        // Se parte de su canal principal; el canal concreto se elige después,
+        // en el paso de precios, que es donde importa cuál cambia la tarifa.
+        channelId: "",
         clientPrice: partida ? String(partida) : "",
         creatorCost: tarifa > 0 ? String(tarifa) : "",
       },
     ]);
+  }
+
+  /**
+   * Cambia el canal de una línea y vuelve a proponer su precio.
+   *
+   * Un canal secundario suele tener su propia tarifa: dejar el precio del
+   * principal después de cambiarlo es justo el error que se quiere evitar.
+   */
+  function cambiarCanal(indice: number, channelId: string) {
+    setLineas((prev) =>
+      prev.map((l, i) => {
+        if (i !== indice) return l;
+        const creator = creators.find((c) => c.id === l.creatorId);
+        if (!creator) return { ...l, channelId };
+        const tarifa = rateFor(creator, l.platform, l.type, channelId);
+        const partida = tarifa > 0 ? Math.round(clientPriceForRate(tarifa, comisionBase)) : 0;
+        return {
+          ...l,
+          channelId,
+          clientPrice: partida ? String(partida) : "",
+          creatorCost: tarifa > 0 ? String(tarifa) : "",
+        };
+      }),
+    );
   }
 
   function editarLinea(indice: number, patch: Partial<Linea>) {
@@ -244,6 +273,7 @@ export function NewCampaignForm({
             creatorId: l.creatorId,
             platform: l.platform,
             type: l.type,
+            channelId: l.channelId,
             clientPrice: Number(l.clientPrice) || 0,
             commissionPct: null,
             // La ganancia se guarda como comisión fija: es exactamente la
@@ -673,6 +703,27 @@ export function NewCampaignForm({
                               </button>
                             </div>
 
+                            {/* Solo si tiene canales adicionales en YouTube:
+                                en el resto de redes no hay dónde elegir. */}
+                            {linea.platform === "youtube" && creator.channels.length > 0 && (
+                              <div className="mt-2.5 pl-[42px]">
+                                <Label htmlFor={`canal-${i}`}>Canal</Label>
+                                <Picker
+                                  id={`canal-${i}`}
+                                  value={linea.channelId}
+                                  onChange={(v) => cambiarCanal(i, v)}
+                                  options={[
+                                    { id: "", label: "Canal principal", hint: creator.handle },
+                                    ...creator.channels.map((c) => ({
+                                      id: c.id,
+                                      label: c.label || c.handle || "Canal",
+                                      hint: c.handle,
+                                    })),
+                                  ]}
+                                />
+                              </div>
+                            )}
+
                             <div className="mt-2.5 grid gap-2 pl-[42px] sm:grid-cols-[1fr_1fr]">
                               <div>
                                 <Label htmlFor={`cobro-${i}`}>Pago del cliente</Label>
@@ -720,11 +771,11 @@ export function NewCampaignForm({
                                   ({((ganancia / cobro) * 100).toFixed(0)}%)
                                 </span>
                               )}
-                              {creador > 0 && rateFor(creator, linea.platform, linea.type) > creador && (
+                              {creador > 0 && rateFor(creator, linea.platform, linea.type, linea.channelId) > creador && (
                                 <span className="ml-auto text-[var(--warn)]">
                                   por debajo de su tarifa (
                                   {formatMoney(
-                                    rateFor(creator, linea.platform, linea.type),
+                                    rateFor(creator, linea.platform, linea.type, linea.channelId),
                                     creator.currency,
                                   )}
                                   )
