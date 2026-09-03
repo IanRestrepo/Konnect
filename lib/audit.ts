@@ -19,6 +19,8 @@ export const AUDIT_ACTIONS = {
   "campana.estado": "Cambió el estado de la campaña",
   "campana.borrada": "Borró la campaña",
   "campana.asignada": "Cambió quién lleva la campaña",
+  "contrato.finalizado": "Finalizó el contrato con",
+  "contrato.reabierto": "Reabrió el contrato con",
   "pago.estado": "Cambió el estado de pago",
   "pago.comprobante": "Adjuntó el comprobante de pago",
   "pago.comprobante.quitado": "Quitó el comprobante de pago",

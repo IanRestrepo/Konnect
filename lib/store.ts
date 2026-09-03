@@ -388,6 +388,7 @@ function toCompany(row: CompanyRow): Company {
 const campaignInclude = {
   deliverables: { orderBy: { createdAt: "asc" } },
   members: { select: { userId: true } },
+  endedContracts: { orderBy: { endedAt: "desc" } },
 } satisfies Prisma.CampaignInclude;
 
 type CampaignRow = Prisma.CampaignGetPayload<{ include: typeof campaignInclude }>;
@@ -437,6 +438,11 @@ function toCampaign(row: CampaignRow): Campaign {
     notes: row.notes,
     managerId: row.managerId,
     memberIds: row.members.map((m) => m.userId),
+    endedContracts: row.endedContracts.map((e) => ({
+      creatorId: e.creatorId,
+      endedAt: iso(e.endedAt),
+      reason: e.reason,
+    })),
     deliverables: row.deliverables.map(toDeliverable),
     createdAt: iso(row.createdAt),
   };
@@ -1128,6 +1134,142 @@ export async function updateCampaign(
   }
 
   const row = await prisma.campaign.findUnique({ where: { id }, include: campaignInclude });
+  return row ? toCampaign(row) : null;
+}
+
+/**
+ * Contrata a un creador dentro de una campaña ya empezada.
+ *
+ * Le crea la pieza pactada y se asegura de que tenga sesión de entrega: si es
+ * la primera vez que entra a esta campaña se le abre una con su código, y si
+ * ya tenía se le añade la petición a la que hay. Sin eso, el creador nuevo se
+ * quedaría con una pieza en la campaña y sin sitio donde entregarla.
+ *
+ * Contratar a alguien cuyo contrato estaba cerrado lo reabre: es exactamente
+ * lo que significa volver a encargarle trabajo.
+ */
+export async function hireCreator(
+  campaignId: string,
+  input: {
+    creatorId: string;
+    creatorName: string;
+    platform: SocialPlatform;
+    type: Deliverable["type"];
+    channelId: string;
+    clientPrice: number;
+    commissionFixed: number;
+  },
+): Promise<{ campaign: Campaign; sessionId: string } | null> {
+  const campana = await prisma.campaign.findUnique({
+    where: { id: campaignId },
+    select: { id: true, name: true },
+  });
+  if (!campana) return null;
+
+  const deliverableId = newId("dl");
+  await prisma.deliverable.create({
+    data: {
+      id: deliverableId,
+      campaignId,
+      creatorId: input.creatorId,
+      type: input.type,
+      status: "pendiente",
+      platform: input.platform,
+      channelId: input.channelId,
+      clientPrice: input.clientPrice,
+      commissionPct: null,
+      commissionFixed: input.commissionFixed,
+      agreedFee: input.clientPrice - input.commissionFixed,
+      paymentStatus: "pendiente",
+    },
+  });
+
+  await prisma.campaignCreatorEnd.deleteMany({ where: { campaignId, creatorId: input.creatorId } });
+
+  let sesion = await prisma.collabSession.findFirst({
+    where: { campaignId, creatorId: input.creatorId },
+    select: { id: true },
+  });
+
+  if (!sesion) {
+    const nueva = await createCollabSession({
+      name: `${campana.name} · ${input.creatorName}`,
+      campaignId,
+      creatorId: input.creatorId,
+      accesses: [{ role: "creador", label: input.creatorName, canUpload: true }],
+    });
+    sesion = { id: nueva.id };
+  }
+
+  await seedRequirementsFromCampaign(sesion.id, campaignId, input.creatorId);
+
+  const row = await prisma.campaign.findUnique({
+    where: { id: campaignId },
+    include: campaignInclude,
+  });
+  return row ? { campaign: toCampaign(row), sessionId: sesion.id } : null;
+}
+
+/**
+ * Cierra el contrato con un creador dentro de una campaña.
+ *
+ * No borra nada, y esa es toda la razón de que exista en vez de quitarlo de la
+ * campaña: lo que ya entregó y lo que ya se le pagó es dinero que se movió, y
+ * borrarlo dejaría los informes contando una campaña que nunca ocurrió así.
+ *
+ * Lo que sí cambia son las piezas que seguían pendientes: se cancelan, porque
+ * ya no van a pasar, y `campaignTotals` deja de contarlas. Las que están en
+ * revisión o publicadas se quedan intactas, con su estado de pago.
+ *
+ * Devuelve cuántas piezas se dieron por canceladas.
+ */
+export async function endCreatorContract(
+  campaignId: string,
+  creatorId: string,
+  reason = "",
+): Promise<{ campaign: Campaign; canceladas: number } | null> {
+  const campana = await prisma.campaign.findUnique({
+    where: { id: campaignId },
+    select: { id: true },
+  });
+  if (!campana) return null;
+
+  const { count: canceladas } = await prisma.deliverable.updateMany({
+    where: { campaignId, creatorId, status: "pendiente" },
+    data: { status: "cancelado" },
+  });
+
+  await prisma.campaignCreatorEnd.upsert({
+    where: { campaignId_creatorId: { campaignId, creatorId } },
+    create: { id: newId("cce"), campaignId, creatorId, reason },
+    update: { reason, endedAt: new Date() },
+  });
+
+  const row = await prisma.campaign.findUnique({
+    where: { id: campaignId },
+    include: campaignInclude,
+  });
+  return row ? { campaign: toCampaign(row), canceladas } : null;
+}
+
+/**
+ * Reabre el contrato: se borra la marca de cierre.
+ *
+ * Las piezas que se cancelaron al cerrarlo NO se resucitan. Cuáles eran no se
+ * guarda en ningún sitio, y devolver a pendiente todo lo cancelado reviviría
+ * también lo que se canceló por otros motivos. Se vuelven a contratar a mano,
+ * que es explícito y no adivina.
+ */
+export async function reopenCreatorContract(
+  campaignId: string,
+  creatorId: string,
+): Promise<Campaign | null> {
+  await prisma.campaignCreatorEnd.deleteMany({ where: { campaignId, creatorId } });
+
+  const row = await prisma.campaign.findUnique({
+    where: { id: campaignId },
+    include: campaignInclude,
+  });
   return row ? toCampaign(row) : null;
 }
 

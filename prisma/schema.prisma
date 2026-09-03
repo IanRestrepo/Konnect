@@ -133,6 +133,7 @@ model Creator {
   notes String @default("")
 
   rates          CreatorRate[]
+  endedContracts CampaignCreatorEnd[]
   contacts       CreatorContact[]
   contactFields  CreatorContactField[]
   bankAccounts   CreatorBankAccount[]
@@ -372,9 +373,10 @@ model Campaign {
   managerId String?
   manager   User?   @relation("CampaignManager", fields: [managerId], references: [id], onDelete: SetNull)
 
-  deliverables Deliverable[]
-  sessions     CollabSession[]
-  members      CampaignMember[]
+  deliverables   Deliverable[]
+  sessions       CollabSession[]
+  members        CampaignMember[]
+  endedContracts CampaignCreatorEnd[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -383,6 +385,33 @@ model Campaign {
   @@index([status])
   @@index([createdAt])
   @@index([managerId])
+}
+
+/// Contrato terminado con un creador dentro de una campaña.
+///
+/// Solo existe la fila cuando el contrato se da por cerrado: sin fila, el
+/// creador sigue activo. Así no hay dos sitios que mantener sincronizados —la
+/// participación se sigue deduciendo de sus entregables— y reabrir es borrar
+/// la fila.
+///
+/// Cerrar un contrato NO borra nada. Las piezas ya entregadas o pagadas se
+/// quedan como están, con su dinero: es trabajo que se hizo y se facturó.
+/// Solo las que seguían pendientes se cancelan, porque ya no van a pasar.
+model CampaignCreatorEnd {
+  id         String   @id
+  campaignId String
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  creatorId  String
+  creator    Creator  @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  endedAt DateTime @default(now())
+  /// Por qué se cerró. Sale en la ficha y en la bitácora.
+  reason  String   @default("")
+
+  createdAt DateTime @default(now())
+
+  @@unique([campaignId, creatorId])
+  @@index([campaignId])
 }
 
 /// Empleado asignado a una campaña.

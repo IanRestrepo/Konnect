@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { ViewsChart, type ChartPoint } from "@/components/campaigns/views-chart";
 import { DeliverablesSection } from "@/components/campaigns/deliverables-section";
+import { CampaignCreators } from "@/components/campaigns/campaign-creators";
 import { CampaignSwitch } from "@/components/campaigns/campaign-switch";
 import { EditCampaignButton } from "@/components/campaigns/edit-campaign-dialog";
 import {
@@ -165,6 +166,14 @@ export default async function CampanaPage({ params }: { params: Promise<{ id: st
             </CardHeader>
             <ViewsChart data={chart} />
           </Card>
+
+          {/* Con quién se trabaja y cuánto se le debe. La lista de entregables
+              responde qué piezas hay, no eso. */}
+          <CampaignCreators
+            campaign={campaign}
+            creators={creators}
+            currency={campaign.currency}
+          />
 
           <DeliverablesSection
             campaignId={campaign.id}

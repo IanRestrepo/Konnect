@@ -139,7 +139,7 @@ export async function POST(request: Request) {
     };
   });
 
-  const campaign = await createCampaign({ ...rest, deliverables });
+  const campaign = await createCampaign({ ...rest, endedContracts: [], deliverables });
 
   /**
    * Cada creador de la campaña recibe su propia sesión con su código: es su

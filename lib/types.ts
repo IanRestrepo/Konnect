@@ -191,8 +191,22 @@ export type Campaign = {
   managerId: string | null;
   /** Empleados asignados, además del responsable. */
   memberIds: string[];
+  /** Creadores cuyo contrato se cerró. Sin entrada = sigue activo. */
+  endedContracts: CampaignCreatorEnd[];
   deliverables: Deliverable[];
   createdAt: string;
+};
+
+/**
+ * Contrato terminado con un creador dentro de una campaña.
+ *
+ * Cerrarlo no borra nada: lo entregado y lo pagado se queda con su dinero.
+ * Solo dejan de esperarse las piezas que seguían pendientes.
+ */
+export type CampaignCreatorEnd = {
+  creatorId: string;
+  endedAt: string;
+  reason: string;
 };
 
 /* ---------------- Bitácora ---------------- */
