@@ -88,11 +88,15 @@ export function PortalView({
       <div className="portal-wrap">
         <h1 className="portal-hero__titulo">{name}</h1>
         <p className="portal-hero__sub">
-          {requirements.length === 0
-            ? "Todavía no hay nada que entregar."
-            : hechos === requirements.length
-              ? "Todo entregado y aprobado. No queda nada por hacer."
-              : `${hechos} de ${requirements.length} aprobados · ${pendientes.length} por resolver`}
+          {/* Al cliente no se le pide entregar nada: decirle que «no hay nada
+              que entregar» le hace buscar una lista que no existe. */}
+          {role === "cliente"
+            ? "Aquí compartes el material de la campaña con la agencia."
+            : requirements.length === 0
+              ? "Todavía no hay nada que entregar."
+              : hechos === requirements.length
+                ? "Todo entregado y aprobado. No queda nada por hacer."
+                : `${hechos} de ${requirements.length} aprobados · ${pendientes.length} por resolver`}
         </p>
 
         {/* ---------------- Lo que se pide ----------------
@@ -224,12 +228,45 @@ function Material({
         <span className="portal-seccion__contador">{items.length}</span>
       </div>
 
+      <input
+        ref={campo}
+        type="file"
+        hidden
+        onChange={(e) => {
+          const archivo = e.target.files?.[0];
+          if (archivo) void subir(archivo);
+        }}
+      />
+
       {items.length === 0 ? (
-        <p className="portal-vacio">
-          {puedeSubir
-            ? "Todavía no hay nada. Sube el brief, el logo o lo que haga falta."
-            : "Todavía no hay material compartido."}
-        </p>
+        // Vacío: una sola caja que dice qué hace falta y tiene dentro con qué
+        // hacerlo. Antes eran tres bloques sueltos para no decir nada.
+        <div className="portal-subida">
+          <p className="portal-subida__texto">
+            {puedeSubir
+              ? role === "cliente"
+                ? "Sube el brief, el logo o la guía de marca."
+                : "Sube aquí lo que quieras compartir con la agencia."
+              : "Todavía no hay material compartido."}
+          </p>
+          {puedeSubir && (
+            <>
+              <button
+                className="portal-btn portal-btn--chico"
+                disabled={subiendo}
+                onClick={() => campo.current?.click()}
+              >
+                {subiendo ? (
+                  <LoaderCircle size={14} className="portal-girando" />
+                ) : (
+                  <Upload size={14} />
+                )}
+                {subiendo ? "Subiendo…" : "Subir archivo"}
+              </button>
+              <p className="portal-subida__pie">Imágenes, video, PDF o ZIP · hasta 100 MB</p>
+            </>
+          )}
+        </div>
       ) : (
         <div className="portal-archivos">
           {items.map((item) => (
@@ -258,30 +295,22 @@ function Material({
 
       {error && <p className="portal-revision">{error}</p>}
 
-      {puedeSubir && (
+      {/* Con material ya subido, el botón va discreto debajo: la lista es lo
+          que importa, no volver a explicar los formatos. */}
+      {puedeSubir && items.length > 0 && (
         <div className="portal-check__pie">
-          <input
-            ref={campo}
-            type="file"
-            hidden
-            onChange={(e) => {
-              const archivo = e.target.files?.[0];
-              if (archivo) void subir(archivo);
-            }}
-          />
           <button
-            className="portal-btn portal-btn--chico"
+            className="portal-btn portal-btn--chico portal-btn--fantasma"
             disabled={subiendo}
             onClick={() => campo.current?.click()}
           >
             {subiendo ? (
-              <LoaderCircle size={13} className="portal-girando" />
+              <LoaderCircle size={14} className="portal-girando" />
             ) : (
-              <Upload size={13} />
+              <Upload size={14} />
             )}
-            {subiendo ? "Subiendo…" : "Subir archivo"}
+            {subiendo ? "Subiendo…" : "Subir otro"}
           </button>
-          <span className="portal-archivo__meta">Imágenes, video, PDF o ZIP. Hasta 100 MB.</span>
         </div>
       )}
     </section>
