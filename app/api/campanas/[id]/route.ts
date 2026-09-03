@@ -5,6 +5,9 @@ import { getSession } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
 import { deleteCampaign, updateCampaign } from "@/lib/store";
 import { getCampaign } from "@/lib/data";
+import { puedeEditarCampana } from "@/lib/campaign-access";
+import { registrar } from "@/lib/audit";
+import { CAMPAIGN_STATUS } from "@/lib/labels";
 
 export const dynamic = "force-dynamic";
 
@@ -35,8 +38,28 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     );
   }
 
+  const antes = await getCampaign(id);
+  if (!antes) return NextResponse.json({ error: "Campaña no encontrada." }, { status: 404 });
+  if (!puedeEditarCampana(session, antes)) {
+    return NextResponse.json({ error: "Esa campaña no es tuya." }, { status: 403 });
+  }
+
   const campaign = await updateCampaign(id, parsed.data);
   if (!campaign) return NextResponse.json({ error: "Campaña no encontrada." }, { status: 404 });
+
+  // Solo el cambio de estado va a la bitácora: renombrar o retocar una nota no
+  // es lo que alguien viene a buscar dentro de tres meses.
+  if (parsed.data.status && parsed.data.status !== antes.status) {
+    await registrar({
+      actorId: session.userId,
+      actorName: session.name,
+      action: "campana.estado",
+      entity: "campaign",
+      entityId: id,
+      entityLabel: campaign.name,
+      detail: `${CAMPAIGN_STATUS[antes.status].label} → ${CAMPAIGN_STATUS[campaign.status].label}`,
+    });
+  }
 
   revalidatePath("/campanas");
   revalidatePath(`/campanas/${id}`);
@@ -69,12 +92,22 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     );
   }
 
+  if (!puedeEditarCampana(session, campaign)) {
+    return NextResponse.json({ error: "Esa campaña no es tuya." }, { status: 403 });
+  }
+
   const { ok, sesiones } = await deleteCampaign(id);
   if (!ok) return NextResponse.json({ error: "Campaña no encontrada." }, { status: 404 });
 
-  console.info(
-    `[auditoría] campaña borrada — campaña=${id} «${campaign.name}» sesiones=${sesiones} usuario=${session.userId} (${session.email})`,
-  );
+  await registrar({
+    actorId: session.userId,
+    actorName: session.name,
+    action: "campana.borrada",
+    entity: "campaign",
+    entityId: id,
+    entityLabel: campaign.name,
+    detail: sesiones > 0 ? `Con ${sesiones} sesión${sesiones === 1 ? "" : "es"}` : "",
+  });
 
   revalidatePath("/campanas");
   revalidatePath("/sesiones");

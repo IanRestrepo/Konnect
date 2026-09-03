@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { addDeliverable } from "@/lib/store";
+import { getSession } from "@/lib/session";
+import { hasPermission } from "@/lib/permissions";
+import { getCampaign } from "@/lib/data";
+import { puedeEditarCampana } from "@/lib/campaign-access";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +36,20 @@ const schema = z.object({
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+
+  // Faltaba comprobar nada: bastaba con tener sesión para añadirle piezas a
+  // cualquier campaña. El middleware no cubre las rutas de API.
+  const session = await getSession();
+  if (!session || !hasPermission(session.permissions, "editar_campanas")) {
+    return NextResponse.json({ error: "Tu rol no permite editar campañas." }, { status: 403 });
+  }
+
+  const campana = await getCampaign(id);
+  if (!campana) return NextResponse.json({ error: "Campaña no encontrada." }, { status: 404 });
+  if (!puedeEditarCampana(session, campana)) {
+    return NextResponse.json({ error: "Esa campaña no es tuya." }, { status: 403 });
+  }
+
   const body = await request.json().catch(() => null);
   const parsed = schema.safeParse(body);
 

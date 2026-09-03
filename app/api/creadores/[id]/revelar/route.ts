@@ -3,6 +3,7 @@ import { revealBanking } from "@/lib/store";
 import { clearFailures, isLocked, registerFailure, verifyAccessCode } from "@/lib/crypto";
 import { getSession } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
+import { registrar } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
 
@@ -54,9 +55,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   clearFailures(actor);
-  console.info(
-    `[auditoría] datos bancarios revelados — creador=${id} usuario=${session.userId} (${session.email})`,
-  );
+  await registrar({
+    actorId: session.userId,
+    actorName: session.name,
+    action: "banca.revelada",
+    entity: "creator",
+    entityId: id,
+    entityLabel: revelado.banking.holder || "",
+  });
 
   return NextResponse.json({
     banking: revelado.banking,

@@ -89,9 +89,13 @@ type Linea = {
 export function NewCampaignForm({
   companies,
   creators,
+  empleados,
+  responsablePorDefecto,
 }: {
   companies: Company[];
   creators: Creator[];
+  empleados: { id: string; name: string; avatarUrl: string | null }[];
+  responsablePorDefecto: string;
 }) {
   const router = useRouter();
   const [step, setStep] = useState(0);
@@ -106,6 +110,7 @@ export function NewCampaignForm({
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [notes, setNotes] = useState("");
+  const [managerId, setManagerId] = useState(responsablePorDefecto);
 
   /** Tope de referencia, opcional. No reparte nada. */
   const [budget, setBudget] = useState("");
@@ -269,6 +274,7 @@ export function NewCampaignForm({
           startDate: startDate ? new Date(startDate).toISOString() : new Date().toISOString(),
           endDate: endDate ? new Date(endDate).toISOString() : null,
           notes: notes.trim(),
+          managerId: managerId || null,
           lineas: lineas.map((l) => ({
             creatorId: l.creatorId,
             platform: l.platform,
@@ -495,6 +501,22 @@ export function NewCampaignForm({
                       onChange={(e) => setEndDate(e.target.value)}
                     />
                   </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="manager">Responsable</Label>
+                  <Picker
+                    id="manager"
+                    value={managerId}
+                    onChange={setManagerId}
+                    options={[
+                      { id: "", label: "Sin responsable" },
+                      ...empleados.map((e) => ({ id: e.id, label: e.name })),
+                    ]}
+                  />
+                  <FieldHint>
+                    Quien la lleva. Los encargados se añaden después, desde la ficha.
+                  </FieldHint>
                 </div>
 
                 <div>

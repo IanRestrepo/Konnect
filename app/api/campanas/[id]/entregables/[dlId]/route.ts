@@ -3,6 +3,17 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requirePermission } from "@/lib/session";
 import { removeDeliverable, updateDeliverable } from "@/lib/store";
+import { registrar } from "@/lib/audit";
+import { formatMoney } from "@/lib/utils";
+import { getCampaign } from "@/lib/data";
+import { puedeEditarCampana } from "@/lib/campaign-access";
+
+/** Cómo se lee cada estado de pago en la bitácora. */
+const PAGO_LABEL: Record<string, string> = {
+  pendiente: "Marcado sin pagar",
+  aprobado: "Aprobado para pago",
+  pagado: "Marcado pagado",
+};
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +37,7 @@ export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string; dlId: string }> },
 ) {
-  await requirePermission("editar_campanas");
+  const session = await requirePermission("editar_campanas");
   const { id, dlId } = await params;
 
   const parsed = schema.safeParse(await request.json().catch(() => null));
@@ -37,9 +48,33 @@ export async function PATCH(
     );
   }
 
+  const antes = await getCampaign(id);
+  if (!antes) return NextResponse.json({ error: "Esa campaña no existe." }, { status: 404 });
+  if (!puedeEditarCampana(session, antes)) {
+    return NextResponse.json({ error: "Esa campaña no es tuya." }, { status: 403 });
+  }
+
   const campaign = await updateDeliverable(id, dlId, parsed.data);
   if (!campaign) {
     return NextResponse.json({ error: "Ese entregable no existe." }, { status: 404 });
+  }
+
+  // El estado de pago sí va a la bitácora: es dinero, y es lo que el creador
+  // ve en su portal. Publicar o despublicar una pieza no.
+  if (parsed.data.paymentStatus) {
+    const pieza = campaign.deliverables.find((d) => d.id === dlId);
+    await registrar({
+      actorId: session.userId,
+      actorName: session.name,
+      action: "pago.estado",
+      entity: "deliverable",
+      entityId: dlId,
+      entityLabel: pieza?.title ?? campaign.name,
+      detail: `${PAGO_LABEL[parsed.data.paymentStatus]} · ${formatMoney(
+        pieza?.agreedFee ?? 0,
+        campaign.currency,
+      )}`,
+    });
   }
 
   revalidatePath(`/campanas/${id}`);
@@ -53,8 +88,14 @@ export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string; dlId: string }> },
 ) {
-  await requirePermission("editar_campanas");
+  const session = await requirePermission("editar_campanas");
   const { id, dlId } = await params;
+
+  const campana = await getCampaign(id);
+  if (!campana) return NextResponse.json({ error: "Esa campaña no existe." }, { status: 404 });
+  if (!puedeEditarCampana(session, campana)) {
+    return NextResponse.json({ error: "Esa campaña no es tuya." }, { status: 403 });
+  }
 
   if (!(await removeDeliverable(id, dlId))) {
     return NextResponse.json({ error: "Ese entregable no existe." }, { status: 404 });

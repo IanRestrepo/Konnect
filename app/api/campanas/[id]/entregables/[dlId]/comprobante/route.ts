@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { requirePermission } from "@/lib/session";
 import { setDeliverableReceipt } from "@/lib/store";
 import { MAXIMO_COMPROBANTE, TIPOS_COMPROBANTE, esFallo, subirArchivo } from "@/lib/uploads";
+import { registrar } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,7 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string; dlId: string }> },
 ) {
-  await requirePermission("editar_campanas");
+  const session = await requirePermission("editar_campanas");
   const { id, dlId } = await params;
 
   const form = await request.formData().catch(() => null);
@@ -40,6 +41,16 @@ export async function POST(
     return NextResponse.json({ error: "Ese entregable no existe." }, { status: 404 });
   }
 
+  await registrar({
+    actorId: session.userId,
+    actorName: session.name,
+    action: "pago.comprobante",
+    entity: "deliverable",
+    entityId: dlId,
+    entityLabel: campaign.deliverables.find((d) => d.id === dlId)?.title ?? campaign.name,
+    detail: subido.fileName,
+  });
+
   revalidatePath(`/campanas/${id}`);
   revalidatePath("/finanzas");
   return NextResponse.json({ campaign });
@@ -50,7 +61,7 @@ export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string; dlId: string }> },
 ) {
-  await requirePermission("editar_campanas");
+  const session = await requirePermission("editar_campanas");
   const { id, dlId } = await params;
 
   const campaign = await setDeliverableReceipt(id, dlId, {
@@ -60,6 +71,15 @@ export async function DELETE(
   if (!campaign) {
     return NextResponse.json({ error: "Ese entregable no existe." }, { status: 404 });
   }
+
+  await registrar({
+    actorId: session.userId,
+    actorName: session.name,
+    action: "pago.comprobante.quitado",
+    entity: "deliverable",
+    entityId: dlId,
+    entityLabel: campaign.deliverables.find((d) => d.id === dlId)?.title ?? campaign.name,
+  });
 
   revalidatePath(`/campanas/${id}`);
   revalidatePath("/finanzas");

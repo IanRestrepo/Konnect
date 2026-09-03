@@ -103,6 +103,28 @@ export const PERMISSIONS = [
     href: null,
   },
   {
+    id: "ver_bitacora",
+    label: "Bitácora",
+    description: "Quién hizo qué y cuándo en campañas, sesiones y pagos",
+    group: "Páginas",
+    href: "/bitacora",
+  },
+  {
+    id: "asignar_campanas",
+    label: "Asignar campañas",
+    description: "Nombrar responsable y encargados de cada campaña",
+    group: "Acciones",
+    href: null,
+  },
+  {
+    id: "solo_campanas_asignadas",
+    label: "Solo sus campañas",
+    description:
+      "Restringe: quien tenga esto solo ve y edita las campañas y sesiones en las que está asignado",
+    group: "Acciones",
+    href: null,
+  },
+  {
     id: "gestionar_usuarios",
     label: "Gestionar usuarios y roles",
     description: "Crear cuentas, asignar roles y definir permisos",

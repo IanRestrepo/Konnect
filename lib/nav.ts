@@ -1,4 +1,5 @@
 import {
+  History,
   NotebookPen,
   Building2,
   FolderKanban,
@@ -27,4 +28,5 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/sesiones", label: "Sesiones", icon: FolderKanban, permission: "ver_sesiones" },
   { href: "/mensajes", label: "Mensajes", icon: Mail, permission: "ver_mensajes" },
   { href: "/finanzas", label: "Finanzas", icon: Wallet, permission: "ver_finanzas" },
+  { href: "/bitacora", label: "Bitácora", icon: History, permission: "ver_bitacora" },
 ];

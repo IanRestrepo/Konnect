@@ -4,11 +4,12 @@ import { requirePermission } from "@/lib/session";
 import { getCampaign, getCampaigns, getCreator, getCreators } from "@/lib/data";
 import { getCollabSession } from "@/lib/store";
 import { SessionDetail } from "@/app/sesiones/[id]/session-detail";
+import { puedeVerCampana, soloLoSuyo } from "@/lib/campaign-access";
 
 export const metadata = { title: "Sesión — Konnect" };
 
 export default async function SesionPage({ params }: { params: Promise<{ id: string }> }) {
-  await requirePermission("ver_sesiones");
+  const cuenta = await requirePermission("ver_sesiones");
   const { id } = await params;
 
   const session = await getCollabSession(id);
@@ -28,6 +29,16 @@ export default async function SesionPage({ params }: { params: Promise<{ id: str
     getCampaigns(),
     getCreators(),
   ]);
+
+  /**
+   * La sesión hereda el acceso de su campaña. Una sesión suelta —sin campaña,
+   * o con la campaña ya borrada— no la ve nadie con la restricción puesta: no
+   * hay a qué asignación mirar, y darla por buena sería la vía por la que se
+   * cuelan las que no le tocan.
+   */
+  if (soloLoSuyo(cuenta) && !(campaign && puedeVerCampana(cuenta, campaign))) {
+    notFound();
+  }
 
   return (
     <SessionDetail

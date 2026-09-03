@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { decrypt, encrypt } from "@/lib/crypto";
 import { codeHint, generateAccessCode, normalizeAccessCode } from "@/lib/portal";
+import { tareaLabel } from "@/lib/socials";
 import { CATEGORIAS_INICIALES } from "@/lib/labels";
 import type {
   Announcement,
@@ -386,6 +387,7 @@ function toCompany(row: CompanyRow): Company {
 
 const campaignInclude = {
   deliverables: { orderBy: { createdAt: "asc" } },
+  members: { select: { userId: true } },
 } satisfies Prisma.CampaignInclude;
 
 type CampaignRow = Prisma.CampaignGetPayload<{ include: typeof campaignInclude }>;
@@ -433,6 +435,8 @@ function toCampaign(row: CampaignRow): Campaign {
     startDate: iso(row.startDate),
     endDate: isoOrNull(row.endDate),
     notes: row.notes,
+    managerId: row.managerId,
+    memberIds: row.members.map((m) => m.userId),
     deliverables: row.deliverables.map(toDeliverable),
     createdAt: iso(row.createdAt),
   };
@@ -1032,10 +1036,17 @@ export async function createCampaign(
       startDate,
       endDate: toDate(input.endDate),
       notes: input.notes ?? "",
+      managerId: input.managerId || null,
       deliverables: {
         create: (input.deliverables ?? []).map((d) => ({
           id: d.id || newId("dl"),
           ...deliverableData(d),
+        })),
+      },
+      members: {
+        create: (input.memberIds ?? []).map((userId) => ({
+          id: newId("cm"),
+          userId,
         })),
       },
     },
@@ -1043,6 +1054,44 @@ export async function createCampaign(
   });
 
   return toCampaign(row);
+}
+
+/**
+ * Reemplaza el responsable y los encargados de una campaña.
+ *
+ * Los encargados llegan enteros y se reescriben: quitar a alguien en la
+ * pantalla tiene que quitarle el acceso de verdad, no dejarlo en la base.
+ */
+export async function setCampaignTeam(
+  campaignId: string,
+  team: { managerId: string | null; memberIds: string[] },
+): Promise<Campaign | null> {
+  const existe = await prisma.campaign.findUnique({
+    where: { id: campaignId },
+    select: { id: true },
+  });
+  if (!existe) return null;
+
+  // El responsable no necesita estar además como encargado: ya alcanza la
+  // campaña por serlo, y duplicarlo lo pintaría dos veces en la ficha.
+  const encargados = [...new Set(team.memberIds)].filter((id) => id !== team.managerId);
+
+  await prisma.$transaction([
+    prisma.campaign.update({
+      where: { id: campaignId },
+      data: { managerId: team.managerId },
+    }),
+    prisma.campaignMember.deleteMany({ where: { campaignId } }),
+    prisma.campaignMember.createMany({
+      data: encargados.map((userId) => ({ id: newId("cm"), campaignId, userId })),
+    }),
+  ]);
+
+  const row = await prisma.campaign.findUnique({
+    where: { id: campaignId },
+    include: campaignInclude,
+  });
+  return row ? toCampaign(row) : null;
 }
 
 export async function updateCampaign(
@@ -1396,6 +1445,7 @@ function toRequirement(row: SessionRow["requirements"][number]): SessionRequirem
     steps: row.steps,
     position: row.position,
     required: row.required,
+    deliverableId: row.deliverableId,
     status: row.status,
     url: row.url,
     notes: row.notes,
@@ -1976,6 +2026,43 @@ export async function clearPinFailures(accessId: string): Promise<void> {
 
 /* ---------------- Peticiones de la sesión ---------------- */
 
+/**
+ * Siembra el checklist de una sesión con las piezas pactadas en la campaña.
+ *
+ * Cada entregable del creador nace como una petición atada a él, así que lo
+ * que se le encargó y lo que se le pide entregar son lo mismo y no dos listas
+ * que alguien tiene que mantener a mano. Al aprobar la entrega, el entregable
+ * se rellena solo.
+ */
+export async function seedRequirementsFromCampaign(
+  sessionId: string,
+  campaignId: string,
+  creatorId: string,
+): Promise<void> {
+  const piezas = await prisma.deliverable.findMany({
+    where: { campaignId, creatorId },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, type: true, platform: true },
+  });
+  if (piezas.length === 0) return;
+
+  await prisma.sessionRequirement.createMany({
+    data: piezas.map((p, i) => ({
+      id: newId("rq"),
+      sessionId,
+      deliverableId: p.id,
+      kind: "entregable" as const,
+      // Se nombra como se llama en su red: «Mención dentro de un video», no
+      // «integracion», que no le dice nada a quien lo lee en el portal.
+      title: tareaLabel(p.platform as SocialPlatform, p.type),
+      instructions: "Pega el enlace cuando esté publicado.",
+      steps: [],
+      required: true,
+      position: i,
+    })),
+  });
+}
+
 export async function addRequirement(
   sessionId: string,
   input: {
@@ -1984,6 +2071,7 @@ export async function addRequirement(
     instructions?: string;
     steps?: string[];
     required?: boolean;
+    deliverableId?: string | null;
   },
 ): Promise<CollabSession | null> {
   const existe = await prisma.collabSession.findUnique({
@@ -2007,6 +2095,7 @@ export async function addRequirement(
       instructions: input.instructions ?? "",
       steps: input.steps ?? [],
       required: input.required ?? true,
+      deliverableId: input.deliverableId ?? null,
       position: (ultimo?.position ?? -1) + 1,
     },
   });
@@ -2093,8 +2182,25 @@ export async function reviewRequirement(
 
   const req = await prisma.sessionRequirement.findUnique({
     where: { id: requirementId },
-    select: { title: true },
+    select: { title: true, url: true, deliverableId: true },
   });
+
+  // Aprobar la entrega la vuelca en la campaña. Antes el enlace se quedaba en
+  // la sesión y alguien tenía que copiarlo a mano al entregable: mientras no lo
+  // hacía, la campaña decía que la pieza seguía pendiente aunque estuviera
+  // publicada y aprobada.
+  if (input.aprobado && req?.deliverableId && req.url) {
+    await prisma.deliverable.updateMany({
+      where: { id: req.deliverableId },
+      data: {
+        status: "publicado",
+        videoUrl: req.url,
+        // El título de la petición es lo que la agencia le puso al encargo;
+        // sirve hasta que las métricas traigan el de verdad.
+        title: req.title,
+      },
+    });
+  }
   await logSessionEvent(sessionId, {
     kind: input.aprobado ? "aprobacion" : "cambios",
     message: input.aprobado

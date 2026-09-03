@@ -187,7 +187,28 @@ export type Campaign = {
   startDate: string;
   endDate: string | null;
   notes: string;
+  /** Quién la lleva. Null = sin responsable asignado. */
+  managerId: string | null;
+  /** Empleados asignados, además del responsable. */
+  memberIds: string[];
   deliverables: Deliverable[];
+  createdAt: string;
+};
+
+/* ---------------- Bitácora ---------------- */
+
+/** Un movimiento registrado: quién hizo qué, sobre qué y cuándo. */
+export type AuditEntry = {
+  id: string;
+  actorId: string | null;
+  actorName: string;
+  /** Llave estable: "campana.borrada", "pago.marcado"… */
+  action: string;
+  entity: string;
+  entityId: string;
+  /** Cómo se llamaba en el momento del hecho. */
+  entityLabel: string;
+  detail: string;
   createdAt: string;
 };
 
@@ -343,6 +364,8 @@ export type SessionRequirement = {
   steps: string[];
   position: number;
   required: boolean;
+  /** Pieza de la campaña que completa. Aprobarla la rellena sola. */
+  deliverableId: string | null;
   status: RequirementStatus;
   url: string | null;
   notes: string;

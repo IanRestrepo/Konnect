@@ -367,8 +367,14 @@ model Campaign {
   endDate   DateTime?
   notes     String            @default("")
 
+  /// Quién lleva la campaña. Es una persona, no un equipo: cuando el cliente
+  /// pregunta hay que saber a quién se le pregunta.
+  managerId String?
+  manager   User?   @relation("CampaignManager", fields: [managerId], references: [id], onDelete: SetNull)
+
   deliverables Deliverable[]
   sessions     CollabSession[]
+  members      CampaignMember[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -376,6 +382,27 @@ model Campaign {
   @@index([companyId])
   @@index([status])
   @@index([createdAt])
+  @@index([managerId])
+}
+
+/// Empleado asignado a una campaña.
+///
+/// Solo importa para las cuentas con el permiso `solo_campanas_asignadas`: sin
+/// él la asignación es informativa —quién anda en qué— y todo el mundo sigue
+/// viendo todas las campañas, como siempre. Se hizo así para que activar esto
+/// no le quite el acceso a nadie de golpe.
+model CampaignMember {
+  id         String   @id
+  campaignId String
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([campaignId, userId])
+  @@index([campaignId])
+  @@index([userId])
 }
 
 model Deliverable {
@@ -498,10 +525,46 @@ model User {
   active       Boolean   @default(true)
   lastLoginAt  DateTime?
 
+  /// Campañas que lleva y campañas en las que participa.
+  managedCampaigns Campaign[]       @relation("CampaignManager")
+  campaignMembers  CampaignMember[]
+
   createdAt DateTime @default(now())
 
   @@index([roleId])
   @@index([createdAt])
+}
+
+/// Bitácora de movimientos: quién hizo qué y cuándo.
+///
+/// `SensitiveAccessLog` ya guardaba las revelaciones de datos bancarios y
+/// `SessionEvent` las novedades de cada sesión, pero no había forma de mirar
+/// la agencia entera y responder «¿quién cerró esta campaña?». Se registra lo
+/// que mueve dinero o cambia el estado de algo, no cada clic: un registro que
+/// lo guarda todo no lo lee nadie.
+model AuditLog {
+  id String @id @default(cuid())
+
+  /// Quién. El nombre se copia aquí porque la cuenta puede borrarse después y
+  /// «lo hizo el usuario u_3f9» no le sirve a nadie dentro de seis meses.
+  actorId   String?
+  actorName String
+
+  /// Qué pasó, en llave estable: "campana.borrada", "pago.marcado"…
+  action String
+  /// Sobre qué: "campaign", "creator", "session", "deliverable".
+  entity   String
+  entityId String
+  /// Cómo se llamaba en ese momento, por lo mismo que `actorName`.
+  entityLabel String @default("")
+  /// Detalle legible, ya redactado. Sale tal cual en la pantalla.
+  detail String @default("")
+
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([entity, entityId])
+  @@index([actorId])
 }
 
 /// Ajustes de la aplicación. Una sola fila, con id "default".
@@ -726,6 +789,15 @@ model SessionRequirement {
   steps        String[]
   position     Int             @default(0)
   required     Boolean         @default(true)
+
+  /// Pieza de la campaña que esta petición completa.
+  ///
+  /// Sin esto, lo que el creador entregaba se quedaba en la sesión y alguien
+  /// tenía que copiar el enlace a mano a la campaña; con el enlace puesto,
+  /// aprobar la petición rellena el entregable solo. Es texto y no una
+  /// relación porque la sesión sobrevive a la campaña —su `campaignId` está en
+  /// `SetNull`— y una clave foránea la arrastraría al borrarla.
+  deliverableId String?
 
   status      RequirementStatus @default(pendiente)
   /// Lo que entrega el creador: un enlace por ahora.

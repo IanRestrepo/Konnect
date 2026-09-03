@@ -1,8 +1,16 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { createCampaign, createCollabSession, newId, read } from "@/lib/store";
+import {
+  createCampaign,
+  createCollabSession,
+  newId,
+  read,
+  seedRequirementsFromCampaign,
+} from "@/lib/store";
 import { IMPORTE_MAXIMO } from "@/lib/pricing";
+import { getSession } from "@/lib/session";
+import { hasPermission } from "@/lib/permissions";
 import type { Deliverable } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -66,11 +74,22 @@ const schema = z.object({
   endDate: z.string().nullable().default(null),
   notes: z.string().default(""),
   lineas: z.array(linea).default([]),
+  /** Quién lleva la campaña. */
+  managerId: z.string().nullable().default(null),
+  /** Empleados asignados, además del responsable. */
+  memberIds: z.array(z.string()).default([]),
   /** Crear la sesión de entregas junto con la campaña. */
   crearSesion: z.boolean().default(true),
 });
 
 export async function POST(request: Request) {
+  // Faltaba: cualquier cuenta con sesión podía crear campañas, porque el
+  // middleware solo cubre las rutas de página y aquí no se comprobaba nada.
+  const session = await getSession();
+  if (!session || !hasPermission(session.permissions, "editar_campanas")) {
+    return NextResponse.json({ error: "Tu rol no permite crear campañas." }, { status: 403 });
+  }
+
   const body = await request.json().catch(() => null);
   const parsed = schema.safeParse(body);
 
@@ -131,9 +150,9 @@ export async function POST(request: Request) {
     const unicos = [...new Set(lineas.map((l) => l.creatorId))];
 
     await Promise.all(
-      unicos.map((creatorId) => {
+      unicos.map(async (creatorId) => {
         const creador = creators.find((c) => c.id === creatorId);
-        return createCollabSession({
+        const sesion = await createCollabSession({
           name: `${campaign.name} · ${creador?.name ?? "Creador"}`,
           campaignId: campaign.id,
           creatorId,
@@ -141,6 +160,9 @@ export async function POST(request: Request) {
             { role: "creador", label: creador?.name ?? "Creador", canUpload: true },
           ],
         });
+        // El checklist nace de lo pactado: lo que se le encargó y lo que se le
+        // pide entregar son lo mismo, y aprobarlo rellena el entregable solo.
+        await seedRequirementsFromCampaign(sesion.id, campaign.id, creatorId);
       }),
     );
   }

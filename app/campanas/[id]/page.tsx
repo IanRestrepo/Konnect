@@ -20,7 +20,9 @@ import {
   getCompany,
   getCreators,
 } from "@/lib/data";
-import { listSessions } from "@/lib/store";
+import { listSessions, listUsers } from "@/lib/store";
+import { puedeVerCampana } from "@/lib/campaign-access";
+import { CampaignTeam } from "@/components/campaigns/campaign-team";
 import { LinkedNotes } from "@/components/notes/linked-notes";
 import { DuplicateCampaignButton } from "@/components/campaigns/duplicate-campaign";
 import { DeleteCampaignButton } from "@/components/campaigns/delete-campaign";
@@ -29,16 +31,25 @@ import { CAMPAIGN_OBJECTIVE } from "@/lib/labels";
 import { formatCompact, formatDate, formatMoney } from "@/lib/utils";
 
 export default async function CampanaPage({ params }: { params: Promise<{ id: string }> }) {
-  await requirePermission("ver_campanas");
+  const session = await requirePermission("ver_campanas");
   const { id } = await params;
   const campaign = await getCampaign(id);
   if (!campaign) notFound();
+  // Una campaña que no es suya no existe para él: 404 y no 403, que ya
+  // confirmaría que la campaña está ahí.
+  if (!puedeVerCampana(session, campaign)) notFound();
 
-  const [company, creators, todasSesiones] = await Promise.all([
+  const [company, creators, todasSesiones, usuarios] = await Promise.all([
     getCompany(campaign.companyId),
     getCreators(),
     listSessions(),
+    listUsers(),
   ]);
+  // Solo las cuentas activas: asignarle una campaña a alguien que ya no entra
+  // deja la ficha diciendo que la lleva quien no la lleva.
+  const empleados = usuarios
+    .filter((u) => u.active)
+    .map((u) => ({ id: u.id, name: u.name, avatarUrl: u.avatarUrl }));
   const sessions = todasSesiones.filter((s) => s.campaignId === campaign.id);
   const metrics = campaignMetrics(campaign);
   const pace = campaignTotals(campaign).budgetUsedPct ?? 0;
@@ -252,6 +263,13 @@ export default async function CampanaPage({ params }: { params: Promise<{ id: st
               {campaign.notes || "Sin apuntes."}
             </p>
           </Card>
+
+          <CampaignTeam
+            campaignId={campaign.id}
+            managerId={campaign.managerId}
+            memberIds={campaign.memberIds}
+            empleados={empleados}
+          />
 
           <LinkedNotes campaignId={campaign.id} />
         </div>
