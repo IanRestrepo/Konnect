@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { ViewsChart, type ChartPoint } from "@/components/campaigns/views-chart";
 import { DeliverablesSection } from "@/components/campaigns/deliverables-section";
-import { CampaignStatusControl } from "@/components/campaigns/campaign-status-control";
+import { CampaignSwitch } from "@/components/campaigns/campaign-switch";
 import { EditCampaignButton } from "@/components/campaigns/edit-campaign-dialog";
 import {
   campaignMetrics,
@@ -27,7 +27,7 @@ import { LinkedNotes } from "@/components/notes/linked-notes";
 import { DuplicateCampaignButton } from "@/components/campaigns/duplicate-campaign";
 import { DeleteCampaignButton } from "@/components/campaigns/delete-campaign";
 import { CampaignMetrics, type MetricRow } from "@/components/campaigns/campaign-metrics";
-import { CAMPAIGN_OBJECTIVE } from "@/lib/labels";
+import { CAMPAIGN_OBJECTIVE, CAMPAIGN_STATUS } from "@/lib/labels";
 import { formatCompact, formatDate, formatMoney } from "@/lib/utils";
 
 export default async function CampanaPage({ params }: { params: Promise<{ id: string }> }) {
@@ -51,6 +51,7 @@ export default async function CampanaPage({ params }: { params: Promise<{ id: st
     .filter((u) => u.active)
     .map((u) => ({ id: u.id, name: u.name, avatarUrl: u.avatarUrl }));
   const sessions = todasSesiones.filter((s) => s.campaignId === campaign.id);
+  const status = CAMPAIGN_STATUS[campaign.status];
   const metrics = campaignMetrics(campaign);
   const pace = campaignTotals(campaign).budgetUsedPct ?? 0;
 
@@ -120,8 +121,8 @@ export default async function CampanaPage({ params }: { params: Promise<{ id: st
           }
         />
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          {/* El control ya pinta el estado: la insignia suelta lo duplicaba. */}
-          <CampaignStatusControl campaignId={campaign.id} status={campaign.status} />
+          <CampaignSwitch campaignId={campaign.id} status={campaign.status} />
+          <Badge tone={status.tone}>{status.label}</Badge>
           <Badge plain>
             {formatDate(campaign.startDate)} — {campaign.endDate ? formatDate(campaign.endDate) : "abierta"}
           </Badge>

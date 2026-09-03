@@ -181,6 +181,7 @@ export function EditCampaignButton({ campaign }: { campaign: Campaign }) {
               <option value="activa">Activa</option>
               <option value="pausada">Pausada</option>
               <option value="finalizada">Finalizada</option>
+              <option value="cancelada">Cancelada</option>
             </Select>
           </div>
 
