@@ -97,6 +97,7 @@ export function SessionDetail({
   const [error, setError] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const [copiado, setCopiado] = useState<string | null>(null);
+  const [trayendo, setTrayendo] = useState(false);
 
   const [itemOpen, setItemOpen] = useState(false);
   const [item, setItem] = useState<MaterialDraft>({ ...MATERIAL_VACIO });
@@ -146,6 +147,22 @@ export function SessionDetail({
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+
+  /**
+   * Trae al checklist las piezas pactadas en la campaña.
+   *
+   * Las campañas nuevas lo hacen solas al crearse; esto es para las de antes.
+   * Se puede pulsar dos veces: solo entra lo que aún no está.
+   */
+  async function traerDelAcuerdo() {
+    setTrayendo(true);
+    await llamar(
+      `/api/sesiones/${session.id}/peticiones/acuerdo`,
+      { method: "POST" },
+      "No se pudieron traer las piezas del acuerdo.",
+    );
+    setTrayendo(false);
+  }
 
   /** Aprueba o pide cambios sobre lo que el creador entregó. */
   async function revisar(requirementId: string, accion: "aprobar" | "cambios", reviewNotes = "") {
@@ -292,10 +309,25 @@ export function SessionDetail({
             }
             action={
               puedeEditar && session.requirements.length > 0 ? (
-                <Button variant="secondary" size="sm" onClick={() => setPeticionOpen(true)}>
-                  <Plus size={15} />
-                  Añadir
-                </Button>
+                <span className="flex items-center gap-1.5">
+                  {/* Para las campañas anteriores a esto, que se quedaron sin
+                      checklist. No duplica: solo trae lo que aún no está. */}
+                  {session.campaignId && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={traerDelAcuerdo}
+                      disabled={trayendo}
+                    >
+                      {trayendo && <LoaderCircle size={13} className="animate-spin" />}
+                      Traer del acuerdo
+                    </Button>
+                  )}
+                  <Button variant="secondary" size="sm" onClick={() => setPeticionOpen(true)}>
+                    <Plus size={15} />
+                    Añadir
+                  </Button>
+                </span>
               ) : undefined
             }
           />
@@ -307,10 +339,18 @@ export function SessionDetail({
               description="Define qué tiene que entregar el creador. Le aparecerá como una lista de casillas en su portal."
               action={
                 puedeEditar && (
-                  <Button variant="accent" onClick={() => setPeticionOpen(true)}>
-                    <Plus size={16} />
-                    Crear petición
-                  </Button>
+                  <span className="flex flex-wrap items-center justify-center gap-2">
+                    {session.campaignId && (
+                      <Button variant="secondary" onClick={traerDelAcuerdo} disabled={trayendo}>
+                        {trayendo && <LoaderCircle size={14} className="animate-spin" />}
+                        Traer del acuerdo
+                      </Button>
+                    )}
+                    <Button variant="accent" onClick={() => setPeticionOpen(true)}>
+                      <Plus size={16} />
+                      Crear petición
+                    </Button>
+                  </span>
                 )
               }
             />

@@ -65,10 +65,7 @@ export function SocialsPanel({
   }
 
   return (
-    // La tarjeta recorta lo que se sale de ella, y la lista del desplegable se
-    // sale por abajo. Mientras se edita se deja asomar; el resto del tiempo
-    // vuelve a recortar, que es lo que mantiene el radio limpio.
-    <Card style={editando ? { overflow: "visible" } : undefined}>
+    <Card>
       <CardHeader>
         <CardTitle>Redes sociales</CardTitle>
         {puedeEditar &&

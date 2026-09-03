@@ -3,7 +3,12 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { PORTAL_COOKIE, readPortalToken } from "@/lib/portal";
-import { submitRequirement } from "@/lib/store";
+import {
+  applyDeliveryToDeliverable,
+  requirementDeliverableId,
+  submitRequirement,
+} from "@/lib/store";
+import { fetchVideo } from "@/lib/youtube";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +47,39 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   if (!actualizada) {
     return NextResponse.json({ error: "Esa petición ya no existe." }, { status: 404 });
+  }
+
+  /**
+   * La entrega se vuelca en la pieza de la campaña: la fila deja de decir
+   * «Pendiente de publicar» y pasa a ser el video.
+   *
+   * Los datos del video son un extra, no un requisito: si no hay clave de
+   * YouTube, o el enlace es de otra red, se guarda el enlace y ya está.
+   * Reventar la entrega del creador porque una API de terceros no respondió
+   * sería cambiarle su problema por el nuestro.
+   */
+  const deliverableId = await requirementDeliverableId(id, parsed.data.requirementId);
+  if (deliverableId) {
+    let video: Awaited<ReturnType<typeof fetchVideo>> | null = null;
+    try {
+      video = await fetchVideo(parsed.data.url);
+    } catch {
+      // Ni es de YouTube ni se pudo leer: nos quedamos con el enlace.
+    }
+
+    await applyDeliveryToDeliverable(deliverableId, {
+      url: parsed.data.url,
+      videoId: video?.videoId ?? null,
+      title: video?.title ?? null,
+      thumbnail: video?.thumbnail ?? null,
+      publishedAt: video?.publishedAt ?? null,
+      durationSeconds: video?.durationSeconds ?? null,
+      views: video?.views ?? null,
+      likes: video?.likes ?? null,
+      comments: video?.comments ?? null,
+    });
+
+    revalidatePath("/campanas");
   }
 
   revalidatePath(`/portal/${id}`);

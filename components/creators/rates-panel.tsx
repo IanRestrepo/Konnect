@@ -149,8 +149,7 @@ export function RatesPanel({
   }
 
   return (
-    // El desplegable propio se sale de la tarjeta; sin esto lo cortaría.
-    <Card style={editando ? { overflow: "visible" } : undefined}>
+    <Card>
       <CardHeader>
         <CardTitle>Precio base por red</CardTitle>
         <div className="flex items-center gap-1.5">

@@ -2038,16 +2038,34 @@ export async function seedRequirementsFromCampaign(
   sessionId: string,
   campaignId: string,
   creatorId: string,
-): Promise<void> {
+): Promise<number> {
   const piezas = await prisma.deliverable.findMany({
     where: { campaignId, creatorId },
     orderBy: { createdAt: "asc" },
     select: { id: true, type: true, platform: true },
   });
-  if (piezas.length === 0) return;
+  if (piezas.length === 0) return 0;
+
+  // Se puede llamar más de una vez: las campañas de antes de esto no tienen
+  // checklist, y traerlo dos veces duplicaría las peticiones. Solo entran las
+  // piezas que todavía no tienen la suya.
+  const yaAtadas = await prisma.sessionRequirement.findMany({
+    where: { sessionId, deliverableId: { in: piezas.map((p) => p.id) } },
+    select: { deliverableId: true },
+  });
+  const atadas = new Set(yaAtadas.map((r) => r.deliverableId));
+  const nuevas = piezas.filter((p) => !atadas.has(p.id));
+  if (nuevas.length === 0) return 0;
+
+  const ultimo = await prisma.sessionRequirement.findFirst({
+    where: { sessionId },
+    orderBy: { position: "desc" },
+    select: { position: true },
+  });
+  const desde = (ultimo?.position ?? -1) + 1;
 
   await prisma.sessionRequirement.createMany({
-    data: piezas.map((p, i) => ({
+    data: nuevas.map((p, i) => ({
       id: newId("rq"),
       sessionId,
       deliverableId: p.id,
@@ -2058,9 +2076,11 @@ export async function seedRequirementsFromCampaign(
       instructions: "Pega el enlace cuando esté publicado.",
       steps: [],
       required: true,
-      position: i,
+      position: desde + i,
     })),
   });
+
+  return nuevas.length;
 }
 
 export async function addRequirement(
@@ -2133,6 +2153,72 @@ export async function removeRequirement(
 }
 
 /** El creador entrega: pasa a «enviado» y queda pendiente de revisión. */
+/** A qué pieza de la campaña apunta esta petición, si apunta a alguna. */
+export async function requirementDeliverableId(
+  sessionId: string,
+  requirementId: string,
+): Promise<string | null> {
+  const req = await prisma.sessionRequirement.findFirst({
+    where: { id: requirementId, sessionId },
+    select: { deliverableId: true },
+  });
+  return req?.deliverableId ?? null;
+}
+
+/**
+ * Vuelca en la pieza de la campaña lo que el creador acaba de entregar.
+ *
+ * La fila deja de decir «Pendiente de publicar» y pasa a ser el video: es el
+ * momento en que la campaña se entera de que el trabajo llegó, sin que nadie
+ * copie el enlace a mano.
+ *
+ * Queda en `en_revision` y no en `publicado` a propósito: entregarlo lo dice
+ * el creador, darlo por bueno lo dice la agencia, y son dos cosas distintas.
+ * Al aprobar la petición pasa a publicado.
+ *
+ * Los datos del video llegan ya resueltos desde la ruta: `lib/youtube` importa
+ * de aquí, así que pedirlos en este archivo cerraría un ciclo de importación.
+ */
+export async function applyDeliveryToDeliverable(
+  deliverableId: string,
+  entrega: {
+    url: string;
+    videoId?: string | null;
+    title?: string | null;
+    thumbnail?: string | null;
+    publishedAt?: string | null;
+    durationSeconds?: number | null;
+    views?: number | null;
+    likes?: number | null;
+    comments?: number | null;
+  },
+): Promise<void> {
+  const tieneMetricas = entrega.views !== null && entrega.views !== undefined;
+
+  await prisma.deliverable.updateMany({
+    where: { id: deliverableId },
+    data: {
+      status: "en_revision",
+      videoUrl: entrega.url,
+      // Lo que no se pudo leer se deja como estaba: sin clave de YouTube, o
+      // con un enlace que no es de YouTube, al menos queda el enlace.
+      ...(entrega.videoId ? { videoId: entrega.videoId } : {}),
+      ...(entrega.title ? { title: entrega.title } : {}),
+      ...(entrega.thumbnail ? { thumbnail: entrega.thumbnail } : {}),
+      ...(entrega.publishedAt ? { publishedAt: new Date(entrega.publishedAt) } : {}),
+      ...(entrega.durationSeconds ? { durationSeconds: entrega.durationSeconds } : {}),
+      ...(tieneMetricas
+        ? {
+            views: BigInt(Math.trunc(entrega.views!)),
+            likes: entrega.likes ?? null,
+            comments: entrega.comments ?? null,
+            metricsUpdatedAt: new Date(),
+          }
+        : {}),
+    },
+  });
+}
+
 export async function submitRequirement(
   sessionId: string,
   requirementId: string,
@@ -2185,20 +2271,13 @@ export async function reviewRequirement(
     select: { title: true, url: true, deliverableId: true },
   });
 
-  // Aprobar la entrega la vuelca en la campaña. Antes el enlace se quedaba en
-  // la sesión y alguien tenía que copiarlo a mano al entregable: mientras no lo
-  // hacía, la campaña decía que la pieza seguía pendiente aunque estuviera
-  // publicada y aprobada.
-  if (input.aprobado && req?.deliverableId && req.url) {
+  // La pieza ya se rellenó cuando el creador entregó; aquí solo se confirma.
+  // Pedir cambios la devuelve a pendiente: dar por publicado algo que se
+  // rechazó es lo que hacía que la campaña mintiera en la otra dirección.
+  if (req?.deliverableId) {
     await prisma.deliverable.updateMany({
       where: { id: req.deliverableId },
-      data: {
-        status: "publicado",
-        videoUrl: req.url,
-        // El título de la petición es lo que la agencia le puso al encargo;
-        // sirve hasta que las métricas traigan el de verdad.
-        title: req.title,
-      },
+      data: { status: input.aprobado ? "publicado" : "pendiente" },
     });
   }
   await logSessionEvent(sessionId, {

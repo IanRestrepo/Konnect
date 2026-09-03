@@ -82,7 +82,7 @@ export function CampaignTeam({
   }
 
   return (
-    <Card style={editando ? { overflow: "visible" } : undefined}>
+    <Card>
       <CardHeader>
         <CardTitle>Equipo</CardTitle>
         {puedeAsignar &&

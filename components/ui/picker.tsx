@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Check, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -13,6 +14,12 @@ import { cn } from "@/lib/utils";
  *
  * Mantiene lo que el nativo hace bien: se abre con Enter o flechas, se navega
  * con el teclado, se cierra con Escape y al hacer clic fuera.
+ *
+ * La lista se dibuja sobre el documento y no dentro del campo. Las tarjetas
+ * llevan `overflow-hidden` para respetar su radio, así que una lista absoluta
+ * dentro de una tarjeta se corta por abajo por mucho `z-index` que tenga —y
+ * eso pasaba en la mitad de los formularios—. Colocarla contra la posición
+ * real del disparador es lo único que lo arregla en todos los sitios a la vez.
  */
 export function Picker<T extends string>({
   value,
@@ -36,6 +43,8 @@ export function Picker<T extends string>({
   const listaId = useId();
   const caja = useRef<HTMLDivElement>(null);
   const lista = useRef<HTMLDivElement>(null);
+  /** Dónde y con qué ancho se pinta la lista, medida contra el disparador. */
+  const [sitio, setSitio] = useState<{ top: number; left: number; width: number } | null>(null);
 
   const elegido = options.find((o) => o.id === value);
 
@@ -48,11 +57,50 @@ export function Picker<T extends string>({
   useEffect(() => {
     if (!open) return;
     const fuera = (e: MouseEvent) => {
-      if (caja.current && !caja.current.contains(e.target as Node)) setOpen(false);
+      // La lista ya no cuelga del campo, así que hay que preguntarle a las
+      // dos: sin esto, el `mousedown` sobre una opción contaba como clic
+      // fuera, cerraba la lista y el clic se perdía sin elegir nada.
+      const dentro =
+        caja.current?.contains(e.target as Node) || lista.current?.contains(e.target as Node);
+      if (!dentro) setOpen(false);
     };
     document.addEventListener("mousedown", fuera);
     return () => document.removeEventListener("mousedown", fuera);
   }, [open]);
+
+  /**
+   * Coloca la lista contra la posición real del campo en pantalla. Se mide en
+   * `useLayoutEffect` para no pintar un fotograma descolocado, y se vuelve a
+   * medir al desplazar o redimensionar: como vive fuera del campo, no lo sigue
+   * sola.
+   */
+  useLayoutEffect(() => {
+    if (!open || !caja.current) return;
+
+    function medir() {
+      const t = caja.current?.getBoundingClientRect();
+      if (!t) return;
+
+      const margen = 8;
+      const alto = lista.current?.getBoundingClientRect().height ?? 0;
+
+      // Si no cabe debajo pero sí encima, se voltea; es lo que pasa con los
+      // campos del final de un formulario largo.
+      const cabeDebajo = t.bottom + 6 + alto <= window.innerHeight - margen;
+      const cabeEncima = t.top - 6 - alto >= margen;
+      const top = cabeDebajo || !cabeEncima ? t.bottom + 6 : t.top - alto - 6;
+
+      setSitio({ top, left: t.left, width: t.width });
+    }
+
+    medir();
+    window.addEventListener("scroll", medir, true);
+    window.addEventListener("resize", medir);
+    return () => {
+      window.removeEventListener("scroll", medir, true);
+      window.removeEventListener("resize", medir);
+    };
+  }, [open, options.length]);
 
   // Mantiene a la vista la opción marcada al navegar con el teclado.
   useEffect(() => {
@@ -122,14 +170,23 @@ export function Picker<T extends string>({
         />
       </button>
 
-      {open && (
-        <div
-          ref={lista}
-          id={listaId}
-          role="listbox"
-          className="absolute z-50 mt-1.5 max-h-64 w-full overflow-y-auto rounded-[var(--r-control)] border border-[var(--line)] bg-[var(--surface)] p-1 shadow-[var(--shadow-pop)]"
-        >
-          {options.length === 0 ? (
+      {open &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div
+            ref={lista}
+            id={listaId}
+            role="listbox"
+            // `fixed` y no `absolute`: al vivir fuera del campo, se posiciona
+            // contra la ventana con las medidas que tomó `medir`.
+            style={{
+              top: sitio?.top ?? -9999,
+              left: sitio?.left ?? -9999,
+              width: sitio?.width,
+            }}
+            className="animate-layer fixed z-[100] max-h-64 overflow-y-auto rounded-[var(--r-control)] border border-[var(--line)] bg-[var(--surface)] p-1 shadow-[var(--shadow-pop)]"
+          >
+            {options.length === 0 ? (
             <p className="px-2.5 py-3 text-center text-[12.5px] text-[var(--text-subtle)]">
               Nada que elegir
             </p>
@@ -165,8 +222,9 @@ export function Picker<T extends string>({
               );
             })
           )}
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
