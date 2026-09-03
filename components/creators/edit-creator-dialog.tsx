@@ -7,7 +7,7 @@ import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select, Textarea } from "@/components/ui/field";
 import { useCan } from "@/components/session-provider";
-import { CATEGORIES, CURRENCIES } from "@/lib/labels";
+import { CURRENCIES } from "@/lib/labels";
 import type { Creator } from "@/lib/types";
 
 /**
@@ -48,7 +48,14 @@ function desde(creator: Creator): Campos {
 }
 
 /** Botón de la cabecera de la ficha, con su formulario de edición. */
-export function EditCreatorButton({ creator }: { creator: Creator }) {
+export function EditCreatorButton({
+  creator,
+  categories,
+}: {
+  creator: Creator;
+  /** Catálogo vivo, editable desde Configuración. */
+  categories: string[];
+}) {
   const router = useRouter();
   const can = useCan();
   const [open, setOpen] = useState(false);
@@ -167,9 +174,9 @@ export function EditCreatorButton({ creator }: { creator: Creator }) {
               onChange={(e) => set("category", e.target.value)}
             >
               {/* Una categoría vieja que ya no esté en la lista no debe perderse. */}
-              {(CATEGORIES.includes(form.category)
-                ? CATEGORIES
-                : [form.category, ...CATEGORIES]
+              {(categories.includes(form.category)
+                ? categories
+                : [form.category, ...categories]
               ).map((c) => (
                 <option key={c} value={c}>
                   {c}

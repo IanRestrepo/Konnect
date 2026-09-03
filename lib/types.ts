@@ -162,7 +162,7 @@ export type Deliverable = {
   agreedFee: number;
 };
 
-export type CampaignStatus = "borrador" | "activa" | "pausada" | "finalizada";
+export type CampaignStatus = "borrador" | "activa" | "pausada" | "finalizada" | "cancelada";
 export type CampaignObjective = "awareness" | "trafico" | "conversiones" | "lanzamiento";
 
 export type Campaign = {

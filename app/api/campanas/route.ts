@@ -48,7 +48,7 @@ const schema = z.object({
     .string({ error: "Falta el nombre de la campaña." })
     .min(1, "Falta el nombre de la campaña."),
   companyId: z.string({ error: "Selecciona un cliente." }).min(1, "Selecciona un cliente."),
-  status: z.enum(["borrador", "activa", "pausada", "finalizada"]).default("borrador"),
+  status: z.enum(["borrador", "activa", "pausada", "finalizada", "cancelada"]).default("borrador"),
   objective: z.enum(["awareness", "trafico", "conversiones", "lanzamiento"]).default("awareness"),
   currency: z.enum(["USD", "MXN", "COP", "EUR"]).default("USD"),
   /** Tope de referencia, opcional. Null = sin tope. */

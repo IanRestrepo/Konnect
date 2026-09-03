@@ -6,12 +6,11 @@ import { Download, Megaphone, Plus, SlidersHorizontal } from "lucide-react";
 import { PageTitle } from "@/components/ui/section";
 import { Segmented, SearchInput, Toolbar } from "@/components/shell/toolbar";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Table, TableWrap, Td, Th, Tr } from "@/components/ui/table";
 import { ListBox, ListRow } from "@/components/ui/list";
-import { CampaignSwitch } from "@/components/campaigns/campaign-switch";
+import { CampaignStatusControl } from "@/components/campaigns/campaign-status-control";
 import { CAMPAIGN_OBJECTIVE, CAMPAIGN_STATUS } from "@/lib/labels";
 import type { Campaign, CampaignMetrics, CampaignStatus, Company, Creator } from "@/lib/types";
 import { formatCompact, formatDate, formatMoney } from "@/lib/utils";
@@ -39,6 +38,7 @@ export function CampaignsView({ rows }: { rows: CampaignRow[] }) {
       { id: "pausada", label: "Pausadas", count: count("pausada") },
       { id: "borrador", label: "Borradores", count: count("borrador") },
       { id: "finalizada", label: "Finalizadas", count: count("finalizada") },
+      { id: "cancelada", label: "Canceladas", count: count("cancelada") },
     ];
   }, [rows]);
 
@@ -159,7 +159,6 @@ export function CampaignsView({ rows }: { rows: CampaignRow[] }) {
           {/* Teléfono y tablet: filas apiladas. La tabla pide 880px y no cabe. */}
           <ListBox className="lg:hidden">
             {filtered.map(({ campaign, metrics, company, creators }) => {
-              const status = CAMPAIGN_STATUS[campaign.status];
               return (
                 <ListRow
                   key={campaign.id}
@@ -172,9 +171,8 @@ export function CampaignsView({ rows }: { rows: CampaignRow[] }) {
                         <span className="tabular text-[13px] font-semibold">
                           {formatCompact(metrics.views)}
                         </span>
-                        <Badge tone={status.tone}>{status.label}</Badge>
                       </span>
-                      <CampaignSwitch campaignId={campaign.id} status={campaign.status} />
+                      <CampaignStatusControl campaignId={campaign.id} status={campaign.status} />
                     </span>
                   }
                 />
@@ -186,8 +184,7 @@ export function CampaignsView({ rows }: { rows: CampaignRow[] }) {
             <Table className="min-w-[880px]">
             <thead>
               <tr>
-                <Th className="w-12 pl-4" aria-label="Activa" />
-                <Th>Campaña</Th>
+                <Th className="pl-4">Campaña</Th>
                 <Th>Creadores</Th>
                 <Th>Estado</Th>
                 <Th align="right">Vistas</Th>
@@ -198,13 +195,9 @@ export function CampaignsView({ rows }: { rows: CampaignRow[] }) {
             </thead>
             <tbody>
               {filtered.map(({ campaign, metrics, company, creators }) => {
-                const status = CAMPAIGN_STATUS[campaign.status];
                 return (
                   <Tr key={campaign.id}>
                     <Td className="pl-4">
-                      <CampaignSwitch campaignId={campaign.id} status={campaign.status} />
-                    </Td>
-                    <Td>
                       <Link href={`/campanas/${campaign.id}`} className="block max-w-72">
                         <span className="block truncate text-[14px] font-semibold">
                           {campaign.name}
@@ -238,7 +231,7 @@ export function CampaignsView({ rows }: { rows: CampaignRow[] }) {
                       )}
                     </Td>
                     <Td>
-                      <Badge tone={status.tone}>{status.label}</Badge>
+                      <CampaignStatusControl campaignId={campaign.id} status={campaign.status} />
                     </Td>
                     <Td align="right" className="tabular text-[15px] font-semibold">
                       {formatCompact(metrics.views)}

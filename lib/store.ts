@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { decrypt, encrypt } from "@/lib/crypto";
 import { codeHint, generateAccessCode, normalizeAccessCode } from "@/lib/portal";
+import { CATEGORIAS_INICIALES } from "@/lib/labels";
 import type {
   Announcement,
   BankingAccount,
@@ -1067,6 +1068,30 @@ export async function updateCampaign(
   return row ? toCampaign(row) : null;
 }
 
+/**
+ * Borra una campaña con todo lo que cuelga de ella.
+ *
+ * Los entregables caen solos por la cascada del esquema. Las sesiones no: su
+ * `campaignId` está en `SetNull`, así que sobrevivirían sueltas y —esto es lo
+ * grave— con sus códigos de portal todavía válidos. Una campaña borrada no
+ * puede dejar puertas abiertas, así que se borran aquí a mano.
+ *
+ * Devuelve cuántas sesiones se llevó por delante, para poder decírselo a quien
+ * confirmó el borrado.
+ */
+export async function deleteCampaign(
+  id: string,
+): Promise<{ ok: boolean; sesiones: number }> {
+  const existe = await prisma.campaign.findUnique({ where: { id }, select: { id: true } });
+  if (!existe) return { ok: false, sesiones: 0 };
+
+  return prisma.$transaction(async (tx) => {
+    const { count: sesiones } = await tx.collabSession.deleteMany({ where: { campaignId: id } });
+    await tx.campaign.delete({ where: { id } });
+    return { ok: true, sesiones };
+  });
+}
+
 export async function addDeliverable(
   campaignId: string,
   input: Omit<Deliverable, "id">,
@@ -1633,6 +1658,58 @@ export async function setCreatorContacts(
 
   const row = await prisma.creator.findUnique({ where: { id: creatorId }, include: creatorInclude });
   return row ? toCreator(row) : null;
+}
+
+/* ---------------- Catálogo de categorías ---------------- */
+
+/**
+ * Categorías que se ofrecen al clasificar un creador.
+ *
+ * La tabla vacía significa «nunca se tocó el catálogo», no «no hay ninguna»:
+ * en ese caso se siembra con las de siempre para que una instalación recién
+ * hecha se comporte igual que antes. Que no pueda quedarse vacía lo garantiza
+ * la ruta, que rechaza guardar una lista sin nada.
+ */
+export async function listCreatorCategories(): Promise<string[]> {
+  const rows = await prisma.creatorCategory.findMany({
+    orderBy: [{ position: "asc" }, { name: "asc" }],
+  });
+  if (rows.length > 0) return rows.map((r) => r.name);
+
+  await prisma.creatorCategory.createMany({
+    data: CATEGORIAS_INICIALES.map((name, i) => ({ id: newId("cat"), name, position: i })),
+    skipDuplicates: true,
+  });
+  return [...CATEGORIAS_INICIALES];
+}
+
+/**
+ * Reemplaza el catálogo entero, en el orden recibido.
+ *
+ * Borrar una categoría de aquí no toca las fichas que la usaban: `category` es
+ * texto en el creador, no una relación. Deja de ofrecerse al elegir, y la ficha
+ * vieja sigue enseñando la suya hasta que alguien la cambie a mano.
+ */
+export async function setCreatorCategories(names: string[]): Promise<string[]> {
+  // Sin duplicados y sin distinguir mayúsculas: «Gaming» y «gaming» son una.
+  const vistas = new Set<string>();
+  const limpias = names
+    .map((n) => n.trim())
+    .filter((n) => {
+      const llave = n.toLowerCase();
+      if (!n || vistas.has(llave)) return false;
+      vistas.add(llave);
+      return true;
+    });
+
+  await prisma.$transaction([
+    prisma.creatorCategory.deleteMany({}),
+    prisma.creatorCategory.createMany({
+      data: limpias.map((name, i) => ({ id: newId("cat"), name, position: i })),
+    }),
+  ]);
+
+  return limpias;
 }
 
 /** Reemplaza los contactos de nombre libre (Discord, Telegram…) del creador. */

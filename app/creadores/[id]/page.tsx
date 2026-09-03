@@ -20,6 +20,7 @@ import { ContactsPanel } from "@/components/companies/contacts-panel";
 import { LinkedNotes } from "@/components/notes/linked-notes";
 import { EditCreatorButton } from "@/components/creators/edit-creator-dialog";
 import { creatorCampaigns, getCampaigns, getCreator } from "@/lib/data";
+import { listCreatorCategories } from "@/lib/store";
 import {
   CREATOR_STATUS,
   DELIVERABLE_STATUS,
@@ -33,7 +34,11 @@ import { formatCompact, formatMoney } from "@/lib/utils";
 export default async function CreadorPage({ params }: { params: Promise<{ id: string }> }) {
   await requirePermission("ver_creadores");
   const { id } = await params;
-  const [creator, campaigns] = await Promise.all([getCreator(id), getCampaigns()]);
+  const [creator, campaigns, categories] = await Promise.all([
+    getCreator(id),
+    getCampaigns(),
+    listCreatorCategories(),
+  ]);
   if (!creator) notFound();
 
   // Las métricas se nombran según dónde publica: un TikToker no tiene suscriptores.
@@ -83,7 +88,7 @@ export default async function CreadorPage({ params }: { params: Promise<{ id: st
                 <Button variant="secondary" size="icon-lg" aria-label="Actualizar métricas">
                   <RefreshCw size={17} strokeWidth={1.75} />
                 </Button>
-                <EditCreatorButton creator={creator} />
+                <EditCreatorButton creator={creator} categories={categories} />
               </>
             }
           />

@@ -114,6 +114,16 @@ export function NewCampaignForm({
   const [tipo, setTipo] = useState<DeliverableType>("video");
   const [categoria, setCategoria] = useState("");
   const [busqueda, setBusqueda] = useState("");
+  /**
+   * Aviso de que cambiar de red obligó a cambiar la pieza.
+   *
+   * Antes se sustituía en silencio, y ahí se perdía lo que habías pedido: al
+   * pasar por Instagram, que no admite menciones dentro de un video, un
+   * `integracion` se convertía en `short` y al volver a YouTube se quedaba en
+   * Short, porque YouTube sí los tiene. Acababas encargando un Short sin
+   * haberlo elegido nunca.
+   */
+  const [avisoTipo, setAvisoTipo] = useState<string | null>(null);
 
   const [lineas, setLineas] = useState<Linea[]>([]);
 
@@ -158,11 +168,15 @@ export function NewCampaignForm({
   );
 
   function alternar(creator: Creator) {
-    const yaEsta = lineas.some((l) => l.creatorId === creator.id && l.platform === platform);
-    if (yaEsta) {
-      setLineas((prev) =>
-        prev.filter((l) => !(l.creatorId === creator.id && l.platform === platform)),
-      );
+    // La línea se identifica también por la pieza: al mismo creador se le puede
+    // encargar un video dedicado y una mención en la misma red, y son dos
+    // acuerdos con dos precios. Sin el tipo, el segundo encargo desmarcaba el
+    // primero en vez de añadirse.
+    const mismaLinea = (l: Linea) =>
+      l.creatorId === creator.id && l.platform === platform && l.type === tipo;
+
+    if (lineas.some(mismaLinea)) {
+      setLineas((prev) => prev.filter((l) => !mismaLinea(l)));
       return;
     }
 
@@ -489,9 +503,17 @@ export function NewCampaignForm({
                           setPlatform(id);
                           setCategoria("");
                           // Un Reel no existe en Twitch: se cae a la primera
-                          // tarea que sí tenga sentido en la red elegida.
+                          // tarea que sí tenga sentido en la red elegida, pero
+                          // diciéndolo, que es lo que faltaba.
                           if (!TAREAS[id].some((t) => t.type === tipo)) {
-                            setTipo(TAREAS[id][0].type);
+                            const anterior = tareaLabel(platform, tipo);
+                            const nueva = TAREAS[id][0];
+                            setTipo(nueva.type);
+                            setAvisoTipo(
+                              `${PLATFORM_LABEL[id]} no admite «${anterior}». Se cambió a «${nueva.label}».`,
+                            );
+                          } else {
+                            setAvisoTipo(null);
                           }
                         }}
                       />
@@ -504,10 +526,17 @@ export function NewCampaignForm({
                       <Picker
                         id="tipo"
                         value={tipo}
-                        onChange={setTipo}
+                        onChange={(t) => {
+                          setTipo(t);
+                          setAvisoTipo(null);
+                        }}
                         options={TAREAS[platform].map((t) => ({ id: t.type, label: t.label }))}
                       />
-                      <FieldHint>Determina qué tarifa del creador se aplica.</FieldHint>
+                      {avisoTipo ? (
+                        <FieldHint className="text-[var(--warn)]">{avisoTipo}</FieldHint>
+                      ) : (
+                        <FieldHint>Determina qué tarifa del creador se aplica.</FieldHint>
+                      )}
                     </div>
                     <div>
                       <Label htmlFor="categoria">Categoría de contenido</Label>
@@ -550,7 +579,10 @@ export function NewCampaignForm({
                     <div className="space-y-1.5">
                       {resultados.map((creator) => {
                         const active = lineas.some(
-                          (l) => l.creatorId === creator.id && l.platform === platform,
+                          (l) =>
+                            l.creatorId === creator.id &&
+                            l.platform === platform &&
+                            l.type === tipo,
                         );
                         const precio = rateFor(creator, platform, tipo);
                         const propia = hasRateFor(creator, platform, tipo);

@@ -1,10 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { Building, Palette, Plug, Shield, ShieldCheck, Users, type LucideIcon } from "lucide-react";
+import {
+  Building,
+  Palette,
+  Plug,
+  Shield,
+  ShieldCheck,
+  Tags,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
 import { AppearancePanel } from "@/components/shell/appearance-panel";
 import { YoutubePanel } from "@/app/configuracion/youtube-panel";
 import { TeamPanel } from "@/app/configuracion/team-panel";
+import { CategoriesPanel } from "@/app/configuracion/categories-panel";
 import { PageTitle } from "@/components/ui/section";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,7 +22,14 @@ import { FieldHint, Input, Label, Select } from "@/components/ui/field";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-type TabId = "apariencia" | "usuarios" | "roles" | "seguridad" | "integraciones" | "organizacion";
+type TabId =
+  | "apariencia"
+  | "usuarios"
+  | "roles"
+  | "seguridad"
+  | "integraciones"
+  | "catalogos"
+  | "organizacion";
 
 const TABS: { id: TabId; label: string; icon: LucideIcon }[] = [
   { id: "apariencia", label: "Apariencia", icon: Palette },
@@ -20,6 +37,7 @@ const TABS: { id: TabId; label: string; icon: LucideIcon }[] = [
   { id: "roles", label: "Roles", icon: Shield },
   { id: "seguridad", label: "Seguridad", icon: ShieldCheck },
   { id: "integraciones", label: "Integraciones", icon: Plug },
+  { id: "catalogos", label: "Catálogos", icon: Tags },
   { id: "organizacion", label: "Organización", icon: Building },
 ];
 
@@ -120,6 +138,8 @@ export function SettingsView() {
         {tab === "roles" && <TeamPanel tab="roles" />}
 
         {tab === "integraciones" && <YoutubePanel />}
+
+        {tab === "catalogos" && <CategoriesPanel />}
 
         {tab === "organizacion" && (
           <Card>

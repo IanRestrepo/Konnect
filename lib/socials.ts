@@ -5,7 +5,8 @@ export const PLATFORMS: { id: SocialPlatform; label: string; placeholder: string
   { id: "youtube", label: "YouTube", placeholder: "usuario" },
   { id: "instagram", label: "Instagram", placeholder: "usuario" },
   { id: "tiktok", label: "TikTok", placeholder: "usuario" },
-  { id: "x", label: "X", placeholder: "usuario" },
+  // Sigue llamándose Twitter en media agencia: sin la palabra, nadie lo encuentra.
+  { id: "x", label: "X (Twitter)", placeholder: "usuario" },
   { id: "twitch", label: "Twitch", placeholder: "usuario" },
   { id: "kick", label: "Kick", placeholder: "usuario" },
   { id: "discord", label: "Discord", placeholder: "invitación o usuario" },

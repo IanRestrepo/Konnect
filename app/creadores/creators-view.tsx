@@ -20,9 +20,12 @@ type Filter = CreatorStatus | "todos";
 export function CreatorsView({
   creators,
   campaignCount,
+  categories,
 }: {
   creators: Creator[];
   campaignCount: Record<string, number>;
+  /** Catálogo vivo, para el alta. */
+  categories: string[];
 }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<Filter>("todos");
@@ -134,7 +137,11 @@ export function CreatorsView({
         ))
       )}
 
-      <NewCreatorDialog open={dialogOpen} onClose={() => setDialogOpen(false)} />
+      <NewCreatorDialog
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        categories={categories}
+      />
     </div>
   );
 }

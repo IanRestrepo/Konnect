@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { FieldHint, Input, InputWithIcon, Label, Select, Textarea } from "@/components/ui/field";
 import { ContactFieldsEditor } from "@/components/creators/contact-fields-editor";
 import { PaymentAccountsEditor } from "@/components/creators/payment-accounts-editor";
-import { CATEGORIES, CURRENCIES } from "@/lib/labels";
+import { CURRENCIES } from "@/lib/labels";
 import { PLATFORMS, PLATFORM_URL } from "@/lib/socials";
 import type { BankingAccount, ContactField, PaymentMethod, SocialPlatform } from "@/lib/types";
 import { cn, formatCompact } from "@/lib/utils";
@@ -29,10 +29,17 @@ type ChannelPreview = {
 };
 
 /** Las que la agencia usa a diario van primero; el resto se añaden luego. */
-const PLATAFORMAS_ALTA: SocialPlatform[] = ["youtube", "tiktok", "instagram", "twitch", "kick"];
+const PLATAFORMAS_ALTA: SocialPlatform[] = [
+  "youtube",
+  "tiktok",
+  "instagram",
+  "x",
+  "twitch",
+  "kick",
+];
 
 const EMPTY = {
-  category: CATEGORIES[0],
+  category: "",
   status: "prospecto",
   email: "",
   phone: "",
@@ -63,7 +70,16 @@ const CUENTA_INICIAL: BankingAccount[] = [
   },
 ];
 
-export function NewCreatorDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function NewCreatorDialog({
+  open,
+  onClose,
+  categories,
+}: {
+  open: boolean;
+  onClose: () => void;
+  /** Catálogo vivo, editable desde Configuración. */
+  categories: string[];
+}) {
   const router = useRouter();
   const [platform, setPlatform] = useState<SocialPlatform>("youtube");
   const [url, setUrl] = useState("");
@@ -75,7 +91,7 @@ export function NewCreatorDialog({ open, onClose }: { open: boolean; onClose: ()
   const [methods, setMethods] = useState<PaymentMethod[]>(["transferencia"]);
   const [accounts, setAccounts] = useState<BankingAccount[]>(CUENTA_INICIAL);
   const [contactFields, setContactFields] = useState<ContactField[]>([]);
-  const [form, setForm] = useState({ ...EMPTY });
+  const [form, setForm] = useState({ ...EMPTY, category: categories[0] ?? "" });
 
   const esYoutube = platform === "youtube";
   // En YouTube hace falta buscar el canal; en el resto basta con el nombre.
@@ -96,7 +112,7 @@ export function NewCreatorDialog({ open, onClose }: { open: boolean; onClose: ()
     setMethods(["transferencia"]);
     setAccounts(CUENTA_INICIAL);
     setContactFields([]);
-    setForm({ ...EMPTY });
+    setForm({ ...EMPTY, category: categories[0] ?? "" });
     onClose();
   }
 
@@ -370,7 +386,7 @@ export function NewCreatorDialog({ open, onClose }: { open: boolean; onClose: ()
                   value={form.category}
                   onChange={(e) => set("category", e.target.value)}
                 >
-                  {CATEGORIES.map((c) => (
+                  {categories.map((c) => (
                     <option key={c}>{c}</option>
                   ))}
                 </Select>

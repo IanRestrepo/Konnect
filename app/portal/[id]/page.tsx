@@ -7,7 +7,7 @@ import { getCampaign } from "@/lib/data";
 import { creatorPayout } from "@/lib/pricing";
 import { PortalGate } from "@/app/portal/[id]/portal-gate";
 import { PortalView, type PortalPago } from "@/app/portal/[id]/portal-view";
-import { DELIVERABLE_TYPE } from "@/lib/labels";
+import { tareaLabel } from "@/lib/socials";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Portal — Konnect", robots: { index: false, follow: false } };
@@ -75,7 +75,10 @@ export default async function PortalPage({ params }: { params: Promise<{ id: str
         moneda: campaign.currency,
         estado,
         piezas: suyos.map((d) => ({
-          titulo: d.title ?? DELIVERABLE_TYPE[d.type],
+          // Con el nombre de la red, no el genérico: al creador se le encargó
+          // «Mención dentro de un video», y leer «Fracción publicitaria» —o
+          // peor, «Reel / Short»— le hace dudar de qué tiene que entregar.
+          titulo: d.title ?? tareaLabel(d.platform, d.type),
           importe: creatorPayout(d, campaign),
           estado: d.paymentStatus,
         })),

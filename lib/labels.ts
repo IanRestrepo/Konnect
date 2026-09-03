@@ -21,7 +21,15 @@ export const CAMPAIGN_STATUS: Record<CampaignStatus, { label: string; tone: Tone
   activa: { label: "Activa", tone: "ok" },
   pausada: { label: "Pausada", tone: "warn" },
   finalizada: { label: "Finalizada", tone: "info" },
+  cancelada: { label: "Cancelada", tone: "danger" },
 };
+
+/**
+ * Los dos estados de los que no se vuelve. Se piden confirmados y sacan la
+ * campaña de la operación diaria: finalizada es que se cumplió, cancelada que
+ * se cayó, y mezclarlas falsea los informes porque lo cancelado no se facturó.
+ */
+export const CAMPAIGN_STATUS_CIERRE: CampaignStatus[] = ["finalizada", "cancelada"];
 
 export const CAMPAIGN_OBJECTIVE: Record<CampaignObjective, string> = {
   awareness: "Reconocimiento",
@@ -138,8 +146,11 @@ export const COMPANY_STATUS: Record<string, { label: string; tone: Tone }> = {
   inactivo: { label: "Inactivo", tone: "neutral" },
 };
 
-/** Listas de los desplegables. Compartidas entre el alta y la edición. */
-export const CATEGORIES = [
+/**
+ * Categorías de partida. El catálogo real vive en la base y se edita desde
+ * Configuración; esto es solo con lo que se siembra la primera vez.
+ */
+export const CATEGORIAS_INICIALES = [
   "Tecnología",
   "Gaming",
   "Lifestyle",
