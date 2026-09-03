@@ -403,6 +403,9 @@ function toDeliverable(row: CampaignRow["deliverables"][number]): Deliverable {
     commissionFixed: row.commissionFixed === null ? null : num(row.commissionFixed),
     paymentStatus: row.paymentStatus,
     paidAt: isoOrNull(row.paidAt),
+    receiptUrl: row.receiptUrl,
+    receiptName: row.receiptName,
+    receiptUploadedAt: isoOrNull(row.receiptUploadedAt),
     videoUrl: row.videoUrl,
     videoId: row.videoId,
     title: row.title,
@@ -996,6 +999,9 @@ function deliverableData(input: Omit<Deliverable, "id">) {
     agreedFee: input.agreedFee ?? 0,
     paymentStatus: input.paymentStatus ?? "pendiente",
     paidAt: toDate(input.paidAt),
+    receiptUrl: input.receiptUrl ?? null,
+    receiptName: input.receiptName ?? null,
+    receiptUploadedAt: toDate(input.receiptUploadedAt),
     videoId: input.videoId,
     videoUrl: input.videoUrl,
     title: input.title,
@@ -1360,6 +1366,9 @@ function toSession(row: SessionRow): CollabSession {
       title: i.title,
       url: i.url,
       notes: i.notes,
+      fileName: i.fileName,
+      fileSize: i.fileSize,
+      contentType: i.contentType,
       authorRole: i.authorRole,
       authorLabel: i.authorLabel,
       createdAt: iso(i.createdAt),
@@ -1544,6 +1553,10 @@ export async function addSessionItem(
     title: string;
     url?: string | null;
     notes?: string;
+    /** Datos del archivo si se subió. Ausentes si `url` es un enlace pegado. */
+    fileName?: string | null;
+    fileSize?: number | null;
+    contentType?: string | null;
     authorRole: PortalRole | null;
     authorLabel: string;
   },
@@ -1562,6 +1575,9 @@ export async function addSessionItem(
       title: input.title,
       url: input.url || null,
       notes: input.notes ?? "",
+      fileName: input.fileName ?? null,
+      fileSize: input.fileSize ?? null,
+      contentType: input.contentType ?? null,
       authorRole: input.authorRole,
       authorLabel: input.authorLabel,
     },
@@ -1573,6 +1589,9 @@ export async function addSessionItem(
     title: row.title,
     url: row.url,
     notes: row.notes,
+    fileName: row.fileName,
+    fileSize: row.fileSize,
+    contentType: row.contentType,
     authorRole: row.authorRole,
     authorLabel: row.authorLabel,
     createdAt: iso(row.createdAt),
@@ -1752,6 +1771,34 @@ export async function setCreatorBankAccounts(
  * Deja constancia en la sesión del creador: es la vía por la que se entera de
  * que su dinero salió, sin que nadie tenga que escribirle.
  */
+/**
+ * Adjunta o quita el comprobante del pago de una pieza.
+ *
+ * Va aparte de `updateDeliverable` porque no toca dinero: no recalcula nada ni
+ * avisa al creador de un cambio de estado que no ha habido.
+ */
+export async function setDeliverableReceipt(
+  campaignId: string,
+  deliverableId: string,
+  patch: { receiptUrl: string | null; receiptName: string | null },
+): Promise<Campaign | null> {
+  const { count } = await prisma.deliverable.updateMany({
+    where: { id: deliverableId, campaignId },
+    data: {
+      receiptUrl: patch.receiptUrl,
+      receiptName: patch.receiptName,
+      receiptUploadedAt: patch.receiptUrl ? new Date() : null,
+    },
+  });
+  if (count === 0) return null;
+
+  const row = await prisma.campaign.findUnique({
+    where: { id: campaignId },
+    include: campaignInclude,
+  });
+  return row ? toCampaign(row) : null;
+}
+
 export async function updateDeliverable(
   campaignId: string,
   deliverableId: string,

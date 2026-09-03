@@ -1,10 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, LoaderCircle, LogOut, Upload } from "lucide-react";
+import { Check, LoaderCircle, LogOut, Paperclip, Upload } from "lucide-react";
 import { KonnectMark } from "@/components/brand/logo";
-import type { PortalRole, RequirementStatus, SessionRequirement } from "@/lib/types";
+import type {
+  PortalRole,
+  RequirementStatus,
+  SessionItem,
+  SessionRequirement,
+} from "@/lib/types";
+import { formatBytes } from "@/lib/uploads";
 import { formatDate } from "@/lib/utils";
 
 /**
@@ -43,6 +49,7 @@ export function PortalView({
   label,
   canUpload,
   requirements,
+  items,
   pago,
 }: {
   sessionId: string;
@@ -51,6 +58,8 @@ export function PortalView({
   label: string;
   canUpload: boolean;
   requirements: SessionRequirement[];
+  /** Material compartido en los dos sentidos: lo que sube la agencia y lo que suben ellos. */
+  items: SessionItem[];
   pago: PortalPago | null;
 }) {
   const router = useRouter();
@@ -86,29 +95,42 @@ export function PortalView({
               : `${hechos} de ${requirements.length} aprobados · ${pendientes.length} por resolver`}
         </p>
 
-        {/* ---------------- Lo que se pide ---------------- */}
-        <section className="portal-seccion">
-          <div className="portal-seccion__cabeza">
-            <h2 className="portal-seccion__titulo">Lo que te pedimos</h2>
-            <span className="portal-seccion__contador">{requirements.length}</span>
-          </div>
+        {/* ---------------- Lo que se pide ----------------
+            El cliente no tiene checklist: se le pide material, no entregas.
+            Enseñarle una sección vacía solo le hace dudar de si falta algo. */}
+        {(role !== "cliente" || requirements.length > 0) && (
+          <section className="portal-seccion">
+            <div className="portal-seccion__cabeza">
+              <h2 className="portal-seccion__titulo">Lo que te pedimos</h2>
+              <span className="portal-seccion__contador">{requirements.length}</span>
+            </div>
 
-          {requirements.length === 0 ? (
-            <p className="portal-vacio">
-              La agencia aún no cargó las peticiones. Te avisará cuando estén.
-            </p>
-          ) : (
-            requirements.map((req) => (
-              <Peticion
-                key={req.id}
-                sessionId={sessionId}
-                req={req}
-                puedeSubir={canUpload}
-                onListo={() => router.refresh()}
-              />
-            ))
-          )}
-        </section>
+            {requirements.length === 0 ? (
+              <p className="portal-vacio">
+                La agencia aún no cargó las peticiones. Te avisará cuando estén.
+              </p>
+            ) : (
+              requirements.map((req) => (
+                <Peticion
+                  key={req.id}
+                  sessionId={sessionId}
+                  req={req}
+                  puedeSubir={canUpload}
+                  onListo={() => router.refresh()}
+                />
+              ))
+            )}
+          </section>
+        )}
+
+        {/* ---------------- Material ---------------- */}
+        <Material
+          sessionId={sessionId}
+          items={items}
+          puedeSubir={canUpload}
+          role={role}
+          onListo={() => router.refresh()}
+        />
 
         {/* ---------------- El pago ---------------- */}
         {pago && (
@@ -141,6 +163,128 @@ export function PortalView({
         )}
       </div>
     </div>
+  );
+}
+
+/* ---------------- Material compartido ---------------- */
+
+/**
+ * Archivos que van y vienen dentro de la sesión.
+ *
+ * Existe sobre todo por el cliente: él no tiene checklist que cumplir, pero sí
+ * un brief, un logo y una guía de marca que entregar, y hasta ahora el portal
+ * solo aceptaba enlaces. Pedirle que suba su manual «a algún sitio y me pasas
+ * el link» es justo la fricción que la sesión venía a quitar.
+ */
+function Material({
+  sessionId,
+  items,
+  puedeSubir,
+  role,
+  onListo,
+}: {
+  sessionId: string;
+  items: SessionItem[];
+  puedeSubir: boolean;
+  role: PortalRole;
+  onListo: () => void;
+}) {
+  const [subiendo, setSubiendo] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const campo = useRef<HTMLInputElement>(null);
+
+  async function subir(archivo: File) {
+    setSubiendo(true);
+    setError(null);
+    try {
+      const cuerpo = new FormData();
+      cuerpo.append("archivo", archivo);
+      cuerpo.append("kind", role === "cliente" ? "referencia" : "entregable");
+
+      const res = await fetch(`/api/portal/${sessionId}/archivos`, {
+        method: "POST",
+        body: cuerpo,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "No se pudo subir el archivo.");
+      onListo();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error inesperado");
+    } finally {
+      setSubiendo(false);
+      // Se limpia para poder volver a elegir el mismo archivo si hizo falta.
+      if (campo.current) campo.current.value = "";
+    }
+  }
+
+  return (
+    <section className="portal-seccion">
+      <div className="portal-seccion__cabeza">
+        <h2 className="portal-seccion__titulo">Material</h2>
+        <span className="portal-seccion__contador">{items.length}</span>
+      </div>
+
+      {items.length === 0 ? (
+        <p className="portal-vacio">
+          {puedeSubir
+            ? "Todavía no hay nada. Sube el brief, el logo o lo que haga falta."
+            : "Todavía no hay material compartido."}
+        </p>
+      ) : (
+        <div className="portal-archivos">
+          {items.map((item) => (
+            <a
+              key={item.id}
+              href={item.url ?? "#"}
+              target="_blank"
+              rel="noreferrer"
+              className="portal-archivo"
+            >
+              <span className="portal-archivo__icono">
+                <Paperclip size={14} />
+              </span>
+              <span className="portal-archivo__cuerpo">
+                <span className="portal-archivo__titulo">{item.title}</span>
+                <span className="portal-archivo__meta">
+                  {item.authorLabel}
+                  {item.fileSize ? ` · ${formatBytes(item.fileSize)}` : ""} ·{" "}
+                  {formatDate(item.createdAt)}
+                </span>
+              </span>
+            </a>
+          ))}
+        </div>
+      )}
+
+      {error && <p className="portal-revision">{error}</p>}
+
+      {puedeSubir && (
+        <div className="portal-check__pie">
+          <input
+            ref={campo}
+            type="file"
+            hidden
+            onChange={(e) => {
+              const archivo = e.target.files?.[0];
+              if (archivo) void subir(archivo);
+            }}
+          />
+          <button
+            className="portal-btn portal-btn--chico"
+            disabled={subiendo}
+            onClick={() => campo.current?.click()}
+          >
+            {subiendo ? (
+              <LoaderCircle size={13} className="portal-girando" />
+            ) : (
+              <Upload size={13} />
+            )}
+            {subiendo ? "Subiendo…" : "Subir archivo"}
+          </button>
+          <span className="portal-archivo__meta">Imágenes, video, PDF o ZIP. Hasta 100 MB.</span>
+        </div>
+      )}
+    </section>
   );
 }
 

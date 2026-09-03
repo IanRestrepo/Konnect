@@ -584,3 +584,71 @@
   font-weight: 500;
   color: var(--pt-suave);
 }
+
+/* ---------------- Material compartido ---------------- */
+
+.portal-archivos {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.portal-archivo {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 13px;
+  border: 1px solid var(--pt-borde);
+  border-radius: 12px;
+  background: var(--pt-fondo);
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s;
+}
+
+.portal-archivo:hover {
+  border-color: var(--pt-tenue);
+}
+
+.portal-archivo__icono {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--pt-marca-suave);
+  color: var(--pt-marca);
+}
+
+.portal-archivo__cuerpo {
+  min-width: 0;
+  flex: 1;
+}
+
+.portal-archivo__titulo {
+  display: block;
+  font-size: 13.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.portal-archivo__meta {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--pt-suave);
+}
+
+/* El botón de subir enseña que está trabajando; sin esto el icono se queda
+   quieto y parece que el clic no hizo nada. */
+.portal-girando {
+  animation: portal-giro 0.9s linear infinite;
+}
+
+@keyframes portal-giro {
+  to {
+    transform: rotate(360deg);
+  }
+}

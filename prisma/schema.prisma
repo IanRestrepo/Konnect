@@ -411,6 +411,12 @@ model Deliverable {
   paymentStatus PaymentStatus @default(pendiente)
   paidAt        DateTime?
 
+  /// Comprobante del pago al creador: la transferencia, el recibo de PayPal…
+  /// Vive en Vercel Blob; aquí solo el enlace y con qué nombre se subió.
+  receiptUrl      String?
+  receiptName     String?
+  receiptUploadedAt DateTime?
+
   // Datos públicos del video
   videoId         String?
   videoUrl        String?
@@ -601,6 +607,14 @@ model SessionItem {
   title String
   url   String?
   notes String          @default("")
+
+  /// Datos del archivo cuando el material se subió en vez de pegarse como
+  /// enlace. `url` apunta a Vercel Blob igual que apuntaría a YouTube, así que
+  /// sin esto no hay forma de saber que es un archivo nuestro ni de pintar su
+  /// nombre y su peso.
+  fileName    String?
+  fileSize    Int?
+  contentType String?
 
   /// Quién lo subió. La agencia queda registrada con el nombre del usuario.
   authorRole  PortalRole?

@@ -94,6 +94,7 @@ export default async function PortalPage({ params }: { params: Promise<{ id: str
       label={portal.label}
       canUpload={acceso.canUpload && session.status === "abierta"}
       requirements={session.requirements}
+      items={session.items}
       pago={pago}
     />
   );

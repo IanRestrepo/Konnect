@@ -153,6 +153,10 @@ export type Deliverable = {
   commissionFixed: number | null;
   paymentStatus: PaymentStatus;
   paidAt: string | null;
+  /** Comprobante del pago al creador: la transferencia, el recibo de PayPal… */
+  receiptUrl: string | null;
+  receiptName: string | null;
+  receiptUploadedAt: string | null;
   videoUrl: string | null;
   videoId: string | null;
   title: string | null;
@@ -366,6 +370,10 @@ export type SessionItem = {
   title: string;
   url: string | null;
   notes: string;
+  /** Datos del archivo si se subió; nulos si `url` es un enlace pegado. */
+  fileName: string | null;
+  fileSize: number | null;
+  contentType: string | null;
   authorRole: PortalRole | null;
   authorLabel: string;
   createdAt: string;

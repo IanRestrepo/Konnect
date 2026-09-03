@@ -46,6 +46,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     ...parsed.data,
     metricsUpdatedAt: parsed.data.views !== null ? new Date().toISOString() : null,
     paidAt: null,
+    // El comprobante se sube después, cuando el pago se marca como hecho.
+    receiptUrl: null,
+    receiptName: null,
+    receiptUploadedAt: null,
   });
 
   if (!deliverable) {
