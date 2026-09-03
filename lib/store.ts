@@ -1761,6 +1761,35 @@ export async function listCreatorCategories(): Promise<string[]> {
 }
 
 /**
+ * Añade una categoría suelta y devuelve el catálogo ya ordenado.
+ *
+ * Existe aparte del reemplazo completo porque se llama desde la ficha del
+ * creador: cuando alguien está dando de alta a un creador de una categoría
+ * nueva, mandarlo a Configuración a crearla y volver es perder el formulario
+ * a medias. Si ya existe —sin distinguir mayúsculas— no se duplica: se
+ * devuelve la que hay.
+ */
+export async function addCreatorCategory(name: string): Promise<string[]> {
+  const limpio = name.trim();
+  if (!limpio) return listCreatorCategories();
+
+  // Siembra el catálogo si estaba sin estrenar, para no dejarlo con una sola.
+  const actuales = await listCreatorCategories();
+  if (actuales.some((c) => c.toLowerCase() === limpio.toLowerCase())) return actuales;
+
+  const ultima = await prisma.creatorCategory.findFirst({
+    orderBy: { position: "desc" },
+    select: { position: true },
+  });
+
+  await prisma.creatorCategory.create({
+    data: { id: newId("cat"), name: limpio, position: (ultima?.position ?? -1) + 1 },
+  });
+
+  return listCreatorCategories();
+}
+
+/**
  * Reemplaza el catálogo entero, en el orden recibido.
  *
  * Borrar una categoría de aquí no toca las fichas que la usaban: `category` es

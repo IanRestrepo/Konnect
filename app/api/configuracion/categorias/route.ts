@@ -3,7 +3,11 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getSession } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
-import { listCreatorCategories, setCreatorCategories } from "@/lib/store";
+import {
+  addCreatorCategory,
+  listCreatorCategories,
+  setCreatorCategories,
+} from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +23,38 @@ export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Sin sesión." }, { status: 401 });
   return NextResponse.json({ categories: await listCreatorCategories() });
+}
+
+/**
+ * Añade una categoría suelta.
+ *
+ * Pide `editar_creadores` y no `gestionar_ajustes` a propósito: se llama desde
+ * la ficha del creador, y quien puede dar de alta a un creador tiene que poder
+ * clasificarlo sin ir a pedirle permiso a nadie. Reordenar y borrar el
+ * catálogo sigue siendo cosa de Configuración.
+ */
+export async function POST(request: Request) {
+  const session = await getSession();
+  if (!session || !hasPermission(session.permissions, "editar_creadores")) {
+    return NextResponse.json({ error: "Tu rol no permite crear categorías." }, { status: 403 });
+  }
+
+  const parsed = z
+    .object({ name: z.string().min(1, "Ponle nombre a la categoría.").max(60, "Máximo 60 caracteres.") })
+    .safeParse(await request.json().catch(() => null));
+
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: parsed.error.issues[0]?.message ?? "Datos inválidos." },
+      { status: 400 },
+    );
+  }
+
+  const categories = await addCreatorCategory(parsed.data.name);
+
+  revalidatePath("/creadores");
+  revalidatePath("/configuracion");
+  return NextResponse.json({ categories }, { status: 201 });
 }
 
 /** Reemplaza el catálogo completo, en el orden recibido. */

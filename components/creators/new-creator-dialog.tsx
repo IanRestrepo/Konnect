@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { FieldHint, Input, InputWithIcon, Label, Select, Textarea } from "@/components/ui/field";
+import { CategoryField } from "@/components/creators/category-field";
 import { ContactFieldsEditor } from "@/components/creators/contact-fields-editor";
 import { PaymentAccountsEditor } from "@/components/creators/payment-accounts-editor";
 import { CURRENCIES } from "@/lib/labels";
@@ -92,6 +93,8 @@ export function NewCreatorDialog({
   const [accounts, setAccounts] = useState<BankingAccount[]>(CUENTA_INICIAL);
   const [contactFields, setContactFields] = useState<ContactField[]>([]);
   const [form, setForm] = useState({ ...EMPTY, category: categories[0] ?? "" });
+  /** El catálogo puede crecer sin recargar: se crean categorías desde aquí. */
+  const [catalogo, setCatalogo] = useState(categories);
 
   const esYoutube = platform === "youtube";
   // En YouTube hace falta buscar el canal; en el resto basta con el nombre.
@@ -379,18 +382,15 @@ export function NewCreatorDialog({
         {listo && (
           <>
             <div className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <Label htmlFor="category">Categoría</Label>
-                <Select
-                  id="category"
-                  value={form.category}
-                  onChange={(e) => set("category", e.target.value)}
-                >
-                  {categories.map((c) => (
-                    <option key={c}>{c}</option>
-                  ))}
-                </Select>
-              </div>
+              {/* El componente pone su propia etiqueta: cambia entre elegir y
+                  crear, y necesita nombrarse distinto en cada caso. */}
+              <CategoryField
+                id="category"
+                value={form.category}
+                onChange={(v) => set("category", v)}
+                categories={catalogo}
+                onCategoriesChange={setCatalogo}
+              />
               <div>
                 <Label htmlFor="status">Estado</Label>
                 <Select id="status" value={form.status} onChange={(e) => set("status", e.target.value)}>

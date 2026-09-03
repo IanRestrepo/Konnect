@@ -7,6 +7,7 @@ import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select, Textarea } from "@/components/ui/field";
 import { useCan } from "@/components/session-provider";
+import { CategoryField } from "@/components/creators/category-field";
 import { CURRENCIES } from "@/lib/labels";
 import type { Creator } from "@/lib/types";
 
@@ -60,6 +61,8 @@ export function EditCreatorButton({
   const can = useCan();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<Campos>(() => desde(creator));
+  /** El catálogo puede crecer sin recargar: se crean categorías desde aquí. */
+  const [catalogo, setCatalogo] = useState(categories);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -166,24 +169,13 @@ export function EditCreatorButton({
             />
           </div>
 
-          <div>
-            <Label htmlFor="ec-category">Categoría</Label>
-            <Select
-              id="ec-category"
-              value={form.category}
-              onChange={(e) => set("category", e.target.value)}
-            >
-              {/* Una categoría vieja que ya no esté en la lista no debe perderse. */}
-              {(categories.includes(form.category)
-                ? categories
-                : [form.category, ...categories]
-              ).map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </Select>
-          </div>
+          <CategoryField
+            id="ec-category"
+            value={form.category}
+            onChange={(v) => set("category", v)}
+            categories={catalogo}
+            onCategoriesChange={setCatalogo}
+          />
 
           <div>
             <Label htmlFor="ec-status">Estado</Label>
