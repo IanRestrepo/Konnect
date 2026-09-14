@@ -9,9 +9,16 @@ import { Avatar } from "@/components/ui/avatar";
 import { FieldHint, Input, Label } from "@/components/ui/field";
 import { Picker } from "@/components/ui/picker";
 import { SearchInput } from "@/components/shell/toolbar";
-import { PLATFORM_LABEL, PLATFORMS, TAREAS, tareaLabel } from "@/lib/socials";
+import { DeliverableTypeField } from "@/components/campaigns/deliverable-type-field";
+import { PLATFORM_LABEL, PLATFORMS, TAREAS, piezaLabel } from "@/lib/socials";
 import { IMPORTE_MAXIMO, clientPriceForRate, rateFor } from "@/lib/pricing";
-import type { Creator, Currency, DeliverableType, SocialPlatform } from "@/lib/types";
+import type {
+  Creator,
+  Currency,
+  DeliverableKind,
+  DeliverableType,
+  SocialPlatform,
+} from "@/lib/types";
 import { cn, formatMoney } from "@/lib/utils";
 
 /** Si el creador tiene perfil en esa red, o publica principalmente ahí. */
@@ -34,6 +41,8 @@ export function HireCreatorDialog({
   creators,
   agencyFee,
   currency,
+  kinds,
+  onKindsChange,
 }: {
   open: boolean;
   onClose: () => void;
@@ -42,6 +51,9 @@ export function HireCreatorDialog({
   /** Comisión por defecto de la campaña, para proponer el cobro. */
   agencyFee: number;
   currency: Currency;
+  /** Tipos de pieza propios de la agencia, además de los de fábrica. */
+  kinds: DeliverableKind[];
+  onKindsChange: (kinds: DeliverableKind[]) => void;
 }) {
   const router = useRouter();
 
@@ -49,6 +61,8 @@ export function HireCreatorDialog({
   const [creatorId, setCreatorId] = useState("");
   const [platform, setPlatform] = useState<SocialPlatform>("youtube");
   const [tipo, setTipo] = useState<DeliverableType>("video");
+  /** Nombre propio del encargo. Vacío = la tarea estándar de esa red. */
+  const [tipoPropio, setTipoPropio] = useState("");
   const [channelId, setChannelId] = useState("");
   const [cobro, setCobro] = useState("");
   const [costo, setCosto] = useState("");
@@ -86,6 +100,7 @@ export function HireCreatorDialog({
     const pieza = TAREAS[red][0]?.type ?? "video";
     setPlatform(red);
     setTipo(pieza);
+    setTipoPropio("");
     setChannelId("");
     proponer(creator, red, pieza, "");
   }
@@ -93,6 +108,7 @@ export function HireCreatorDialog({
   function cerrar() {
     setBusqueda("");
     setCreatorId("");
+    setTipoPropio("");
     setChannelId("");
     setCobro("");
     setCosto("");
@@ -123,6 +139,7 @@ export function HireCreatorDialog({
           creatorId: elegido.id,
           platform,
           type: tipo,
+          customType: tipoPropio,
           channelId,
           clientPrice: Number(cobro) || 0,
           creatorCost: Number(costo) || 0,
@@ -219,9 +236,12 @@ export function HireCreatorDialog({
                   id="hc-red"
                   value={platform}
                   onChange={(red) => {
-                    const pieza = TAREAS[red].some((t) => t.type === tipo)
-                      ? tipo
-                      : (TAREAS[red][0]?.type ?? "video");
+                    // Con un tipo propio elegido, la pieza no cambia al cambiar
+                    // de red: «Unboxing» vale igual en YouTube que en TikTok.
+                    const pieza =
+                      tipoPropio || TAREAS[red].some((t) => t.type === tipo)
+                        ? tipo
+                        : (TAREAS[red][0]?.type ?? "video");
                     setPlatform(red);
                     setTipo(pieza);
                     // Los canales son de YouTube: fuera de ahí no aplican.
@@ -237,18 +257,19 @@ export function HireCreatorDialog({
                 />
               </div>
 
-              <div>
-                <Label htmlFor="hc-pieza">Qué se le encarga</Label>
-                <Picker
-                  id="hc-pieza"
-                  value={tipo}
-                  onChange={(pieza) => {
-                    setTipo(pieza);
-                    proponer(elegido, platform, pieza, channelId);
-                  }}
-                  options={TAREAS[platform].map((t) => ({ id: t.type, label: t.label }))}
-                />
-              </div>
+              <DeliverableTypeField
+                id="hc-pieza"
+                platform={platform}
+                type={tipo}
+                customType={tipoPropio}
+                kinds={kinds}
+                onChange={(pieza, propio) => {
+                  setTipo(pieza);
+                  setTipoPropio(propio);
+                  proponer(elegido, platform, pieza, channelId);
+                }}
+                onKindsChange={onKindsChange}
+              />
 
               {platform === "youtube" && elegido.channels.length > 0 && (
                 <div className="sm:col-span-2">
@@ -316,7 +337,7 @@ export function HireCreatorDialog({
             </div>
 
             <FieldHint>
-              La pieza nace pendiente: será «{tareaLabel(platform, tipo)}» y aparecerá en su
+              La pieza nace pendiente: será «{piezaLabel(platform, tipo, tipoPropio)}» y aparecerá en su
               checklist del portal.
             </FieldHint>
           </>

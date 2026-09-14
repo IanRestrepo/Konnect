@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { createCompany, newId } from "@/lib/store";
+import { getSession } from "@/lib/session";
+import { hasPermission } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +28,13 @@ const schema = z.object({
 });
 
 export async function POST(request: Request) {
+  // Faltaba comprobar nada: bastaba con tener sesión para dar de alta un
+  // cliente. El middleware no cubre las rutas de API.
+  const session = await getSession();
+  if (!session || !hasPermission(session.permissions, "editar_empresas")) {
+    return NextResponse.json({ error: "Tu rol no permite crear empresas." }, { status: 403 });
+  }
+
   const body = await request.json().catch(() => null);
   const parsed = schema.safeParse(body);
 

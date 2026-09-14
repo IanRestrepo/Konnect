@@ -8,8 +8,9 @@ import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { FieldHint, Input, Label, Select } from "@/components/ui/field";
+import { DeliverableTypeField } from "@/components/campaigns/deliverable-type-field";
 import { formatCompact, formatDate } from "@/lib/utils";
-import type { Creator } from "@/lib/types";
+import type { Creator, DeliverableKind, DeliverableType } from "@/lib/types";
 
 type VideoPreview = {
   videoId: string;
@@ -61,11 +62,16 @@ export function AddDeliverableDialog({
   onClose,
   campaignId,
   creators,
+  kinds,
+  onKindsChange,
 }: {
   open: boolean;
   onClose: () => void;
   campaignId: string;
   creators: Creator[];
+  /** Tipos de pieza propios de la agencia, además de los de fábrica. */
+  kinds: DeliverableKind[];
+  onKindsChange: (kinds: DeliverableKind[]) => void;
 }) {
   const router = useRouter();
   const [url, setUrl] = useState("");
@@ -75,7 +81,9 @@ export function AddDeliverableDialog({
   const [video, setVideo] = useState<VideoPreview | null>(null);
   const [creatorId, setCreatorId] = useState(creators[0]?.id ?? "");
   const [autodetectado, setAutodetectado] = useState(false);
-  const [type, setType] = useState("video");
+  const [type, setType] = useState<DeliverableType>("video");
+  /** Nombre propio del encargo. Vacío = la tarea estándar de YouTube. */
+  const [customType, setCustomType] = useState("");
   const [fee, setFee] = useState("");
 
   function close() {
@@ -84,6 +92,7 @@ export function AddDeliverableDialog({
     setError(null);
     setSaving(false);
     setFee("");
+    setCustomType("");
     setAutodetectado(false);
     onClose();
   }
@@ -100,6 +109,7 @@ export function AddDeliverableDialog({
       const found = data.video;
       setVideo(found);
       setType(found.isShort ? "short" : "video");
+      setCustomType("");
 
       // El canal del video identifica al creador: mira el canal principal, los
       // secundarios y, si nada cuadra, el nombre del canal.
@@ -135,6 +145,7 @@ export function AddDeliverableDialog({
         body: JSON.stringify({
           creatorId,
           type,
+          customType,
           status: "publicado",
           agreedFee: Number(fee) || 0,
           videoId: video.videoId,
@@ -288,18 +299,19 @@ export function AddDeliverableDialog({
                   </FieldHint>
                 )}
               </div>
-              <div>
-                <Label htmlFor="deliverable-type">Tipo</Label>
-                <Select
-                  id="deliverable-type"
-                  value={type}
-                  onChange={(e) => setType(e.target.value)}
-                >
-                  <option value="video">Video dedicado</option>
-                  <option value="short">Reel / Short</option>
-                  <option value="integracion">Fracción publicitaria</option>
-                </Select>
-              </div>
+              <DeliverableTypeField
+                id="deliverable-type"
+                label="Tipo"
+                platform="youtube"
+                type={type}
+                customType={customType}
+                kinds={kinds}
+                onChange={(t, c) => {
+                  setType(t);
+                  setCustomType(c);
+                }}
+                onKindsChange={onKindsChange}
+              />
               <div>
                 <Label htmlFor="deliverable-fee">Tarifa acordada</Label>
                 <Input

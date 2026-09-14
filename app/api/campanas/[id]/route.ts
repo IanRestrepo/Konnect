@@ -14,9 +14,14 @@ export const dynamic = "force-dynamic";
 const schema = z.object({
   status: z.enum(["borrador", "activa", "pausada", "finalizada", "cancelada"]).optional(),
   name: z.string().min(1).optional(),
+  /** Cambiar de cliente: una campaña dada de alta bajo la empresa equivocada
+   *  solo se podía arreglar borrándola y rehaciéndola. */
+  companyId: z.string().min(1).optional(),
   objective: z.enum(["awareness", "trafico", "conversiones", "lanzamiento"]).optional(),
   currency: z.enum(["USD", "MXN", "COP", "EUR"]).optional(),
   budget: z.number().optional(),
+  /** Margen por defecto de la agencia, en %. Null = sin margen propuesto. */
+  agencyFee: z.number().min(0).max(100).nullable().optional(),
   notes: z.string().optional(),
   startDate: z.string().optional(),
   endDate: z.string().nullable().optional(),

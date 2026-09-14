@@ -12,6 +12,8 @@ export const dynamic = "force-dynamic";
 const schema = z.object({
   creatorId: z.string({ error: "Selecciona un creador." }).min(1, "Selecciona un creador."),
   type: z.enum(["video", "short", "integracion", "directo", "post"]),
+  /** Nombre propio del encargo. Vacío = la tarea estándar de esa red. */
+  customType: z.string().max(60, "Ese nombre de pieza es demasiado largo.").default(""),
   status: z.enum(["pendiente", "en_revision", "publicado", "cancelado"]).default("publicado"),
   agreedFee: z.number().default(0),
   platform: z

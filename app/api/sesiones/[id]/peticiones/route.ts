@@ -20,6 +20,8 @@ const crear = z.object({
   /** Pasos concretos, p. ej. «añadir el enlace en la descripción». */
   steps: z.array(z.string().min(1)).default([]),
   required: z.boolean().default(true),
+  /** Para cuándo se espera. Null = sin fecha pactada. */
+  dueDate: z.string().nullable().default(null),
 });
 
 /** Crea una petición del checklist. */
@@ -55,6 +57,7 @@ const revisar = z.object({
   instructions: z.string().optional(),
   steps: z.array(z.string()).optional(),
   required: z.boolean().optional(),
+  dueDate: z.string().nullable().optional(),
 });
 
 /** Aprueba, pide cambios o edita una petición existente. */

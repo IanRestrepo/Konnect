@@ -9,7 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { campaignMetrics, getCampaigns, getCompanies, getCreators } from "@/lib/data";
-import { CAMPAIGN_STATUS, DELIVERABLE_STATUS, DELIVERABLE_TYPE } from "@/lib/labels";
+import { CAMPAIGN_STATUS, DELIVERABLE_STATUS } from "@/lib/labels";
+import { piezaLabel } from "@/lib/socials";
 import {
   activeCampaignsSeries,
   budgetSeries,
@@ -202,7 +203,11 @@ export default async function DashboardPage() {
                     href={`/campanas/${campaign.id}`}
                     leading={<Avatar src={creator?.avatarUrl} name={creator?.name ?? "?"} size={32} />}
                     title={creator?.name ?? "Sin creador"}
-                    subtitle={`${DELIVERABLE_TYPE[deliverable.type]} · ${campaign.name}`}
+                    subtitle={`${piezaLabel(
+                      deliverable.platform,
+                      deliverable.type,
+                      deliverable.customType,
+                    )} · ${campaign.name}`}
                     trailing={<Badge tone={status.tone}>{status.label}</Badge>}
                   />
                 );

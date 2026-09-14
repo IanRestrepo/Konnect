@@ -3,7 +3,16 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LoaderCircle, MoreHorizontal, Plus, RotateCcw, UserMinus, Users } from "lucide-react";
+import {
+  LoaderCircle,
+  MoreHorizontal,
+  Plus,
+  RotateCcw,
+  SquareArrowOutUpRight,
+  Trash2,
+  UserMinus,
+  Users,
+} from "lucide-react";
 import { SectionLabel } from "@/components/ui/section";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,8 +24,9 @@ import { Modal } from "@/components/ui/modal";
 import { FieldHint, Label, Textarea } from "@/components/ui/field";
 import { useCan } from "@/components/session-provider";
 import { HireCreatorDialog } from "@/components/campaigns/hire-creator-dialog";
+import type { Empleado } from "@/components/campaigns/campaign-team";
 import { creatorPayout } from "@/lib/pricing";
-import type { Campaign, Creator, Currency } from "@/lib/types";
+import type { Campaign, Creator, Currency, DeliverableKind } from "@/lib/types";
 import { formatDate, formatMoney } from "@/lib/utils";
 
 /** Lo que hay que saber de un creador dentro de esta campaña. */
@@ -25,10 +35,14 @@ type Participante = {
   piezas: number;
   /** Las que siguen esperándose. Son las que se cancelan al cerrar. */
   pendientes: number;
+  /** Cuántas tienen el dinero ya fuera. Pesa al decidir si se borra o se cierra. */
+  pagadas: number;
   /** Lo pactado con él, sin contar lo cancelado. */
   total: number;
   pagado: number;
   finalizado: { endedAt: string; reason: string } | null;
+  /** Quién responde por él. Vacío = responde el manager de la campaña. */
+  encargados: Empleado[];
 };
 
 /**
@@ -36,17 +50,25 @@ type Participante = {
  *
  * Existe porque la lista de entregables responde «qué piezas hay» pero no «con
  * quién estamos trabajando y cuánto le debemos», que es la pregunta con la que
- * se entra a una campaña a mitad de mes.
+ * se entra a una campaña a mitad de mes. Cada fila lleva a su ficha dentro de
+ * la campaña, que es donde se controlan sus piezas, sus fechas y quién lo
+ * lleva.
  */
 export function CampaignCreators({
   campaign,
   creators,
   currency,
+  kinds,
+  empleados,
 }: {
   campaign: Campaign;
   /** Todos los del catálogo: hacen falta para poder contratar a uno nuevo. */
   creators: Creator[];
   currency: Currency;
+  /** Tipos de pieza propios de la agencia. Se pueden crear al contratar. */
+  kinds: DeliverableKind[];
+  /** Cuentas activas, para decir quién lleva a cada creador. */
+  empleados: Empleado[];
 }) {
   const router = useRouter();
   const can = useCan();
@@ -54,11 +76,16 @@ export function CampaignCreators({
 
   const [contratando, setContratando] = useState(false);
   const [cerrando, setCerrando] = useState<Participante | null>(null);
+  const [quitando, setQuitando] = useState<Participante | null>(null);
   const [razon, setRazon] = useState("");
   const [ocupado, setOcupado] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // El catálogo llega del servidor pero puede crecer sin recargar: el diálogo
+  // de contratar deja crear un tipo de pieza en el sitio.
+  const [catalogo, setCatalogo] = useState(kinds);
 
   const finPorCreador = new Map(campaign.endedContracts.map((e) => [e.creatorId, e]));
+  const empleadoPorId = new Map(empleados.map((e) => [e.id, e]));
 
   // Participa quien tiene alguna pieza. El orden es el de entrada, que es como
   // el equipo los recuerda.
@@ -77,11 +104,16 @@ export function CampaignCreators({
         creator,
         piezas: suyas.length,
         pendientes: suyas.filter((d) => d.status === "pendiente").length,
+        pagadas: suyas.filter((d) => d.paymentStatus === "pagado").length,
         total: vivas.reduce((s, d) => s + creatorPayout(d, campaign), 0),
         pagado: vivas
           .filter((d) => d.paymentStatus === "pagado")
           .reduce((s, d) => s + creatorPayout(d, campaign), 0),
         finalizado: fin ? { endedAt: fin.endedAt, reason: fin.reason } : null,
+        encargados: campaign.creatorLeads
+          .filter((l) => l.creatorId === creatorId)
+          .map((l) => empleadoPorId.get(l.userId))
+          .filter((e): e is Empleado => Boolean(e)),
       };
     })
     .filter((p): p is Participante => p !== null);
@@ -99,6 +131,25 @@ export function CampaignCreators({
       if (!res.ok) throw new Error(data.error ?? "No se pudo cambiar el contrato.");
       setCerrando(null);
       setRazon("");
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error inesperado");
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  async function quitar(creatorId: string) {
+    setOcupado(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/campanas/${campaign.id}/creadores?creatorId=${encodeURIComponent(creatorId)}`,
+        { method: "DELETE" },
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error ?? "No se pudo quitar al creador.");
+      setQuitando(null);
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error inesperado");
@@ -141,96 +192,126 @@ export function CampaignCreators({
         />
       ) : (
         <ListBox>
-          {participantes.map((p) => (
-            <ListRow
-              key={p.creator.id}
-              chevron={false}
-              leading={<Avatar src={p.creator.avatarUrl} name={p.creator.name} size={34} />}
-              title={p.creator.name}
-              subtitle={
-                p.finalizado
-                  ? `Contrato finalizado el ${formatDate(p.finalizado.endedAt)}${
-                      p.finalizado.reason ? ` · ${p.finalizado.reason}` : ""
-                    }`
-                  : `${p.piezas} pieza${p.piezas === 1 ? "" : "s"}${
-                      p.pendientes ? ` · ${p.pendientes} por entregar` : ""
-                    }`
-              }
-              trailing={
-                <span className="flex items-center gap-3">
-                  <span className="hidden text-right sm:block">
-                    <span className="tabular block text-[14px] font-semibold">
-                      {formatMoney(p.total, currency)}
+          {participantes.map((p) => {
+            const ficha = `/campanas/${campaign.id}/creador/${p.creator.id}`;
+            return (
+              <ListRow
+                key={p.creator.id}
+                chevron={false}
+                leading={<Avatar src={p.creator.avatarUrl} name={p.creator.name} size={34} />}
+                // El nombre es el enlace y no la fila entera: la fila ya lleva
+                // un menú, y un botón dentro de un enlace se porta mal.
+                title={
+                  <Link href={ficha} className="transition hover:text-[var(--accent)]">
+                    {p.creator.name}
+                  </Link>
+                }
+                subtitle={
+                  p.finalizado
+                    ? `Contrato finalizado el ${formatDate(p.finalizado.endedAt)}${
+                        p.finalizado.reason ? ` · ${p.finalizado.reason}` : ""
+                      }`
+                    : [
+                        `${p.piezas} pieza${p.piezas === 1 ? "" : "s"}`,
+                        p.pendientes ? `${p.pendientes} por entregar` : null,
+                        p.encargados.length
+                          ? `lleva ${p.encargados.map((e) => e.name).join(", ")}`
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")
+                }
+                trailing={
+                  <span className="flex items-center gap-3">
+                    <span className="hidden text-right sm:block">
+                      <span className="tabular block text-[14px] font-semibold">
+                        {formatMoney(p.total, currency)}
+                      </span>
+                      <span className="block text-[11.5px] text-[var(--text-subtle)]">
+                        {formatMoney(p.pagado, currency)} pagado
+                      </span>
                     </span>
-                    <span className="block text-[11.5px] text-[var(--text-subtle)]">
-                      {formatMoney(p.pagado, currency)} pagado
-                    </span>
-                  </span>
 
-                  {p.finalizado && <Badge tone="neutral">Finalizado</Badge>}
+                    {p.finalizado && <Badge tone="neutral">Finalizado</Badge>}
 
-                  {puedeEditar && (
-                    <Popover
-                      side="bottom"
-                      align="end"
-                      portal
-                      trigger={({ toggle }) => (
-                        <button
-                          onClick={toggle}
-                          disabled={ocupado}
-                          aria-label={`Contrato de ${p.creator.name}`}
-                          className="grid h-8 w-8 shrink-0 place-items-center rounded-[var(--r-control)] text-[var(--text-subtle)] transition hover:bg-[var(--surface-3)] hover:text-[var(--text)]"
-                        >
-                          <MoreHorizontal size={16} />
-                        </button>
-                      )}
-                    >
-                      {({ close }) => (
-                        <div className="w-56 p-1">
-                          <Link
-                            href={`/creadores/${p.creator.id}`}
-                            onClick={close}
-                            className="flex w-full items-center gap-2.5 rounded-[var(--r-chip)] px-2.5 py-1.5 text-left text-[13px] transition hover:bg-[var(--surface-3)]"
+                    {puedeEditar && (
+                      <Popover
+                        side="bottom"
+                        align="end"
+                        portal
+                        trigger={({ toggle }) => (
+                          <button
+                            onClick={toggle}
+                            disabled={ocupado}
+                            aria-label={`Acciones de ${p.creator.name}`}
+                            className="grid h-8 w-8 shrink-0 place-items-center rounded-[var(--r-control)] text-[var(--text-subtle)] transition hover:bg-[var(--surface-3)] hover:text-[var(--text)]"
                           >
-                            <Users size={14} className="shrink-0" />
-                            Ver su ficha
-                          </Link>
-
-                          <div className="my-1 h-px bg-[var(--line)]" />
-
-                          {p.finalizado ? (
-                            <button
-                              onClick={() => {
-                                close();
-                                void contrato(p.creator.id, "reabrir");
-                              }}
-                              className="flex w-full items-center gap-2.5 rounded-[var(--r-chip)] px-2.5 py-1.5 text-left text-[13px] transition hover:bg-[var(--surface-3)]"
+                            <MoreHorizontal size={16} />
+                          </button>
+                        )}
+                      >
+                        {({ close }) => (
+                          <div className="w-60 p-1">
+                            <Enlace href={ficha} onClick={close} icono={SquareArrowOutUpRight}>
+                              Abrir en la campaña
+                            </Enlace>
+                            <Enlace
+                              href={`/creadores/${p.creator.id}`}
+                              onClick={close}
+                              icono={Users}
                             >
-                              <RotateCcw size={14} className="shrink-0" />
-                              Reabrir contrato
-                            </button>
-                          ) : (
-                            <button
+                              Ver su ficha
+                            </Enlace>
+
+                            <div className="my-1 h-px bg-[var(--line)]" />
+
+                            {p.finalizado ? (
+                              <Opcion
+                                icono={RotateCcw}
+                                onClick={() => {
+                                  close();
+                                  void contrato(p.creator.id, "reabrir");
+                                }}
+                              >
+                                Reabrir contrato
+                              </Opcion>
+                            ) : (
+                              <Opcion
+                                icono={UserMinus}
+                                peligro
+                                onClick={() => {
+                                  close();
+                                  setRazon("");
+                                  setError(null);
+                                  setCerrando(p);
+                                }}
+                              >
+                                Finalizar contrato
+                              </Opcion>
+                            )}
+
+                            {/* Para el creador que nunca debió estar aquí.
+                                Finalizar guarda el rastro; esto lo borra. */}
+                            <Opcion
+                              icono={Trash2}
+                              peligro
                               onClick={() => {
                                 close();
-                                setRazon("");
                                 setError(null);
-                                setCerrando(p);
+                                setQuitando(p);
                               }}
-                              className="flex w-full items-center gap-2.5 rounded-[var(--r-chip)] px-2.5 py-1.5 text-left text-[13px] text-[var(--danger)] transition hover:bg-[var(--surface-3)]"
                             >
-                              <UserMinus size={14} className="shrink-0" />
-                              Finalizar contrato
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </Popover>
-                  )}
-                </span>
-              }
-            />
-          ))}
+                              Quitar de la campaña
+                            </Opcion>
+                          </div>
+                        )}
+                      </Popover>
+                    )}
+                  </span>
+                }
+              />
+            );
+          })}
         </ListBox>
       )}
 
@@ -241,6 +322,8 @@ export function CampaignCreators({
         creators={creators}
         agencyFee={campaign.agencyFee ?? 20}
         currency={currency}
+        kinds={catalogo}
+        onKindsChange={setCatalogo}
       />
 
       <Modal
@@ -300,6 +383,102 @@ export function CampaignCreators({
           </div>
         </div>
       </Modal>
+
+      <Modal
+        open={quitando !== null}
+        onClose={() => setQuitando(null)}
+        size="sm"
+        title="Quitar de la campaña"
+        description={
+          quitando
+            ? `${quitando.creator.name} desaparece de esta campaña con todo lo suyo.`
+            : undefined
+        }
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setQuitando(null)}>
+              Cancelar
+            </Button>
+            <Button
+              variant="danger"
+              disabled={ocupado}
+              onClick={() => quitando && quitar(quitando.creator.id)}
+            >
+              {ocupado && <LoaderCircle size={14} className="animate-spin" />}
+              Quitar de la campaña
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <ul className="space-y-1 rounded-[var(--r-control)] bg-[var(--surface-2)] px-3 py-2.5 text-[12.5px] text-[var(--text-muted)]">
+            <li>
+              Se borran sus {quitando?.piezas ?? 0} pieza
+              {quitando?.piezas === 1 ? "" : "s"} de esta campaña, publicadas o no.
+            </li>
+            <li>Se borra su sesión de entrega y su código de portal deja de servir.</li>
+            <li>
+              <span className="font-medium text-[var(--text)]">No hay papelera.</span> Su ficha de
+              creador y sus otras campañas no se tocan.
+            </li>
+          </ul>
+
+          {quitando && quitando.pagadas > 0 && (
+            <p className="rounded-[var(--r-control)] bg-[var(--danger-soft)] px-3 py-2.5 text-[12.5px] text-[var(--danger)]">
+              Cuidado: {quitando.pagadas} de sus piezas ya están marcadas como pagadas. Ese dinero
+              salió de verdad y va a desaparecer de los informes. Para el trabajo que sí ocurrió,
+              lo que quieres es «Finalizar contrato».
+            </p>
+          )}
+        </div>
+      </Modal>
     </section>
+  );
+}
+
+function Enlace({
+  href,
+  icono: Icono,
+  children,
+  onClick,
+}: {
+  href: string;
+  icono: typeof Users;
+  children: React.ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <Link
+      href={href}
+      onClick={onClick}
+      className="flex w-full items-center gap-2.5 rounded-[var(--r-chip)] px-2.5 py-1.5 text-left text-[13px] transition hover:bg-[var(--surface-3)]"
+    >
+      <Icono size={14} className="shrink-0" />
+      {children}
+    </Link>
+  );
+}
+
+function Opcion({
+  icono: Icono,
+  children,
+  onClick,
+  peligro,
+}: {
+  icono: typeof Users;
+  children: React.ReactNode;
+  onClick: () => void;
+  peligro?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex w-full items-center gap-2.5 rounded-[var(--r-chip)] px-2.5 py-1.5 text-left text-[13px] transition hover:bg-[var(--surface-3)] ${
+        peligro ? "text-[var(--danger)]" : ""
+      }`}
+    >
+      <Icono size={14} className="shrink-0" />
+      {children}
+    </button>
   );
 }

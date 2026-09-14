@@ -2,13 +2,15 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { LoaderCircle, Pencil, TriangleAlert } from "lucide-react";
+import { LoaderCircle, Pencil, Plus, TriangleAlert } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { FieldHint, Input, Label, Select, Textarea } from "@/components/ui/field";
+import { Picker } from "@/components/ui/picker";
 import { useCan } from "@/components/session-provider";
+import { QuickCompanyDialog } from "@/components/companies/quick-company-dialog";
 import { CAMPAIGN_OBJECTIVE, CURRENCIES } from "@/lib/labels";
-import type { Campaign, CampaignObjective } from "@/lib/types";
+import type { Campaign, CampaignObjective, Company } from "@/lib/types";
 
 const OBJETIVOS = Object.keys(CAMPAIGN_OBJECTIVE) as CampaignObjective[];
 
@@ -21,10 +23,12 @@ function aInput(iso: string | null): string {
 
 type Campos = {
   name: string;
+  companyId: string;
   objective: CampaignObjective;
   status: Campaign["status"];
   currency: string;
   budget: string;
+  agencyFee: string;
   startDate: string;
   endDate: string;
   notes: string;
@@ -33,10 +37,12 @@ type Campos = {
 function desde(campaign: Campaign): Campos {
   return {
     name: campaign.name,
+    companyId: campaign.companyId,
     objective: campaign.objective,
     status: campaign.status,
     currency: campaign.currency,
     budget: String(campaign.budget),
+    agencyFee: campaign.agencyFee === null ? "" : String(campaign.agencyFee),
     startDate: aInput(campaign.startDate),
     endDate: aInput(campaign.endDate),
     notes: campaign.notes,
@@ -44,11 +50,20 @@ function desde(campaign: Campaign): Campos {
 }
 
 /** Los entregables tienen su propia sección; aquí va la ficha de la campaña. */
-export function EditCampaignButton({ campaign }: { campaign: Campaign }) {
+export function EditCampaignButton({
+  campaign,
+  companies,
+}: {
+  campaign: Campaign;
+  /** Para poder cambiar de cliente sin rehacer la campaña. */
+  companies: Company[];
+}) {
   const router = useRouter();
   const can = useCan();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<Campos>(() => desde(campaign));
+  const [clientes, setClientes] = useState(companies);
+  const [creandoCliente, setCreandoCliente] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -67,6 +82,10 @@ export function EditCampaignButton({ campaign }: { campaign: Campaign }) {
   async function guardar() {
     if (!form.name.trim()) {
       setError("Falta el nombre de la campaña.");
+      return;
+    }
+    if (!form.companyId) {
+      setError("Selecciona el cliente que contrata.");
       return;
     }
     if (form.startDate && form.endDate && form.endDate < form.startDate) {
@@ -93,10 +112,12 @@ export function EditCampaignButton({ campaign }: { campaign: Campaign }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: form.name.trim(),
+          companyId: form.companyId,
           objective: form.objective,
           status: form.status,
           currency: form.currency,
           budget: Number(form.budget) || 0,
+          agencyFee: form.agencyFee.trim() ? Number(form.agencyFee) : null,
           ...fechas,
           notes: form.notes,
         }),
@@ -145,7 +166,7 @@ export function EditCampaignButton({ campaign }: { campaign: Campaign }) {
         )}
 
         <div className="grid gap-3 sm:grid-cols-2">
-          <div className="sm:col-span-2">
+          <div>
             <Label htmlFor="ecp-name">Nombre</Label>
             <Input
               id="ecp-name"
@@ -153,6 +174,31 @@ export function EditCampaignButton({ campaign }: { campaign: Campaign }) {
               onChange={(e) => set("name", e.target.value)}
               placeholder="Nombre de la campaña"
             />
+          </div>
+
+          <div>
+            <Label htmlFor="ecp-company">Cliente</Label>
+            <div className="flex gap-2">
+              <Picker
+                id="ecp-company"
+                value={form.companyId}
+                onChange={(v) => set("companyId", v)}
+                placeholder={clientes.length ? "Selecciona…" : "Sin empresas todavía"}
+                options={clientes.map((c) => ({ id: c.id, label: c.name, hint: c.industry }))}
+                className="min-w-0 flex-1"
+              />
+              {can("editar_empresas") && (
+                <button
+                  type="button"
+                  onClick={() => setCreandoCliente(true)}
+                  aria-label="Crear un cliente"
+                  title="Crear un cliente"
+                  className="grid h-10 w-9 shrink-0 place-items-center rounded-[var(--r-control)] border border-[var(--line)] text-[var(--text-subtle)] transition hover:border-[var(--line-strong)] hover:text-[var(--text)]"
+                >
+                  <Plus size={15} />
+                </button>
+              )}
+            </div>
           </div>
 
           <div>
@@ -209,6 +255,23 @@ export function EditCampaignButton({ campaign }: { campaign: Campaign }) {
               value={form.budget}
               onChange={(e) => set("budget", e.target.value)}
             />
+            <FieldHint>Solo para comparar. No reparte nada.</FieldHint>
+          </div>
+
+          <div>
+            <Label htmlFor="ecp-fee">Margen sugerido (%)</Label>
+            <Input
+              id="ecp-fee"
+              type="number"
+              min={0}
+              max={100}
+              value={form.agencyFee}
+              onChange={(e) => set("agencyFee", e.target.value)}
+              placeholder="20"
+            />
+            <FieldHint>
+              Propone el cobro al contratar. Los importes ya pactados no se tocan.
+            </FieldHint>
           </div>
 
           <div>
@@ -243,6 +306,14 @@ export function EditCampaignButton({ campaign }: { campaign: Campaign }) {
             placeholder="Contexto que le sirva al equipo."
           />
         </div>
+        <QuickCompanyDialog
+          open={creandoCliente}
+          onClose={() => setCreandoCliente(false)}
+          onCreated={(company) => {
+            setClientes((prev) => [company, ...prev]);
+            set("companyId", company.id);
+          }}
+        />
       </Modal>
     </>
   );

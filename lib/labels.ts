@@ -5,6 +5,7 @@ import type {
   DeliverableStatus,
   DeliverableType,
   PaymentMethod,
+  RequirementStatus,
 } from "@/lib/types";
 
 type Tone = "neutral" | "ok" | "warn" | "danger" | "info" | "accent";
@@ -52,6 +53,14 @@ export const DELIVERABLE_STATUS: Record<DeliverableStatus, { label: string; tone
   en_revision: { label: "En revisión", tone: "warn" },
   publicado: { label: "Publicado", tone: "ok" },
   cancelado: { label: "Cancelado", tone: "danger" },
+};
+
+/** Estado de una petición del checklist, con el tono de su etiqueta. */
+export const REQUIREMENT_STATUS: Record<RequirementStatus, { label: string; tone: Tone }> = {
+  pendiente: { label: "Pendiente", tone: "neutral" },
+  enviado: { label: "En revisión", tone: "accent" },
+  cambios: { label: "Cambios pedidos", tone: "warn" },
+  aprobado: { label: "Aprobado", tone: "ok" },
 };
 
 export const PAYMENT_METHOD: Record<PaymentMethod, string> = {

@@ -35,6 +35,8 @@ const linea = z.object({
   creatorId: z.string().min(1),
   platform: z.enum(PLATAFORMAS),
   type: z.enum(["video", "short", "integracion", "directo", "post"]),
+  /** Nombre propio del encargo. Vacío = la tarea estándar de esa red. */
+  customType: z.string().max(60, "Ese nombre de pieza es demasiado largo.").default(""),
   /** Canal secundario en el que se publica. Vacío = el principal. */
   channelId: z.string().default(""),
   /** Lo que paga el cliente por esta pieza. */
@@ -117,6 +119,7 @@ export async function POST(request: Request) {
     status: "pendiente",
     platform: l.platform,
     channelId: l.channelId,
+    customType: l.customType,
     clientPrice: l.clientPrice,
     commissionPct: l.commissionPct,
     commissionFixed: l.commissionFixed,
@@ -139,7 +142,12 @@ export async function POST(request: Request) {
     };
   });
 
-  const campaign = await createCampaign({ ...rest, endedContracts: [], deliverables });
+  const campaign = await createCampaign({
+    ...rest,
+    endedContracts: [],
+    creatorLeads: [],
+    deliverables,
+  });
 
   /**
    * Cada creador de la campaña recibe su propia sesión con su código: es su

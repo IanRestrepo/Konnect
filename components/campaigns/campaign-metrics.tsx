@@ -8,8 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Picker } from "@/components/ui/picker";
 import { Popover } from "@/components/ui/popover";
 import { TableWrap, Table, Th, Tr, Td } from "@/components/ui/table";
-import { DELIVERABLE_STATUS, DELIVERABLE_TYPE } from "@/lib/labels";
-import { PLATFORM_LABEL } from "@/lib/socials";
+import { DELIVERABLE_STATUS } from "@/lib/labels";
+import { PLATFORM_LABEL, piezaLabel } from "@/lib/socials";
 import { formatCompact, formatDate } from "@/lib/utils";
 import type { DeliverableStatus, DeliverableType, SocialPlatform } from "@/lib/types";
 
@@ -19,6 +19,8 @@ export type MetricRow = {
   creator: string;
   platform: SocialPlatform;
   type: DeliverableType;
+  /** Nombre propio del encargo. Vacío = la tarea estándar de esa red. */
+  customType: string;
   status: DeliverableStatus;
   publishedAt: string | null;
   views: number | null;
@@ -325,7 +327,8 @@ export function CampaignMetrics({
                       {r.title || "Sin publicar"}
                     </span>
                     <span className="block truncate text-[11.5px] text-[var(--text-subtle)]">
-                      {r.creator} · {PLATFORM_LABEL[r.platform]} · {DELIVERABLE_TYPE[r.type]}
+                      {r.creator} · {PLATFORM_LABEL[r.platform]} ·{" "}
+                      {piezaLabel(r.platform, r.type, r.customType)}
                     </span>
                   </Td>
                   {cols.map((c) => (

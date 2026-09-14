@@ -9,6 +9,7 @@ import {
   Eye,
   LoaderCircle,
   MousePointerClick,
+  Plus,
   Rocket,
   Target,
   TriangleAlert,
@@ -22,12 +23,16 @@ import { Badge } from "@/components/ui/badge";
 import { FieldHint, Input, Label, Textarea } from "@/components/ui/field";
 import { Picker } from "@/components/ui/picker";
 import { SearchInput, Segmented } from "@/components/shell/toolbar";
-import { PLATFORM_LABEL, PLATFORMS, TAREAS, tareaLabel } from "@/lib/socials";
+import { useCan } from "@/components/session-provider";
+import { QuickCompanyDialog } from "@/components/companies/quick-company-dialog";
+import { DeliverableTypeField } from "@/components/campaigns/deliverable-type-field";
+import { PLATFORM_LABEL, PLATFORMS, TAREAS, piezaLabel, tareaLabel } from "@/lib/socials";
 import { IMPORTE_MAXIMO, clientPriceForRate, hasRateFor, rateFor } from "@/lib/pricing";
 import type {
   CampaignObjective,
   Company,
   Creator,
+  DeliverableKind,
   DeliverableType,
   SocialPlatform,
 } from "@/lib/types";
@@ -78,6 +83,8 @@ type Linea = {
   creatorId: string;
   platform: SocialPlatform;
   type: DeliverableType;
+  /** Nombre propio del encargo. Vacío = la tarea estándar de esa red. */
+  customType: string;
   /** Canal secundario pactado. Vacío = su canal principal. */
   channelId: string;
   /** Lo que paga el cliente por esta pieza. */
@@ -91,19 +98,28 @@ export function NewCampaignForm({
   creators,
   empleados,
   responsablePorDefecto,
+  kinds,
 }: {
   companies: Company[];
   creators: Creator[];
   empleados: { id: string; name: string; avatarUrl: string | null }[];
   responsablePorDefecto: string;
+  /** Tipos de pieza propios de la agencia, además de los de fábrica. */
+  kinds: DeliverableKind[];
 }) {
   const router = useRouter();
+  const can = useCan();
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [name, setName] = useState("");
+  const [clientes, setClientes] = useState(companies);
   const [companyId, setCompanyId] = useState(companies[0]?.id ?? "");
+  const [creandoCliente, setCreandoCliente] = useState(false);
+  // El catálogo llega del servidor pero puede crecer sin recargar: el campo de
+  // tipo de pieza deja crear uno en el sitio.
+  const [catalogo, setCatalogo] = useState(kinds);
   const [status, setStatus] = useState("borrador");
   const [objective, setObjective] = useState<CampaignObjective>("awareness");
   const [currency, setCurrency] = useState("USD");
@@ -119,6 +135,8 @@ export function NewCampaignForm({
   // Filtros del buscador de creadores.
   const [platform, setPlatform] = useState<SocialPlatform>("youtube");
   const [tipo, setTipo] = useState<DeliverableType>("video");
+  /** Nombre propio del encargo. Vacío = la tarea estándar de esa red. */
+  const [tipoPropio, setTipoPropio] = useState("");
   const [categoria, setCategoria] = useState("");
   const [busqueda, setBusqueda] = useState("");
   /**
@@ -180,7 +198,10 @@ export function NewCampaignForm({
     // acuerdos con dos precios. Sin el tipo, el segundo encargo desmarcaba el
     // primero en vez de añadirse.
     const mismaLinea = (l: Linea) =>
-      l.creatorId === creator.id && l.platform === platform && l.type === tipo;
+      l.creatorId === creator.id &&
+      l.platform === platform &&
+      l.type === tipo &&
+      l.customType === tipoPropio;
 
     if (lineas.some(mismaLinea)) {
       setLineas((prev) => prev.filter((l) => !mismaLinea(l)));
@@ -199,6 +220,7 @@ export function NewCampaignForm({
         creatorId: creator.id,
         platform,
         type: tipo,
+        customType: tipoPropio,
         // Se parte de su canal principal; el canal concreto se elige después,
         // en el paso de precios, que es donde importa cuál cambia la tarifa.
         channelId: "",
@@ -279,6 +301,7 @@ export function NewCampaignForm({
             creatorId: l.creatorId,
             platform: l.platform,
             type: l.type,
+            customType: l.customType,
             channelId: l.channelId,
             clientPrice: Number(l.clientPrice) || 0,
             commissionPct: null,
@@ -389,13 +412,38 @@ export function NewCampaignForm({
                   </div>
                   <div>
                     <Label htmlFor="company">Cliente</Label>
-                    <Picker
-                      id="company"
-                      value={companyId}
-                      onChange={setCompanyId}
-                      placeholder={companies.length ? "Selecciona…" : "Sin empresas todavía"}
-                      options={companies.map((c) => ({ id: c.id, label: c.name, hint: c.industry }))}
-                    />
+                    <div className="flex gap-2">
+                      <Picker
+                        id="company"
+                        value={companyId}
+                        onChange={setCompanyId}
+                        placeholder={clientes.length ? "Selecciona…" : "Sin empresas todavía"}
+                        options={clientes.map((c) => ({
+                          id: c.id,
+                          label: c.name,
+                          hint: c.industry,
+                        }))}
+                        className="min-w-0 flex-1"
+                      />
+                      {/* Dar de alta al cliente aquí mismo, como ya se hacía
+                          con las categorías del creador: mandar a Empresas a
+                          quien está a medio armar la campaña es perder la
+                          campaña a medias. */}
+                      {can("editar_empresas") && (
+                        <button
+                          type="button"
+                          onClick={() => setCreandoCliente(true)}
+                          aria-label="Crear un cliente"
+                          title="Crear un cliente"
+                          className="grid h-10 w-9 shrink-0 place-items-center rounded-[var(--r-control)] border border-[var(--line)] text-[var(--text-subtle)] transition hover:border-[var(--line-strong)] hover:text-[var(--text)]"
+                        >
+                          <Plus size={15} />
+                        </button>
+                      )}
+                    </div>
+                    {clientes.length === 0 && (
+                      <FieldHint>Crea el primero con el botón de al lado.</FieldHint>
+                    )}
                   </div>
                 </div>
 
@@ -557,7 +605,9 @@ export function NewCampaignForm({
                           // Un Reel no existe en Twitch: se cae a la primera
                           // tarea que sí tenga sentido en la red elegida, pero
                           // diciéndolo, que es lo que faltaba.
-                          if (!TAREAS[id].some((t) => t.type === tipo)) {
+                          // Con un tipo propio elegido no hay nada que caer:
+                          // «Unboxing» vale igual en YouTube que en Twitch.
+                          if (!tipoPropio && !TAREAS[id].some((t) => t.type === tipo)) {
                             const anterior = tareaLabel(platform, tipo);
                             const nueva = TAREAS[id][0];
                             setTipo(nueva.type);
@@ -574,15 +624,18 @@ export function NewCampaignForm({
 
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div>
-                      <Label htmlFor="tipo">Qué se le encarga</Label>
-                      <Picker
+                      <DeliverableTypeField
                         id="tipo"
-                        value={tipo}
-                        onChange={(t) => {
+                        platform={platform}
+                        type={tipo}
+                        customType={tipoPropio}
+                        kinds={catalogo}
+                        onChange={(t, propio) => {
                           setTipo(t);
+                          setTipoPropio(propio);
                           setAvisoTipo(null);
                         }}
-                        options={TAREAS[platform].map((t) => ({ id: t.type, label: t.label }))}
+                        onKindsChange={setCatalogo}
                       />
                       {avisoTipo ? (
                         <FieldHint className="text-[var(--warn)]">{avisoTipo}</FieldHint>
@@ -634,7 +687,8 @@ export function NewCampaignForm({
                           (l) =>
                             l.creatorId === creator.id &&
                             l.platform === platform &&
-                            l.type === tipo,
+                            l.type === tipo &&
+                            l.customType === tipoPropio,
                         );
                         const precio = rateFor(creator, platform, tipo);
                         const propia = hasRateFor(creator, platform, tipo);
@@ -712,7 +766,7 @@ export function NewCampaignForm({
                                 <p className="truncate text-[13.5px]">{creator.name}</p>
                                 <p className="text-[12px] text-[var(--text-muted)]">
                                   {PLATFORM_LABEL[linea.platform]} ·{" "}
-                                  {tareaLabel(linea.platform, linea.type)}
+                                  {piezaLabel(linea.platform, linea.type, linea.customType)}
                                 </p>
                               </div>
                               <button
@@ -845,7 +899,7 @@ export function NewCampaignForm({
             <Fila etiqueta="Nombre" valor={name || "—"} />
             <Fila
               etiqueta="Cliente"
-              valor={companies.find((c) => c.id === companyId)?.name ?? "—"}
+              valor={clientes.find((c) => c.id === companyId)?.name ?? "—"}
             />
             <Fila
               etiqueta="Objetivo"
@@ -891,6 +945,15 @@ export function NewCampaignForm({
           </CardContent>
         </Card>
       </div>
+
+      <QuickCompanyDialog
+        open={creandoCliente}
+        onClose={() => setCreandoCliente(false)}
+        onCreated={(company) => {
+          setClientes((prev) => [company, ...prev]);
+          setCompanyId(company.id);
+        }}
+      />
     </div>
   );
 }

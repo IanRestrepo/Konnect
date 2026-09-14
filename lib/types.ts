@@ -123,6 +123,22 @@ export type Company = {
 };
 
 export type DeliverableType = "video" | "short" | "integracion" | "directo" | "post";
+
+/**
+ * Tipo de pieza con nombre propio, a gusto de la agencia: «Unboxing»,
+ * «Podcast», «Mención en la newsletter».
+ *
+ * Cuelga de uno de los cinco formatos de fábrica —su `baseType`— y es esa
+ * familia la que decide qué tarifa del creador se propone. Se hizo así, y no
+ * abriendo el enum, porque las tarifas, el gráfico y los informes están
+ * escritos contra esos cinco: un tipo suelto que no colgara de ninguno nacería
+ * sin precio de partida y sin sitio donde pintarse.
+ */
+export type DeliverableKind = {
+  id: string;
+  name: string;
+  baseType: DeliverableType;
+};
 export type DeliverableStatus = "pendiente" | "en_revision" | "publicado" | "cancelado";
 export type PaymentStatus = "pendiente" | "aprobado" | "pagado";
 
@@ -145,6 +161,8 @@ export type Deliverable = {
   platform: SocialPlatform;
   /** Canal secundario donde se publica. Vacío = su canal principal. */
   channelId: string;
+  /** Nombre propio del encargo. Vacío = se llama como la tarea de su red. */
+  customType: string;
   /** Lo que paga el cliente por esta pieza. Número base del cálculo. */
   clientPrice: number;
   /** Comisión de la agencia en % del cobro. Null = hereda el de la campaña. */
@@ -193,6 +211,8 @@ export type Campaign = {
   memberIds: string[];
   /** Creadores cuyo contrato se cerró. Sin entrada = sigue activo. */
   endedContracts: CampaignCreatorEnd[];
+  /** Quién responde por cada creador. Sin entrada = responde el manager. */
+  creatorLeads: CampaignCreatorLead[];
   deliverables: Deliverable[];
   createdAt: string;
 };
@@ -207,6 +227,18 @@ export type CampaignCreatorEnd = {
   creatorId: string;
   endedAt: string;
   reason: string;
+};
+
+/**
+ * Quién lleva a un creador concreto dentro de una campaña.
+ *
+ * Los miembros de la campaña dicen quién anda en ella; esto dice a quién se le
+ * pregunta por este influencer. Sin entradas responde el manager de la
+ * campaña, que es lo que ya se asumía antes de que esto existiera.
+ */
+export type CampaignCreatorLead = {
+  creatorId: string;
+  userId: string;
 };
 
 /* ---------------- Bitácora ---------------- */
@@ -378,6 +410,8 @@ export type SessionRequirement = {
   steps: string[];
   position: number;
   required: boolean;
+  /** Para cuándo se espera. Null = sin fecha pactada. */
+  dueDate: string | null;
   /** Pieza de la campaña que completa. Aprobarla la rellena sola. */
   deliverableId: string | null;
   status: RequirementStatus;

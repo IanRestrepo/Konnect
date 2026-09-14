@@ -473,6 +473,14 @@
   background: var(--pt-ok-suave);
   color: var(--pt-ok);
 }
+.portal-tag.fecha {
+  background: color-mix(in srgb, var(--pt-tenue) 22%, transparent);
+  color: var(--pt-suave);
+}
+.portal-tag.atrasado {
+  background: var(--pt-aviso-suave);
+  color: var(--pt-aviso);
+}
 
 .portal-revision {
   margin-top: 10px;

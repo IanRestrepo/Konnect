@@ -143,6 +143,7 @@ model Creator {
   accessLogs     SensitiveAccessLog[]
   sessions       CollabSession[]
   apiConnections CreatorApiConnection[]
+  campaignLeads  CampaignCreatorLead[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -377,6 +378,7 @@ model Campaign {
   sessions       CollabSession[]
   members        CampaignMember[]
   endedContracts CampaignCreatorEnd[]
+  creatorLeads   CampaignCreatorLead[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -442,6 +444,15 @@ model Deliverable {
   creator    Creator           @relation(fields: [creatorId], references: [id], onDelete: Restrict)
   type       DeliverableType
   status     DeliverableStatus @default(pendiente)
+
+  /// Nombre propio de la pieza cuando el encargo no es ninguno de los de
+  /// fábrica: «Unboxing», «Podcast», «Mención en la newsletter». Vacío = se
+  /// llama como la tarea estándar de su red.
+  ///
+  /// Es texto y no una relación al catálogo a propósito: borrar un tipo desde
+  /// Configuración no puede renombrar ni vaciar piezas ya pactadas, igual que
+  /// pasa con la categoría del creador.
+  customType String @default("")
 
   /// Red social en la que se publica. Determina qué tarifa del creador aplica.
   platform SocialPlatform @default(youtube)
@@ -557,6 +568,7 @@ model User {
   /// Campañas que lleva y campañas en las que participa.
   managedCampaigns Campaign[]       @relation("CampaignManager")
   campaignMembers  CampaignMember[]
+  creatorLeads     CampaignCreatorLead[]
 
   createdAt DateTime @default(now())
 
@@ -819,6 +831,13 @@ model SessionRequirement {
   position     Int             @default(0)
   required     Boolean         @default(true)
 
+  /// Para cuándo se espera. Null = sin fecha pactada.
+  ///
+  /// Vive en la petición y no en la campaña porque lo que tiene fecha es cada
+  /// paso —el guion el martes, el borrador el jueves, la publicación el
+  /// viernes—, no el trabajo entero. La ve también el creador en su portal.
+  dueDate      DateTime?
+
   /// Pieza de la campaña que esta petición completa.
   ///
   /// Sin esto, lo que el creador entregaba se quedaba en la sesión y alguien
@@ -1009,4 +1028,47 @@ model MetricFormula {
   updatedAt DateTime @updatedAt
 
   @@index([scope, position])
+}
+
+/// Tipo de pieza que se inventa la agencia: «Unboxing», «Podcast», «Mención en
+/// la newsletter».
+///
+/// El enum `DeliverableType` se queda como la familia de la que cuelga cada
+/// uno, y esa familia es la que decide qué tarifa del creador se propone. Se
+/// hizo así en vez de abrir el enum porque las tarifas, el gráfico de vistas y
+/// los informes están escritos contra esos cinco formatos: un catálogo abierto
+/// que no cuelgue de ninguno deja piezas sin precio de partida y sin sitio en
+/// el gráfico.
+model DeliverableKind {
+  id       String          @id
+  name     String          @unique
+  /// De qué formato de fábrica hereda la tarifa.
+  baseType DeliverableType @default(video)
+  /// Orden en el que se ofrece. Lo decide quien edita el catálogo.
+  position Int             @default(0)
+
+  createdAt DateTime @default(now())
+}
+
+/// Quién lleva a un creador concreto dentro de una campaña.
+///
+/// `CampaignMember` dice quién anda en la campaña entera; esto dice quién
+/// responde por este influencer, que es la pregunta que se hace el equipo
+/// cuando algo se atrasa. Sin filas, se entiende que responde el manager de la
+/// campaña: es lo que ya pasaba antes de que esto existiera y evita tener que
+/// rellenar la asignación creador a creador para que la pantalla diga algo.
+model CampaignCreatorLead {
+  id         String   @id
+  campaignId String
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  creatorId  String
+  creator    Creator  @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([campaignId, creatorId, userId])
+  @@index([campaignId, creatorId])
+  @@index([userId])
 }

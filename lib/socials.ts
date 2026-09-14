@@ -147,6 +147,22 @@ export const TAREAS: Record<SocialPlatform, { type: DeliverableType; label: stri
   web: [{ type: "post", label: "Publicación" }],
 };
 
+/**
+ * Cómo se llama una pieza concreta.
+ *
+ * El nombre propio manda sobre el de fábrica: si la agencia pactó un
+ * «Unboxing», eso es lo que tiene que leer el equipo y lo que tiene que leer
+ * el creador en su portal, no «Video dedicado», que es solo la familia de la
+ * que cuelga para efectos de tarifa.
+ */
+export function piezaLabel(
+  platform: SocialPlatform,
+  type: DeliverableType,
+  customType?: string | null,
+): string {
+  return customType?.trim() || tareaLabel(platform, type);
+}
+
 /** Cómo se llama esa tarea en esa red. Cae en un nombre genérico si no encaja. */
 export function tareaLabel(platform: SocialPlatform, type: DeliverableType): string {
   const encontrada = TAREAS[platform]?.find((t) => t.type === type);

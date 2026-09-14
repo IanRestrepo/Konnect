@@ -24,10 +24,9 @@ import { listCreatorCategories } from "@/lib/store";
 import {
   CREATOR_STATUS,
   DELIVERABLE_STATUS,
-  DELIVERABLE_TYPE,
   PAYMENT_METHOD,
 } from "@/lib/labels";
-import { PLATFORM_METRICS } from "@/lib/socials";
+import { PLATFORM_METRICS, piezaLabel } from "@/lib/socials";
 import { creatorViewsSeries, trend } from "@/lib/series";
 import { formatCompact, formatMoney } from "@/lib/utils";
 
@@ -174,7 +173,11 @@ export default async function CreadorPage({ params }: { params: Promise<{ id: st
                         </RowIcon>
                       }
                       title={deliverable.title ?? "Sin publicar"}
-                      subtitle={`${campaign.name} · ${DELIVERABLE_TYPE[deliverable.type]}`}
+                      subtitle={`${campaign.name} · ${piezaLabel(
+                        deliverable.platform,
+                        deliverable.type,
+                        deliverable.customType,
+                      )}`}
                       trailing={
                         <span className="flex items-center gap-4">
                           <span className="hidden text-right sm:block">

@@ -400,6 +400,15 @@ function Peticion({
         <div className="portal-check__pie">
           <span className={`portal-tag ${req.status}`}>{ESTADO_CHECK[req.status]}</span>
 
+          {/* La fecha pactada, para que no haya que preguntarla. Se pinta en
+              rojo solo mientras siga abierta: aprobada tarde ya no es un
+              problema de nadie. */}
+          {req.dueDate && (
+            <span className={`portal-tag ${atrasada(req.dueDate, aprobado) ? "atrasado" : "fecha"}`}>
+              Para el {formatDate(req.dueDate)}
+            </span>
+          )}
+
           {req.url && (
             <a className="portal-enlace" href={req.url} target="_blank" rel="noreferrer">
               {req.url}
@@ -481,4 +490,15 @@ function Peticion({
       </div>
     </article>
   );
+}
+
+/**
+ * La fecha pactada ya pasó y la petición sigue abierta.
+ *
+ * Aprobada fuera de plazo no se pinta en rojo: el creador ya no tiene nada que
+ * hacer con eso, y marcárselo solo sería un reproche.
+ */
+function atrasada(dueDate: string, aprobado: boolean): boolean {
+  if (aprobado) return false;
+  return new Date(dueDate).getTime() < Date.now();
 }

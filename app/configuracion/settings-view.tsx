@@ -15,6 +15,7 @@ import { AppearancePanel } from "@/components/shell/appearance-panel";
 import { YoutubePanel } from "@/app/configuracion/youtube-panel";
 import { TeamPanel } from "@/app/configuracion/team-panel";
 import { CategoriesPanel } from "@/app/configuracion/categories-panel";
+import { DeliverableKindsPanel } from "@/app/configuracion/deliverable-kinds-panel";
 import { PageTitle } from "@/components/ui/section";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -139,7 +140,12 @@ export function SettingsView() {
 
         {tab === "integraciones" && <YoutubePanel />}
 
-        {tab === "catalogos" && <CategoriesPanel />}
+        {tab === "catalogos" && (
+          <>
+            <CategoriesPanel />
+            <DeliverableKindsPanel />
+          </>
+        )}
 
         {tab === "organizacion" && (
           <Card>

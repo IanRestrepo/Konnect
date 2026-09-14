@@ -11,6 +11,7 @@ import {
   Film,
   LoaderCircle,
   MoreHorizontal,
+  Pencil,
   Plus,
   RefreshCw,
   Trash2,
@@ -25,8 +26,10 @@ import { Avatar } from "@/components/ui/avatar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ListBox, ListRow } from "@/components/ui/list";
 import { AddDeliverableDialog } from "@/components/campaigns/add-deliverable-dialog";
-import { DELIVERABLE_STATUS, DELIVERABLE_TYPE } from "@/lib/labels";
-import type { Creator, Currency, Deliverable } from "@/lib/types";
+import { EditDeliverableDialog } from "@/components/campaigns/edit-deliverable-dialog";
+import { DELIVERABLE_STATUS } from "@/lib/labels";
+import { piezaLabel } from "@/lib/socials";
+import type { Creator, Currency, Deliverable, DeliverableKind } from "@/lib/types";
 import { formatCompact, formatDate, formatMoney } from "@/lib/utils";
 
 /** Estado de pago, con el tono del badge. */
@@ -41,14 +44,21 @@ export function DeliverablesSection({
   deliverables,
   creators,
   currency,
+  kinds,
 }: {
   campaignId: string;
   deliverables: Deliverable[];
   creators: Creator[];
   currency: Currency;
+  /** Tipos de pieza propios de la agencia. Se pueden crear desde los diálogos. */
+  kinds: DeliverableKind[];
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [editando, setEditando] = useState<Deliverable | null>(null);
+  // El catálogo llega del servidor pero puede crecer sin recargar: los dos
+  // diálogos dejan crear un tipo en el sitio.
+  const [catalogo, setCatalogo] = useState(kinds);
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -243,7 +253,7 @@ export function DeliverablesSection({
                         {creator.name}
                       </span>
                     )}
-                    · {DELIVERABLE_TYPE[d.type]} ·{" "}
+                    · {piezaLabel(d.platform, d.type, d.customType)} ·{" "}
                     {d.publishedAt ? formatDate(d.publishedAt) : "sin fecha"}
                   </>
                 }
@@ -268,6 +278,7 @@ export function DeliverablesSection({
                     <Acciones
                       deliverable={d}
                       ocupado={ocupado === d.id}
+                      onEditar={() => setEditando(d)}
                       onCambiar={(patch) => cambiar(d.id, patch)}
                       onBorrar={() => borrar(d.id)}
                       onSubirComprobante={() => pedirComprobante(d.id)}
@@ -300,6 +311,20 @@ export function DeliverablesSection({
         onClose={() => setOpen(false)}
         campaignId={campaignId}
         creators={creators}
+        kinds={catalogo}
+        onKindsChange={setCatalogo}
+      />
+
+      <EditDeliverableDialog
+        key={editando?.id ?? "sin-pieza"}
+        open={editando !== null}
+        onClose={() => setEditando(null)}
+        campaignId={campaignId}
+        deliverable={editando}
+        creator={creators.find((c) => c.id === editando?.creatorId) ?? null}
+        currency={currency}
+        kinds={catalogo}
+        onKindsChange={setCatalogo}
       />
     </section>
   );
@@ -314,6 +339,7 @@ export function DeliverablesSection({
 function Acciones({
   deliverable,
   ocupado,
+  onEditar,
   onCambiar,
   onBorrar,
   onSubirComprobante,
@@ -321,6 +347,7 @@ function Acciones({
 }: {
   deliverable: Deliverable;
   ocupado: boolean;
+  onEditar: () => void;
   onCambiar: (patch: Record<string, string>) => void;
   onBorrar: () => void;
   onSubirComprobante: () => void;
@@ -350,6 +377,19 @@ function Acciones({
     >
       {({ close }) => (
         <div className="w-52 p-1">
+          {/* Lo primero: es lo que más falta hacía y lo que resuelve el resto
+              —el enlace, el tipo y el dinero— sin pasar por este menú. */}
+          <Opcion
+            icono={Pencil}
+            onClick={() => {
+              onEditar();
+              close();
+            }}
+          >
+            Editar la pieza
+          </Opcion>
+          <div className="my-1 h-px bg-[var(--line)]" />
+
           {d.videoUrl && (
             <>
               <Link

@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { decrypt, encrypt } from "@/lib/crypto";
 import { codeHint, generateAccessCode, normalizeAccessCode } from "@/lib/portal";
-import { tareaLabel } from "@/lib/socials";
+import { piezaLabel } from "@/lib/socials";
 import { CATEGORIAS_INICIALES } from "@/lib/labels";
 import type {
   Announcement,
@@ -18,6 +18,8 @@ import type {
   CreatorChannel,
   CreatorRate,
   Deliverable,
+  DeliverableKind,
+  DeliverableType,
   Doc,
   DocLink,
   DocSummary,
@@ -389,6 +391,7 @@ const campaignInclude = {
   deliverables: { orderBy: { createdAt: "asc" } },
   members: { select: { userId: true } },
   endedContracts: { orderBy: { endedAt: "desc" } },
+  creatorLeads: { select: { creatorId: true, userId: true } },
 } satisfies Prisma.CampaignInclude;
 
 type CampaignRow = Prisma.CampaignGetPayload<{ include: typeof campaignInclude }>;
@@ -401,6 +404,7 @@ function toDeliverable(row: CampaignRow["deliverables"][number]): Deliverable {
     status: row.status,
     platform: row.platform as SocialPlatform,
     channelId: row.channelId,
+    customType: row.customType,
     clientPrice: num(row.clientPrice),
     commissionPct: row.commissionPct === null ? null : num(row.commissionPct),
     commissionFixed: row.commissionFixed === null ? null : num(row.commissionFixed),
@@ -442,6 +446,10 @@ function toCampaign(row: CampaignRow): Campaign {
       creatorId: e.creatorId,
       endedAt: iso(e.endedAt),
       reason: e.reason,
+    })),
+    creatorLeads: row.creatorLeads.map((l) => ({
+      creatorId: l.creatorId,
+      userId: l.userId,
     })),
     deliverables: row.deliverables.map(toDeliverable),
     createdAt: iso(row.createdAt),
@@ -1003,6 +1011,7 @@ function deliverableData(input: Omit<Deliverable, "id">) {
     status: input.status,
     platform: input.platform ?? "youtube",
     channelId: input.channelId ?? "",
+    customType: input.customType ?? "",
     clientPrice: input.clientPrice ?? 0,
     commissionPct: input.commissionPct,
     commissionFixed: input.commissionFixed,
@@ -1100,6 +1109,40 @@ export async function setCampaignTeam(
   return row ? toCampaign(row) : null;
 }
 
+/**
+ * Reemplaza quién responde por un creador dentro de una campaña.
+ *
+ * Llega la lista entera y se reescribe, como en `setCampaignTeam`: quitar a
+ * alguien de la pantalla tiene que quitarlo de la base, no dejarlo colgado.
+ */
+export async function setCampaignCreatorLeads(
+  campaignId: string,
+  creatorId: string,
+  userIds: string[],
+): Promise<Campaign | null> {
+  const existe = await prisma.campaign.findUnique({
+    where: { id: campaignId },
+    select: { id: true },
+  });
+  if (!existe) return null;
+
+  const limpios = [...new Set(userIds.filter(Boolean))];
+
+  await prisma.$transaction([
+    prisma.campaignCreatorLead.deleteMany({ where: { campaignId, creatorId } }),
+    prisma.campaignCreatorLead.createMany({
+      data: limpios.map((userId) => ({ id: newId("ccl"), campaignId, creatorId, userId })),
+      skipDuplicates: true,
+    }),
+  ]);
+
+  const row = await prisma.campaign.findUnique({
+    where: { id: campaignId },
+    include: campaignInclude,
+  });
+  return row ? toCampaign(row) : null;
+}
+
 export async function updateCampaign(
   id: string,
   patch: Partial<Campaign>,
@@ -1113,6 +1156,10 @@ export async function updateCampaign(
   if (patch.objective !== undefined) data.objective = patch.objective;
   if (patch.currency !== undefined) data.currency = patch.currency;
   if (patch.budget !== undefined) data.budget = patch.budget;
+  if (patch.agencyFee !== undefined) data.agencyFee = patch.agencyFee;
+  // Cambiar de cliente tiene que ser posible: una campaña dada de alta bajo la
+  // empresa equivocada solo se podía arreglar borrándola y rehaciéndola.
+  if (patch.companyId !== undefined) data.company = { connect: { id: patch.companyId } };
   if (patch.notes !== undefined) data.notes = patch.notes;
   if (patch.startDate !== undefined) {
     const fecha = toDate(patch.startDate);
@@ -1155,6 +1202,8 @@ export async function hireCreator(
     creatorName: string;
     platform: SocialPlatform;
     type: Deliverable["type"];
+    /** Nombre propio del encargo. Vacío = la tarea estándar de esa red. */
+    customType: string;
     channelId: string;
     clientPrice: number;
     commissionFixed: number;
@@ -1176,6 +1225,7 @@ export async function hireCreator(
       status: "pendiente",
       platform: input.platform,
       channelId: input.channelId,
+      customType: input.customType,
       clientPrice: input.clientPrice,
       commissionPct: null,
       commissionFixed: input.commissionFixed,
@@ -1271,6 +1321,52 @@ export async function reopenCreatorContract(
     include: campaignInclude,
   });
   return row ? toCampaign(row) : null;
+}
+
+/**
+ * Quita a un creador de una campaña y borra lo suyo.
+ *
+ * Es lo contrario de finalizar el contrato, y las dos cosas tienen que existir:
+ * finalizar es para lo que pasó de verdad y hay que poder mirar el año que
+ * viene; esto es para lo que nunca debió estar ahí —el creador equivocado, la
+ * campaña de prueba—, donde dejar el rastro solo ensucia los totales.
+ *
+ * Se lleva también su sesión de entrega, por lo mismo que `deleteCampaign`: la
+ * sesión tiene `campaignId` en `SetNull`, así que sobreviviría suelta y —esto
+ * es lo grave— con su código de portal todavía válido.
+ *
+ * Devuelve qué se llevó por delante, para poder decírselo a quien lo confirmó.
+ */
+export async function removeCreatorFromCampaign(
+  campaignId: string,
+  creatorId: string,
+): Promise<{ ok: boolean; piezas: number; pagadas: number; sesiones: number }> {
+  const piezas = await prisma.deliverable.findMany({
+    where: { campaignId, creatorId },
+    select: { id: true, paymentStatus: true },
+  });
+  if (piezas.length === 0) {
+    // Sin piezas no participa, pero puede quedar la marca de contrato cerrado
+    // o la sesión de una contratación que se deshizo: se limpian igual.
+    const { count: sesiones } = await prisma.collabSession.deleteMany({
+      where: { campaignId, creatorId },
+    });
+    await prisma.campaignCreatorEnd.deleteMany({ where: { campaignId, creatorId } });
+    await prisma.campaignCreatorLead.deleteMany({ where: { campaignId, creatorId } });
+    return { ok: sesiones > 0, piezas: 0, pagadas: 0, sesiones };
+  }
+
+  const pagadas = piezas.filter((p) => p.paymentStatus === "pagado").length;
+
+  const sesiones = await prisma.$transaction(async (tx) => {
+    const { count } = await tx.collabSession.deleteMany({ where: { campaignId, creatorId } });
+    await tx.deliverable.deleteMany({ where: { campaignId, creatorId } });
+    await tx.campaignCreatorEnd.deleteMany({ where: { campaignId, creatorId } });
+    await tx.campaignCreatorLead.deleteMany({ where: { campaignId, creatorId } });
+    return count;
+  });
+
+  return { ok: true, piezas: piezas.length, pagadas, sesiones };
 }
 
 /**
@@ -1587,6 +1683,7 @@ function toRequirement(row: SessionRow["requirements"][number]): SessionRequirem
     steps: row.steps,
     position: row.position,
     required: row.required,
+    dueDate: isoOrNull(row.dueDate),
     deliverableId: row.deliverableId,
     status: row.status,
     url: row.url,
@@ -1960,6 +2057,90 @@ export async function setCreatorCategories(names: string[]): Promise<string[]> {
   return limpias;
 }
 
+/* ---------------- Tipos de pieza ---------------- */
+
+/**
+ * El catálogo abierto de tipos de pieza. Vacío de fábrica: los cinco formatos
+ * del enum ya cubren lo normal, y sembrarlo con inventos que nadie pidió solo
+ * llenaría el desplegable de ruido.
+ */
+export async function listDeliverableKinds(): Promise<DeliverableKind[]> {
+  const rows = await prisma.deliverableKind.findMany({
+    orderBy: [{ position: "asc" }, { name: "asc" }],
+  });
+  return rows.map((r) => ({ id: r.id, name: r.name, baseType: r.baseType }));
+}
+
+/**
+ * Añade un tipo suelto y devuelve el catálogo entero.
+ *
+ * Existe aparte del reemplazo completo porque se llama desde el diálogo de
+ * contratar: mandar a Configuración a quien está a medio pactar una pieza —y
+ * perder el formulario— es la razón por la que nadie crearía un tipo nuevo
+ * nunca. Si ya está, sin distinguir mayúsculas, se devuelve el que hay.
+ */
+export async function addDeliverableKind(
+  name: string,
+  baseType: DeliverableType,
+): Promise<DeliverableKind[]> {
+  const limpio = name.trim();
+  if (!limpio) return listDeliverableKinds();
+
+  const actuales = await listDeliverableKinds();
+  if (actuales.some((k) => k.name.toLowerCase() === limpio.toLowerCase())) return actuales;
+
+  const ultimo = await prisma.deliverableKind.findFirst({
+    orderBy: { position: "desc" },
+    select: { position: true },
+  });
+
+  await prisma.deliverableKind.create({
+    data: {
+      id: newId("dk"),
+      name: limpio,
+      baseType,
+      position: (ultimo?.position ?? -1) + 1,
+    },
+  });
+
+  return listDeliverableKinds();
+}
+
+/**
+ * Reemplaza el catálogo entero, en el orden recibido.
+ *
+ * Quitar uno de aquí no toca las piezas que lo usaban: `customType` es texto
+ * en el entregable, no una relación. Deja de ofrecerse al pactar, y la pieza
+ * vieja sigue llamándose como se llamaba.
+ */
+export async function setDeliverableKinds(
+  kinds: { name: string; baseType: DeliverableType }[],
+): Promise<DeliverableKind[]> {
+  const vistos = new Set<string>();
+  const limpios = kinds
+    .map((k) => ({ name: k.name.trim(), baseType: k.baseType }))
+    .filter((k) => {
+      const llave = k.name.toLowerCase();
+      if (!k.name || vistos.has(llave)) return false;
+      vistos.add(llave);
+      return true;
+    });
+
+  await prisma.$transaction([
+    prisma.deliverableKind.deleteMany({}),
+    prisma.deliverableKind.createMany({
+      data: limpios.map((k, i) => ({
+        id: newId("dk"),
+        name: k.name,
+        baseType: k.baseType,
+        position: i,
+      })),
+    }),
+  ]);
+
+  return listDeliverableKinds();
+}
+
 /** Reemplaza los contactos de nombre libre (Discord, Telegram…) del creador. */
 export async function setCreatorContactFields(
   creatorId: string,
@@ -2020,15 +2201,39 @@ export async function setDeliverableReceipt(
   return row ? toCampaign(row) : null;
 }
 
+/**
+ * Cambia una pieza ya pactada: lo que es, dónde sale, qué enlace tiene y
+ * cuánto dinero mueve.
+ *
+ * Antes solo dejaba tocar el estado y el precio, y esa era la queja de fondo
+ * de media agencia: una pieza nacía en el diálogo de contratar y se quedaba
+ * congelada ahí. Sin poder pegarle el enlace de la publicación, la fila decía
+ * «Pendiente de publicar» para siempre aunque el video llevara semanas
+ * arriba; sin poder corregir el pago al creador, el único arreglo era borrarla
+ * y volver a contratarlo, que se lleva por delante su sesión de entrega.
+ */
 export async function updateDeliverable(
   campaignId: string,
   deliverableId: string,
   patch: {
     status?: Deliverable["status"];
     paymentStatus?: Deliverable["paymentStatus"];
+    type?: Deliverable["type"];
+    customType?: string;
+    platform?: SocialPlatform;
+    channelId?: string;
     clientPrice?: number;
     commissionPct?: number | null;
     commissionFixed?: number | null;
+    videoUrl?: string | null;
+    videoId?: string | null;
+    title?: string | null;
+    thumbnail?: string | null;
+    publishedAt?: string | null;
+    durationSeconds?: number | null;
+    views?: number | null;
+    likes?: number | null;
+    comments?: number | null;
   },
 ): Promise<Campaign | null> {
   const actual = await prisma.deliverable.findFirst({
@@ -2039,9 +2244,29 @@ export async function updateDeliverable(
 
   const data: Prisma.DeliverableUpdateManyMutationInput = {};
   if (patch.status !== undefined) data.status = patch.status;
+  if (patch.type !== undefined) data.type = patch.type;
+  if (patch.customType !== undefined) data.customType = patch.customType;
+  if (patch.platform !== undefined) data.platform = patch.platform;
+  if (patch.channelId !== undefined) data.channelId = patch.channelId;
   if (patch.clientPrice !== undefined) data.clientPrice = patch.clientPrice;
   if (patch.commissionPct !== undefined) data.commissionPct = patch.commissionPct;
   if (patch.commissionFixed !== undefined) data.commissionFixed = patch.commissionFixed;
+
+  // Datos de la publicación. El enlace se puede vaciar —una pieza que se dio
+  // por publicada por error vuelve a no tener video—, así que `null` es un
+  // valor y no un «no lo toques»: eso último es `undefined`.
+  if (patch.videoUrl !== undefined) data.videoUrl = patch.videoUrl;
+  if (patch.videoId !== undefined) data.videoId = patch.videoId;
+  if (patch.title !== undefined) data.title = patch.title;
+  if (patch.thumbnail !== undefined) data.thumbnail = patch.thumbnail;
+  if (patch.publishedAt !== undefined) data.publishedAt = toDate(patch.publishedAt);
+  if (patch.durationSeconds !== undefined) data.durationSeconds = patch.durationSeconds;
+  if (patch.views !== undefined) {
+    data.views = patch.views === null ? null : BigInt(Math.trunc(patch.views));
+    data.likes = patch.likes ?? null;
+    data.comments = patch.comments ?? null;
+    data.metricsUpdatedAt = patch.views === null ? null : new Date();
+  }
 
   if (patch.paymentStatus !== undefined) {
     data.paymentStatus = patch.paymentStatus;
@@ -2213,7 +2438,7 @@ export async function seedRequirementsFromCampaign(
   const piezas = await prisma.deliverable.findMany({
     where: { campaignId, creatorId },
     orderBy: { createdAt: "asc" },
-    select: { id: true, type: true, platform: true },
+    select: { id: true, type: true, platform: true, customType: true },
   });
   if (piezas.length === 0) return 0;
 
@@ -2242,8 +2467,9 @@ export async function seedRequirementsFromCampaign(
       deliverableId: p.id,
       kind: "entregable" as const,
       // Se nombra como se llama en su red: «Mención dentro de un video», no
-      // «integracion», que no le dice nada a quien lo lee en el portal.
-      title: tareaLabel(p.platform as SocialPlatform, p.type),
+      // «integracion», que no le dice nada a quien lo lee en el portal. Si la
+      // pieza tiene nombre propio, ese gana.
+      title: piezaLabel(p.platform as SocialPlatform, p.type, p.customType),
       instructions: "Pega el enlace cuando esté publicado.",
       steps: [],
       required: true,
@@ -2262,6 +2488,7 @@ export async function addRequirement(
     instructions?: string;
     steps?: string[];
     required?: boolean;
+    dueDate?: string | null;
     deliverableId?: string | null;
   },
 ): Promise<CollabSession | null> {
@@ -2286,6 +2513,7 @@ export async function addRequirement(
       instructions: input.instructions ?? "",
       steps: input.steps ?? [],
       required: input.required ?? true,
+      dueDate: toDate(input.dueDate ?? null),
       deliverableId: input.deliverableId ?? null,
       position: (ultimo?.position ?? -1) + 1,
     },
@@ -2303,11 +2531,15 @@ export async function updateRequirement(
     steps: string[];
     required: boolean;
     position: number;
+    dueDate: string | null;
   }>,
 ): Promise<CollabSession | null> {
+  const { dueDate, ...resto } = patch;
   const { count } = await prisma.sessionRequirement.updateMany({
     where: { id: requirementId, sessionId },
-    data: patch,
+    // La fecha llega como texto y se puede vaciar: `undefined` es no tocarla,
+    // `null` es quitarla.
+    data: dueDate === undefined ? resto : { ...resto, dueDate: toDate(dueDate) },
   });
   if (count === 0) return null;
   return getCollabSession(sessionId);
@@ -2941,7 +3173,11 @@ export async function duplicateCampaign(
           id: newId("dl"),
           creatorId: d.creatorId,
           type: d.type,
+          // La copia tiene que pactar lo mismo: sin el nombre propio y sin el
+          // canal, una pieza duplicada cambia de nombre y de tarifa sola.
+          customType: d.customType,
           platform: d.platform,
+          channelId: d.channelId,
           status: "pendiente" as const,
           clientPrice: d.clientPrice,
           commissionPct: d.commissionPct,

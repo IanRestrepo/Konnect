@@ -36,17 +36,14 @@ import { FieldHint, Input, Label, Select, Textarea } from "@/components/ui/field
 import { Picker } from "@/components/ui/picker";
 import { MATERIAL_VACIO, MaterialFields, type MaterialDraft } from "@/components/sessions/material-fields";
 import { useCan } from "@/components/session-provider";
-import { PORTAL_ROLE, SESSION_ITEM_KIND, SESSION_STATUS } from "@/lib/labels";
+import {
+  PORTAL_ROLE,
+  REQUIREMENT_STATUS as ESTADO_PETICION,
+  SESSION_ITEM_KIND,
+  SESSION_STATUS,
+} from "@/lib/labels";
 import type { CollabSession, PortalRole, SessionItemKind } from "@/lib/types";
 import { formatCompact, formatDate } from "@/lib/utils";
-
-/** Estado de una petición, con el tono del badge que le corresponde. */
-const ESTADO_PETICION = {
-  pendiente: { label: "Pendiente", tone: "neutral" as const },
-  enviado: { label: "En revisión", tone: "accent" as const },
-  cambios: { label: "Cambios pedidos", tone: "warn" as const },
-  aprobado: { label: "Aprobado", tone: "ok" as const },
-};
 
 const PETICION_VACIA = {
   kind: "entregable" as SessionItemKind,
@@ -54,6 +51,8 @@ const PETICION_VACIA = {
   instructions: "",
   /** Un paso por línea; se parten al guardar. */
   steps: "",
+  /** Para cuándo se espera, en `yyyy-mm-dd`. Vacío = sin plazo. */
+  dueDate: "",
 };
 
 type CreatorResumen = {
@@ -205,6 +204,9 @@ export function SessionDetail({
           .split("\n")
           .map((s) => s.trim())
           .filter(Boolean),
+        dueDate: peticion.dueDate
+          ? new Date(`${peticion.dueDate}T00:00:00`).toISOString()
+          : null,
       }),
       "No se pudo crear la petición.",
     );
@@ -373,6 +375,7 @@ export function SessionDetail({
                       [
                         kind.label,
                         req.steps.length ? `${req.steps.length} pasos` : null,
+                        req.dueDate ? `para el ${formatDate(req.dueDate)}` : null,
                         req.submittedAt ? `entregado ${formatDate(req.submittedAt)}` : null,
                       ]
                         .filter(Boolean)
@@ -391,7 +394,11 @@ export function SessionDetail({
                             <ExternalLink size={14} />
                           </a>
                         )}
-                        <Badge tone={estado.tone}>{estado.label}</Badge>
+                        {atrasada(req.dueDate, req.status) ? (
+                          <Badge tone="danger">Atrasado</Badge>
+                        ) : (
+                          <Badge tone={estado.tone}>{estado.label}</Badge>
+                        )}
 
                         {puedeEditar && req.status === "enviado" && (
                           <>
@@ -860,8 +867,30 @@ export function SessionDetail({
             />
             <FieldHint>Uno por línea. Se le muestran como lista.</FieldHint>
           </div>
+
+          <div>
+            <Label htmlFor="pt-due">Para cuándo</Label>
+            <Input
+              id="pt-due"
+              type="date"
+              value={peticion.dueDate}
+              onChange={(e) => setPeticion({ ...peticion, dueDate: e.target.value })}
+            />
+            <FieldHint>Opcional. La ve el creador en su portal.</FieldHint>
+          </div>
         </div>
       </Modal>
     </div>
   );
+}
+
+/**
+ * La fecha pasó y la petición sigue abierta.
+ *
+ * Aprobada fuera de plazo ya no es un problema que nadie tenga que resolver
+ * hoy, así que no se pinta en rojo: solo ensuciaría la lista de lo que falta.
+ */
+function atrasada(dueDate: string | null, status: string): boolean {
+  if (!dueDate || status === "aprobado") return false;
+  return new Date(dueDate).getTime() < Date.now();
 }

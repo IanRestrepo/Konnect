@@ -18,10 +18,11 @@ import {
   campaignMetrics,
   creatorHasYoutubeAnalytics,
   getCampaign,
+  getCompanies,
   getCompany,
   getCreators,
 } from "@/lib/data";
-import { listSessions, listUsers } from "@/lib/store";
+import { listDeliverableKinds, listSessions, listUsers } from "@/lib/store";
 import { puedeVerCampana } from "@/lib/campaign-access";
 import { CampaignTeam } from "@/components/campaigns/campaign-team";
 import { LinkedNotes } from "@/components/notes/linked-notes";
@@ -40,11 +41,13 @@ export default async function CampanaPage({ params }: { params: Promise<{ id: st
   // confirmaría que la campaña está ahí.
   if (!puedeVerCampana(session, campaign)) notFound();
 
-  const [company, creators, todasSesiones, usuarios] = await Promise.all([
+  const [company, companies, creators, todasSesiones, usuarios, kinds] = await Promise.all([
     getCompany(campaign.companyId),
+    getCompanies(),
     getCreators(),
     listSessions(),
     listUsers(),
+    listDeliverableKinds(),
   ]);
   // Solo las cuentas activas: asignarle una campaña a alguien que ya no entra
   // deja la ficha diciendo que la lleva quien no la lleva.
@@ -86,6 +89,7 @@ export default async function CampanaPage({ params }: { params: Promise<{ id: st
     creator: creatorById.get(d.creatorId)?.name ?? "—",
     platform: d.platform,
     type: d.type,
+    customType: d.customType,
     status: d.status,
     publishedAt: d.publishedAt,
     views: d.views,
@@ -117,7 +121,7 @@ export default async function CampanaPage({ params }: { params: Promise<{ id: st
                 nombre={campaign.name}
                 sesiones={sessions.length}
               />
-              <EditCampaignButton campaign={campaign} />
+              <EditCampaignButton campaign={campaign} companies={companies} />
             </span>
           }
         />
@@ -173,6 +177,8 @@ export default async function CampanaPage({ params }: { params: Promise<{ id: st
             campaign={campaign}
             creators={creators}
             currency={campaign.currency}
+            kinds={kinds}
+            empleados={empleados}
           />
 
           <DeliverablesSection
@@ -180,6 +186,7 @@ export default async function CampanaPage({ params }: { params: Promise<{ id: st
             deliverables={campaign.deliverables}
             creators={creators}
             currency={campaign.currency}
+            kinds={kinds}
           />
         </div>
 
@@ -234,7 +241,14 @@ export default async function CampanaPage({ params }: { params: Promise<{ id: st
               <ul className="px-2 pb-2">
                 {sessions.map((s) => {
                   const suyo = creators.find((c) => c.id === s.creatorId);
-                  const pendientes = s.requirements.filter((r) => r.status !== "aprobado").length;
+                  const abiertas = s.requirements.filter((r) => r.status !== "aprobado");
+                  const pendientes = abiertas.length;
+                  // La fecha más cercana de lo que sigue abierto: es lo que se
+                  // viene encima, y era justo lo que no se veía desde aquí.
+                  const proxima = abiertas
+                    .map((r) => r.dueDate)
+                    .filter((d): d is string => Boolean(d))
+                    .sort()[0];
                   return (
                     <li key={s.id}>
                       <Link
@@ -251,7 +265,9 @@ export default async function CampanaPage({ params }: { params: Promise<{ id: st
                               ? "Sin peticiones"
                               : pendientes === 0
                                 ? "Todo aprobado"
-                                : `${pendientes} por resolver`}
+                                : `${pendientes} por resolver${
+                                    proxima ? ` · próxima el ${formatDate(proxima)}` : ""
+                                  }`}
                           </span>
                         </span>
                         <Badge tone={s.status === "abierta" ? "ok" : "neutral"}>
