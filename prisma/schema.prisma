@@ -100,7 +100,13 @@ model Creator {
   channelUrl String?
   avatarUrl  String?
   country    String        @default("")
+  /// La categoría principal: la primera de `categories`. Se mantiene aparte
+  /// porque agrupa la lista de creadores y la usan los informes de antes.
   category   String
+  /// Todas sus categorías. Un creador de Roblox es también de Gaming, y con
+  /// una sola había que elegir y la otra se perdía al cambiarla. Vacía en las
+  /// fichas de antes: se lee como `[category]`.
+  categories String[]      @default([])
   status     CreatorStatus @default(prospecto)
 
   email String @default("")
@@ -129,6 +135,12 @@ model Creator {
   taxIdLast4       String?
   paypalEmailEnc   String?
   bankNotesEnc     String?
+
+  // Datos personales, cifrados como los bancarios y detrás del mismo código:
+  // el nombre legal y la dirección hacen falta para facturar y enviar
+  // productos, y son justo lo que no debe verse al pasar por la ficha.
+  realNameEnc String?
+  addressEnc  String?
 
   notes String @default("")
 

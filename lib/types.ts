@@ -10,6 +10,14 @@ export type PaymentMethod =
   | "deel"
   | "efectivo";
 
+/** Datos personales del creador. Solo existen revelados, nunca en la ficha. */
+export type PersonalData = {
+  /** Nombre legal, el que va en facturas y contratos. */
+  realName: string;
+  /** Dirección postal, para envíos de producto. */
+  address: string;
+};
+
 export type BankingInfo = {
   holder: string;
   bankName: string;
@@ -65,7 +73,10 @@ export type Creator = {
   channelUrl: string;
   avatarUrl: string | null;
   country: string;
+  /** Categoría principal: la primera de `categories`. */
   category: string;
+  /** Todas sus categorías, la principal primero. */
+  categories: string[];
   status: CreatorStatus;
   email: string;
   phone: string;
@@ -92,6 +103,12 @@ export type Creator = {
   paymentMethods: PaymentMethod[];
   /* Confidencial: cifrado en BD, revelado con código */
   banking: BankingInfo;
+  /**
+   * Si tiene nombre real y dirección guardados. Los valores no salen nunca en
+   * la ficha: se revelan con el código, igual que los bancarios.
+   */
+  hasRealName: boolean;
+  hasAddress: boolean;
   /** Sus cuentas de cobro, una por método. Censuradas hasta revelarlas. */
   bankAccounts: BankingAccount[];
   notes: string;

@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation";
 import { LoaderCircle, Pencil, TriangleAlert } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
-import { Input, Label, Select, Textarea } from "@/components/ui/field";
+import { Input, Label, Textarea } from "@/components/ui/field";
 import { useCan } from "@/components/session-provider";
 import { CategoryField } from "@/components/creators/category-field";
+import { Picker } from "@/components/ui/picker";
 import { CURRENCIES } from "@/lib/labels";
 import type { Creator } from "@/lib/types";
 
@@ -20,7 +21,7 @@ type Campos = {
   name: string;
   handle: string;
   country: string;
-  category: string;
+  categories: string[];
   status: Creator["status"];
   email: string;
   phone: string;
@@ -36,7 +37,7 @@ function desde(creator: Creator): Campos {
     name: creator.name,
     handle: creator.handle,
     country: creator.country,
-    category: creator.category,
+    categories: creator.categories,
     status: creator.status,
     email: creator.email,
     phone: creator.phone,
@@ -84,6 +85,10 @@ export function EditCreatorButton({
       setError("Falta el nombre.");
       return;
     }
+    if (form.categories.length === 0) {
+      setError("Deja al menos una categoría.");
+      return;
+    }
     setGuardando(true);
     setError(null);
     try {
@@ -94,7 +99,7 @@ export function EditCreatorButton({
           name: form.name.trim(),
           handle: form.handle.trim(),
           country: form.country.trim(),
-          category: form.category,
+          categories: form.categories,
           status: form.status,
           email: form.email.trim(),
           phone: form.phone.trim(),
@@ -171,24 +176,25 @@ export function EditCreatorButton({
 
           <CategoryField
             id="ec-category"
-            value={form.category}
-            onChange={(v) => set("category", v)}
+            values={form.categories}
+            onChange={(v) => set("categories", v)}
             categories={catalogo}
             onCategoriesChange={setCatalogo}
           />
 
           <div>
             <Label htmlFor="ec-status">Estado</Label>
-            <Select
+            <Picker
               id="ec-status"
               value={form.status}
-              onChange={(e) => set("status", e.target.value as Creator["status"])}
-            >
-              <option value="activo">Activo</option>
-              <option value="pausado">En pausa</option>
-              <option value="prospecto">Prospecto</option>
-              <option value="archivado">Archivado</option>
-            </Select>
+              onChange={(v) => set("status", v)}
+              options={[
+                { id: "activo", label: "Activo" },
+                { id: "pausado", label: "En pausa" },
+                { id: "prospecto", label: "Prospecto" },
+                { id: "archivado", label: "Archivado" },
+              ]}
+            />
           </div>
 
           <div>
@@ -203,17 +209,12 @@ export function EditCreatorButton({
 
           <div>
             <Label htmlFor="ec-currency">Moneda</Label>
-            <Select
+            <Picker
               id="ec-currency"
               value={form.currency}
-              onChange={(e) => set("currency", e.target.value)}
-            >
-              {CURRENCIES.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </Select>
+              onChange={(v) => set("currency", v)}
+              options={CURRENCIES.map((c) => ({ id: c, label: c }))}
+            />
           </div>
 
           <div>

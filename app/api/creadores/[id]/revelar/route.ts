@@ -67,6 +67,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   return NextResponse.json({
     banking: revelado.banking,
     accounts: revelado.accounts,
+    personal: revelado.personal,
     revealedAt: new Date().toISOString(),
   });
 }

@@ -216,7 +216,7 @@ export function HireCreatorDialog({
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[13px] font-medium">{creator.name}</span>
                       <span className="block truncate text-[12px] text-[var(--text-subtle)]">
-                        {creator.category} · {PLATFORM_LABEL[creator.mainPlatform]}
+                        {creator.categories.join(", ")} · {PLATFORM_LABEL[creator.mainPlatform]}
                       </span>
                     </span>
                     {activo && <Check size={15} className="shrink-0 text-[var(--accent)]" />}

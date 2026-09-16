@@ -55,7 +55,10 @@ export function CreatorsView({
     return creators.filter((c) => {
       if (status !== "todos" && c.status !== status) return false;
       if (!q) return true;
-      return [c.name, c.handle, c.category, c.email, c.country].join(" ").toLowerCase().includes(q);
+      return [c.name, c.handle, ...c.categories, c.email, c.country]
+        .join(" ")
+        .toLowerCase()
+        .includes(q);
     });
   }, [creators, query, status]);
 

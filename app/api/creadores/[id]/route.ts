@@ -3,7 +3,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getSession } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
-import { updateCreator } from "@/lib/store";
+import { setCreatorPersonalData, updateCreator } from "@/lib/store";
+import { registrar } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +13,22 @@ const schema = z.object({
   handle: z.string().optional(),
   country: z.string().optional(),
   category: z.string().min(1, "Falta la categoría.").optional(),
+  /** Todas sus categorías, la principal primero. Vacía no vale. */
+  categories: z
+    .array(z.string().max(60))
+    .max(12, "Demasiadas categorías.")
+    .refine((l) => l.some((c) => c.trim()), "Deja al menos una categoría.")
+    .optional(),
+  /**
+   * Nombre real y dirección. Van cifrados y detrás del mismo permiso que los
+   * datos bancarios. Cadena vacía = borrarlo.
+   */
+  personal: z
+    .object({
+      realName: z.string().max(200).optional(),
+      address: z.string().max(500).optional(),
+    })
+    .optional(),
   status: z.enum(["activo", "pausado", "prospecto", "archivado"]).optional(),
   email: z.string().optional(),
   phone: z.string().optional(),
@@ -71,7 +88,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     );
   }
 
-  const tocaDinero = parsed.data.banking !== undefined || parsed.data.bankAccounts !== undefined;
+  const tocaDinero =
+    parsed.data.banking !== undefined ||
+    parsed.data.bankAccounts !== undefined ||
+    parsed.data.personal !== undefined;
   if (tocaDinero && !hasPermission(session.permissions, "ver_datos_bancarios")) {
     return NextResponse.json(
       { error: "Tu rol no permite cambiar la información de pago." },
@@ -79,7 +99,22 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     );
   }
 
-  const { bankAccounts, ...resto } = parsed.data;
+  const { bankAccounts, personal, ...resto } = parsed.data;
+
+  if (personal) {
+    if (!(await setCreatorPersonalData(id, personal))) {
+      return NextResponse.json({ error: "Creador no encontrado." }, { status: 404 });
+    }
+    await registrar({
+      actorId: session.userId,
+      actorName: session.name,
+      action: "banca.editada",
+      entity: "creator",
+      entityId: id,
+      detail: "Datos personales",
+    });
+  }
+
   const creator = await updateCreator(id, {
     ...resto,
     // Los ids los pone la base al reescribir la lista completa.

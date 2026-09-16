@@ -7,8 +7,9 @@ import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { FieldHint, Input, InputWithIcon, Label, Select, Textarea } from "@/components/ui/field";
+import { FieldHint, Input, InputWithIcon, Label, Textarea } from "@/components/ui/field";
 import { CategoryField } from "@/components/creators/category-field";
+import { Picker } from "@/components/ui/picker";
 import { ContactFieldsEditor } from "@/components/creators/contact-fields-editor";
 import { PaymentAccountsEditor } from "@/components/creators/payment-accounts-editor";
 import { CURRENCIES } from "@/lib/labels";
@@ -92,7 +93,9 @@ export function NewCreatorDialog({
   const [methods, setMethods] = useState<PaymentMethod[]>(["transferencia"]);
   const [accounts, setAccounts] = useState<BankingAccount[]>(CUENTA_INICIAL);
   const [contactFields, setContactFields] = useState<ContactField[]>([]);
-  const [form, setForm] = useState({ ...EMPTY, category: categories[0] ?? "" });
+  const [form, setForm] = useState({ ...EMPTY });
+  /** Varias categorías; la primera es la principal. */
+  const [categorias, setCategorias] = useState<string[]>(categories[0] ? [categories[0]] : []);
   /** El catálogo puede crecer sin recargar: se crean categorías desde aquí. */
   const [catalogo, setCatalogo] = useState(categories);
 
@@ -115,7 +118,8 @@ export function NewCreatorDialog({
     setMethods(["transferencia"]);
     setAccounts(CUENTA_INICIAL);
     setContactFields([]);
-    setForm({ ...EMPTY, category: categories[0] ?? "" });
+    setForm({ ...EMPTY });
+    setCategorias(categories[0] ? [categories[0]] : []);
     onClose();
   }
 
@@ -170,7 +174,7 @@ export function NewCreatorDialog({
           totalViews: esYoutube ? channel!.totalViews : 0,
           videoCount: esYoutube ? channel!.videoCount : 0,
           socials: [{ platform, handle, url: enlace, followers: seguidores }],
-          category: form.category,
+          categories: categorias,
           status: form.status,
           email: form.email.trim(),
           phone: form.phone.trim(),
@@ -386,18 +390,23 @@ export function NewCreatorDialog({
                   crear, y necesita nombrarse distinto en cada caso. */}
               <CategoryField
                 id="category"
-                value={form.category}
-                onChange={(v) => set("category", v)}
+                values={categorias}
+                onChange={setCategorias}
                 categories={catalogo}
                 onCategoriesChange={setCatalogo}
               />
               <div>
                 <Label htmlFor="status">Estado</Label>
-                <Select id="status" value={form.status} onChange={(e) => set("status", e.target.value)}>
-                  <option value="activo">Activo</option>
-                  <option value="pausado">En pausa</option>
-                  <option value="prospecto">Prospecto</option>
-                </Select>
+                <Picker
+                  id="status"
+                  value={form.status}
+                  onChange={(v) => set("status", v)}
+                  options={[
+                    { id: "activo", label: "Activo" },
+                    { id: "pausado", label: "En pausa" },
+                    { id: "prospecto", label: "Prospecto" },
+                  ]}
+                />
               </div>
               <div>
                 <Label htmlFor="email">Correo de contacto</Label>
@@ -425,15 +434,11 @@ export function NewCreatorDialog({
             <div>
               <Label>Tarifas mínimas acordadas</Label>
               <div className="grid gap-3 sm:grid-cols-4">
-                <Select
+                <Picker
                   value={form.currency}
-                  onChange={(e) => set("currency", e.target.value)}
-                  aria-label="Moneda"
-                >
-                  {CURRENCIES.map((c) => (
-                    <option key={c}>{c}</option>
-                  ))}
-                </Select>
+                  onChange={(v) => set("currency", v)}
+                  options={CURRENCIES.map((c) => ({ id: c, label: c }))}
+                />
                 <Input
                   type="number"
                   value={form.rateVideo}

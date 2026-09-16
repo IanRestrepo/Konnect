@@ -4,6 +4,8 @@ import { z } from "zod";
 import { createCreator, newId } from "@/lib/store";
 import { PLATFORM_URL } from "@/lib/socials";
 import { IMPORTE_MAXIMO } from "@/lib/pricing";
+import { getSession } from "@/lib/session";
+import { hasPermission } from "@/lib/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +32,9 @@ const schema = z.object({
   channelUrl: z.string().default(""),
   avatarUrl: z.string().nullable().default(null),
   country: z.string().default(""),
-  category: z.string({ error: "Falta la categoría." }).min(1, "Falta la categoría."),
+  /** Categoría suelta, como llegaba antes. Si vienen `categories`, mandan ellas. */
+  category: z.string().default(""),
+  categories: z.array(z.string().max(60)).max(12, "Demasiadas categorías.").default([]),
   status: z.enum(["activo", "pausado", "prospecto", "archivado"]).default("prospecto"),
   email: z.string().default(""),
   phone: z.string().default(""),
@@ -108,6 +112,13 @@ const schema = z.object({
 });
 
 export async function POST(request: Request) {
+  // Faltaba comprobar nada: bastaba con tener sesión para dar de alta un
+  // creador. El middleware no cubre las rutas de API.
+  const session = await getSession();
+  if (!session || !hasPermission(session.permissions, "editar_creadores")) {
+    return NextResponse.json({ error: "Tu rol no permite crear creadores." }, { status: 403 });
+  }
+
   const body = await request.json().catch(() => null);
   const parsed = schema.safeParse(body);
 
@@ -120,8 +131,16 @@ export async function POST(request: Request) {
 
   const { socials, rates, bankAccounts, contactFields, ...datos } = parsed.data;
 
+  const categorias = datos.categories.map((c) => c.trim()).filter(Boolean);
+  if (categorias.length === 0 && !datos.category.trim()) {
+    return NextResponse.json({ error: "Falta la categoría." }, { status: 400 });
+  }
+
   const creator = await createCreator({
     ...datos,
+    categories: categorias,
+    hasRealName: false,
+    hasAddress: false,
     channels: [],
     // Los ids los pone la base; aquí sólo hace falta que el tipo cuadre.
     rates: rates.map((r) => ({ ...r, id: "" })),

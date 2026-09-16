@@ -27,6 +27,7 @@ import type {
   DocLink,
   DocSummary,
   Folder,
+  PersonalData,
   PortalRole,
   PublicUser,
   Role,
@@ -267,6 +268,9 @@ function toCreator(row: CreatorRow, apiConnections: CreatorApiConnection[] = [])
     avatarUrl: row.avatarUrl,
     country: row.country,
     category: row.category,
+    categories: row.categories.length > 0 ? row.categories : row.category ? [row.category] : [],
+    hasRealName: Boolean(row.realNameEnc),
+    hasAddress: Boolean(row.addressEnc),
     status: row.status,
     email: row.email,
     phone: row.phone,
@@ -581,7 +585,7 @@ export async function createCreator(
       channelUrl: input.channelUrl || null,
       avatarUrl: input.avatarUrl,
       country: input.country ?? "",
-      category: input.category,
+      ...categoriasColumnas(input.categories, input.category),
       status: input.status,
       email: input.email ?? "",
       phone: input.phone ?? "",
@@ -656,6 +660,42 @@ export async function createCreator(
   return toCreator(row);
 }
 
+/**
+ * Las dos columnas de categoría, siempre de acuerdo entre sí: la principal es
+ * la primera de la lista. Acepta la lista, la principal suelta —como llegaba
+ * antes— o las dos.
+ */
+function categoriasColumnas(
+  categories: string[] | undefined,
+  category: string | undefined,
+): { category: string; categories: string[] } {
+  const vistas = new Set<string>();
+  const lista = [...(categories ?? []), ...(categories?.length ? [] : [category ?? ""])]
+    .map((c) => c.trim())
+    .filter((c) => {
+      const llave = c.toLowerCase();
+      if (!c || vistas.has(llave)) return false;
+      vistas.add(llave);
+      return true;
+    });
+  return { category: lista[0] ?? "", categories: lista };
+}
+
+/**
+ * Guarda nombre real y dirección, cifrados. Una cadena vacía los borra;
+ * `undefined` los deja como están.
+ */
+export async function setCreatorPersonalData(
+  id: string,
+  datos: Partial<PersonalData>,
+): Promise<boolean> {
+  const data: Prisma.CreatorUpdateInput = {};
+  if (datos.realName !== undefined) data.realNameEnc = seal(datos.realName);
+  if (datos.address !== undefined) data.addressEnc = seal(datos.address);
+  const { count } = await prisma.creator.updateMany({ where: { id }, data });
+  return count > 0;
+}
+
 export async function updateCreator(id: string, patch: Partial<Creator>): Promise<Creator | null> {
   const existe = await prisma.creator.findUnique({ where: { id }, select: { id: true } });
   if (!existe) return null;
@@ -669,7 +709,9 @@ export async function updateCreator(id: string, patch: Partial<Creator>): Promis
   if (patch.channelUrl !== undefined) data.channelUrl = patch.channelUrl || null;
   if (patch.avatarUrl !== undefined) data.avatarUrl = patch.avatarUrl;
   if (patch.country !== undefined) data.country = patch.country;
-  if (patch.category !== undefined) data.category = patch.category;
+  if (patch.categories !== undefined || patch.category !== undefined) {
+    Object.assign(data, categoriasColumnas(patch.categories, patch.category));
+  }
   if (patch.status !== undefined) data.status = patch.status;
   if (patch.email !== undefined) data.email = patch.email;
   if (patch.phone !== undefined) data.phone = patch.phone;
@@ -769,10 +811,12 @@ async function replaceCreatorLists(id: string, patch: Partial<Creator>): Promise
 /** Datos bancarios completos. Solo para la ruta que exige el código de acceso. */
 export async function revealBanking(
   creatorId: string,
-): Promise<{ banking: BankingInfo; accounts: BankingAccount[] } | null> {
+): Promise<{ banking: BankingInfo; accounts: BankingAccount[]; personal: PersonalData } | null> {
   const row = await prisma.creator.findUnique({
     where: { id: creatorId },
     select: {
+      realNameEnc: true,
+      addressEnc: true,
       bankHolder: true,
       bankName: true,
       bankAccountEnc: true,
@@ -787,7 +831,11 @@ export async function revealBanking(
     },
   });
   if (!row) return null;
-  return { banking: fullBanking(row), accounts: row.bankAccounts.map(fullAccount) };
+  return {
+    banking: fullBanking(row),
+    accounts: row.bankAccounts.map(fullAccount),
+    personal: { realName: unseal(row.realNameEnc), address: unseal(row.addressEnc) },
+  };
 }
 
 /** Añade un canal adicional al creador, sin duplicar por `channelId`. */

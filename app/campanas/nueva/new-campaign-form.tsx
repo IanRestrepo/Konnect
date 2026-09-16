@@ -183,14 +183,15 @@ export function NewCampaignForm({
   /** Categorías reales de los creadores que están en la red elegida. */
   const categorias = useMemo(() => {
     const enRed = creators.filter((c) => estaEn(c, platform));
-    return [...new Set(enRed.map((c) => c.category).filter(Boolean))].sort();
+    return [...new Set(enRed.flatMap((c) => c.categories).filter(Boolean))].sort();
   }, [creators, platform]);
 
   const resultados = useMemo(() => {
     const texto = busqueda.trim().toLowerCase();
     return creators
       .filter((c) => estaEn(c, platform))
-      .filter((c) => !categoria || c.category === categoria)
+      // Por cualquiera de sus categorías, no solo la principal.
+      .filter((c) => !categoria || c.categories.includes(categoria))
       .filter(
         (c) =>
           !texto ||
@@ -793,7 +794,7 @@ export function NewCampaignForm({
                             <div className="min-w-0 flex-1">
                               <p className="truncate text-[13px] font-medium">{creator.name}</p>
                               <p className="truncate text-[12px] text-[var(--text-subtle)]">
-                                {creator.category} ·{" "}
+                                {creator.categories.join(", ")} ·{" "}
                                 {precio > 0 ? (
                                   <>
                                     {formatMoney(precio, creator.currency)}
