@@ -2,7 +2,7 @@ import { campaignTotals } from "@/lib/pricing";
 import { requirePermission } from "@/lib/session";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Layers } from "lucide-react";
+import { Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageTitle } from "@/components/ui/section";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,6 +34,7 @@ import { DeleteCampaignButton } from "@/components/campaigns/delete-campaign";
 import { CampaignMetrics, type MetricRow } from "@/components/campaigns/campaign-metrics";
 import { CAMPAIGN_OBJECTIVE, CAMPAIGN_STATUS } from "@/lib/labels";
 import { formatCompact, formatDate, formatMoney } from "@/lib/utils";
+import { BackLink } from "@/components/ui/back-link";
 
 export default async function CampanaPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await requirePermission("ver_campanas");
@@ -113,13 +114,7 @@ export default async function CampanaPage({ params }: { params: Promise<{ id: st
 
   return (
     <div className="space-y-7">
-      <Link
-        href="/campanas"
-        className="inline-flex items-center gap-1.5 text-[13px] text-[var(--text-muted)] transition hover:text-[var(--text)]"
-      >
-        <ArrowLeft size={15} />
-        Campañas
-      </Link>
+      <BackLink fallbackHref="/campanas" />
 
       <div>
         <PageTitle
@@ -188,7 +183,11 @@ export default async function CampanaPage({ params }: { params: Promise<{ id: st
         )}
 
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <CampaignSwitch campaignId={campaign.id} status={campaign.status} />
+          <CampaignSwitch
+            campaignId={campaign.id}
+            campaignName={campaign.name}
+            status={campaign.status}
+          />
           <Badge tone={status.tone}>{status.label}</Badge>
           <Badge plain>
             {formatDate(campaign.startDate)} — {campaign.endDate ? formatDate(campaign.endDate) : "abierta"}

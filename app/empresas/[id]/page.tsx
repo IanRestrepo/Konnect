@@ -1,7 +1,7 @@
 import { requirePermission } from "@/lib/session";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ExternalLink, Megaphone } from "lucide-react";
+import { ExternalLink, Megaphone } from "lucide-react";
 import { PageTitle, SectionLabel } from "@/components/ui/section";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { ListBox, ListRow, RowIcon } from "@/components/ui/list";
@@ -17,6 +17,7 @@ import { campaignMetrics, companyCampaigns, getCampaigns, getCompany } from "@/l
 import { CAMPAIGN_OBJECTIVE, CAMPAIGN_STATUS, COMPANY_STATUS } from "@/lib/labels";
 import { companyInvestmentSeries, trend, viewsSeries } from "@/lib/series";
 import { formatCompact, formatDate, formatMoney } from "@/lib/utils";
+import { BackLink } from "@/components/ui/back-link";
 
 const SOCIAL_LABEL: Record<string, string> = {
   instagram: "Instagram",
@@ -41,13 +42,7 @@ export default async function EmpresaPage({ params }: { params: Promise<{ id: st
 
   return (
     <div className="space-y-7">
-      <Link
-        href="/empresas"
-        className="inline-flex items-center gap-1.5 text-[13px] text-[var(--text-muted)] transition hover:text-[var(--text)]"
-      >
-        <ArrowLeft size={15} />
-        Empresas
-      </Link>
+      <BackLink fallbackHref="/empresas" />
 
       <div className="flex items-start gap-4">
         {/* Una persona lleva avatar redondo, como la gente; una empresa, cuadrado. */}

@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft,
   Check,
   LoaderCircle,
   Megaphone,
@@ -21,6 +20,7 @@ import { NoteEditor } from "@/components/notes/editor";
 import { useCan } from "@/components/session-provider";
 import type { Doc, Folder } from "@/lib/types";
 import { cn, formatDate } from "@/lib/utils";
+import { BackLink } from "@/components/ui/back-link";
 
 type Referencia = { id: string; name: string; avatarUrl?: string | null };
 
@@ -131,13 +131,7 @@ export function NoteDetail({
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3">
-        <Link
-          href="/notas"
-          className="inline-flex items-center gap-1.5 text-[13px] text-[var(--text-muted)] transition hover:text-[var(--text)]"
-        >
-          <ArrowLeft size={15} />
-          Notas
-        </Link>
+        <BackLink fallbackHref="/notas" />
 
         <span className="flex items-center gap-2.5">
           <span className="text-[12px] text-[var(--text-subtle)]">

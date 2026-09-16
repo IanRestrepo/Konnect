@@ -4,7 +4,6 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft,
   Check,
   Copy,
   ExternalLink,
@@ -43,6 +42,7 @@ import {
 } from "@/lib/labels";
 import type { CollabSession, PortalRole, SessionItemKind } from "@/lib/types";
 import { formatCompact, formatDate } from "@/lib/utils";
+import { BackLink } from "@/components/ui/back-link";
 
 const PETICION_VACIA = {
   kind: "entregable" as SessionItemKind,
@@ -218,15 +218,7 @@ export function SessionDetail({
 
   return (
     <div className="space-y-7">
-      {/* Se vuelve a la campaña: a una sesión se llega desde ahí, y volver a
-          la lista general de sesiones obligaba a buscar la campaña otra vez. */}
-      <Link
-        href={session.campaignId ? `/campanas/${session.campaignId}` : "/campanas"}
-        className="inline-flex items-center gap-1.5 text-[13px] text-[var(--text-muted)] transition hover:text-[var(--text)]"
-      >
-        <ArrowLeft size={15} />
-        {campaignName ?? "Campañas"}
-      </Link>
+      <BackLink fallbackHref={session.campaignId ? `/campanas/${session.campaignId}` : "/campanas"} />
 
       <div>
         <PageTitle

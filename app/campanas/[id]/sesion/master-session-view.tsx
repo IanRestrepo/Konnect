@@ -4,7 +4,6 @@ import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft,
   Check,
   ChevronDown,
   Copy,
@@ -46,6 +45,7 @@ import type {
   SessionRequirement,
 } from "@/lib/types";
 import { cn, formatDate } from "@/lib/utils";
+import { BackLink } from "@/components/ui/back-link";
 
 export type SesionFila = {
   session: CollabSession;
@@ -137,13 +137,7 @@ export function MasterSessionView({
 
   return (
     <div className="space-y-7">
-      <Link
-        href={`/campanas/${campaignId}`}
-        className="inline-flex items-center gap-1.5 text-[13px] text-[var(--text-muted)] transition hover:text-[var(--text)]"
-      >
-        <ArrowLeft size={15} />
-        {campaignName}
-      </Link>
+      <BackLink fallbackHref={`/campanas/${campaignId}`} />
 
       <PageTitle
         eyebrow={companyName ? `Sesión maestra · ${companyName}` : "Sesión maestra"}

@@ -1,10 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft,
   Check,
   Eye,
   LoaderCircle,
@@ -52,6 +50,7 @@ import type {
   SocialPlatform,
 } from "@/lib/types";
 import { cn, formatMoney } from "@/lib/utils";
+import { BackLink } from "@/components/ui/back-link";
 
 const OBJECTIVES: {
   id: CampaignObjective;
@@ -409,13 +408,7 @@ export function NewCampaignForm({
         })}
       </div>
 
-      <Link
-        href="/campanas"
-        className="inline-flex items-center gap-1.5 text-[13px] text-[var(--text-muted)] transition hover:text-[var(--text)]"
-      >
-        <ArrowLeft size={14} />
-        Volver a campañas
-      </Link>
+      <BackLink fallbackHref="/campanas" />
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_272px]">
         <div className="space-y-4">

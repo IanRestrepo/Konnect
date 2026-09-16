@@ -186,7 +186,11 @@ export function CampaignsView({ rows }: { rows: CampaignRow[] }) {
                         </span>
                         <Badge tone={status.tone}>{status.label}</Badge>
                       </span>
-                      <CampaignSwitch campaignId={campaign.id} status={campaign.status} />
+                      <CampaignSwitch
+                        campaignId={campaign.id}
+                        campaignName={campaign.name}
+                        status={campaign.status}
+                      />
                     </span>
                   }
                 />
@@ -214,7 +218,11 @@ export function CampaignsView({ rows }: { rows: CampaignRow[] }) {
                 return (
                   <Tr key={campaign.id}>
                     <Td className="pl-4">
-                      <CampaignSwitch campaignId={campaign.id} status={campaign.status} />
+                      <CampaignSwitch
+                        campaignId={campaign.id}
+                        campaignName={campaign.name}
+                        status={campaign.status}
+                      />
                     </Td>
                     <Td>
                       <Link href={`/campanas/${campaign.id}`} className="block max-w-72">

@@ -1,7 +1,7 @@
 import { requirePermission } from "@/lib/session";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ExternalLink, Film, Megaphone, RefreshCw } from "lucide-react";
+import { ExternalLink, Film, Megaphone, RefreshCw } from "lucide-react";
 import { PageTitle, SectionLabel } from "@/components/ui/section";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { DefList, DefRow } from "@/components/ui/def-list";
@@ -30,6 +30,7 @@ import { PLATFORM_LABEL, PLATFORM_METRICS, piezaLabel } from "@/lib/socials";
 import { creatorViewsSeries, trend } from "@/lib/series";
 import type { Campaign, Company, Creator } from "@/lib/types";
 import { formatCompact, formatDate, formatMoney } from "@/lib/utils";
+import { BackLink } from "@/components/ui/back-link";
 
 export default async function CreadorPage({ params }: { params: Promise<{ id: string }> }) {
   await requirePermission("ver_creadores");
@@ -286,13 +287,7 @@ export default async function CreadorPage({ params }: { params: Promise<{ id: st
 
   return (
     <div className="space-y-7">
-      <Link
-        href="/creadores"
-        className="inline-flex items-center gap-1.5 text-[13px] text-[var(--text-muted)] transition hover:text-[var(--text)]"
-      >
-        <ArrowLeft size={15} />
-        Creadores
-      </Link>
+      <BackLink fallbackHref="/creadores" />
 
       <div className="flex items-start gap-4">
         <Avatar src={creator.avatarUrl} name={creator.name} size={64} />

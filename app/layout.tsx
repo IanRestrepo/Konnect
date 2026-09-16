@@ -9,6 +9,7 @@ import { activeAnnouncementsFor, getDisabledModules } from "@/lib/store";
 import { THEME_SCRIPT } from "@/lib/theme";
 import { InlineScript } from "@/components/inline-script";
 import { Splash } from "@/components/shell/splash";
+import { NavigationMemory } from "@/components/ui/back-link";
 
 const poppins = Poppins({
   variable: "--font-poppins",
@@ -51,6 +52,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       </head>
       <body className="min-h-full">
         <Splash />
+        {/* Cuenta las navegaciones para que «Volver» regrese a donde estabas. */}
+        <NavigationMemory />
         <PreferencesProvider>
           <SessionProvider session={session} disabledModules={disabledModules}>
             <AppShell announcements={announcements}>{children}</AppShell>

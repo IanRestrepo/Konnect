@@ -5,7 +5,6 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft,
   CalendarClock,
   ExternalLink,
   Film,
@@ -37,6 +36,7 @@ import type {
   DeliverableKind,
 } from "@/lib/types";
 import { cn, formatCompact, formatDate, formatMoney } from "@/lib/utils";
+import { BackLink } from "@/components/ui/back-link";
 
 /** Estado de pago, con el tono del badge. */
 const PAGO = {
@@ -100,13 +100,7 @@ export function CampaignCreatorView({
 
   return (
     <div className="space-y-7">
-      <Link
-        href={`/campanas/${campaign.id}`}
-        className="inline-flex items-center gap-1.5 text-[13px] text-[var(--text-muted)] transition hover:text-[var(--text)]"
-      >
-        <ArrowLeft size={15} />
-        {campaign.name}
-      </Link>
+      <BackLink fallbackHref={`/campanas/${campaign.id}`} />
 
       <div>
         <PageTitle
