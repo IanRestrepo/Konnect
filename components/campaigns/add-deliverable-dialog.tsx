@@ -174,8 +174,8 @@ export function AddDeliverableDialog({
       open={open}
       onClose={close}
       size="lg"
-      title="Añadir entregable"
-      description="Pega el enlace del video publicado y traemos sus métricas públicas."
+      title="Registrar video publicado"
+      description="Para lo que ya salió: pega el enlace y traemos sus métricas públicas. Queda como pieza del creador, con su sesión."
       footer={
         <>
           <Button variant="ghost" onClick={close}>

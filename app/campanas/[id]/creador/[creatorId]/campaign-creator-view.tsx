@@ -10,7 +10,6 @@ import {
   ExternalLink,
   Film,
   LoaderCircle,
-  Pencil,
   TriangleAlert,
   UserRound,
 } from "lucide-react";
@@ -25,6 +24,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { FieldHint, Input } from "@/components/ui/field";
 import { useCan } from "@/components/session-provider";
 import { EditDeliverableDialog } from "@/components/campaigns/edit-deliverable-dialog";
+import { DeliverableActions } from "@/components/campaigns/deliverable-actions";
 import type { Empleado } from "@/components/campaigns/campaign-team";
 import { DELIVERABLE_STATUS, REQUIREMENT_STATUS } from "@/lib/labels";
 import { piezaLabel } from "@/lib/socials";
@@ -78,11 +78,13 @@ export function CampaignCreatorView({
   empleados: Empleado[];
   kinds: DeliverableKind[];
 }) {
+  const router = useRouter();
   const can = useCan();
   const puedeEditar = can("editar_campanas");
 
   const [editando, setEditando] = useState<Deliverable | null>(null);
   const [catalogo, setCatalogo] = useState(kinds);
+  const [errorPieza, setErrorPieza] = useState<string | null>(null);
 
   const vivas = deliverables.filter((d) => d.status !== "cancelado");
   const pactado = vivas.reduce((s, d) => s + creatorPayout(d, campaign), 0);
@@ -160,6 +162,12 @@ export function CampaignCreatorView({
         <div className="space-y-6">
           <section>
             <SectionLabel>Sus piezas en esta campaña</SectionLabel>
+            {errorPieza && (
+              <p className="mb-2.5 flex items-start gap-2 rounded-[var(--r-control)] bg-[var(--danger-soft)] px-3 py-2 text-[12.5px] text-[var(--danger)]">
+                <TriangleAlert size={14} className="mt-px shrink-0" />
+                {errorPieza}
+              </p>
+            )}
             <ListBox>
               {deliverables.map((d) => {
                 const estado = DELIVERABLE_STATUS[d.status];
@@ -197,25 +205,32 @@ export function CampaignCreatorView({
                         <Badge tone={PAGO[d.paymentStatus].tone}>
                           {PAGO[d.paymentStatus].label}
                         </Badge>
-                        {d.videoUrl && (
-                          <Link
-                            href={d.videoUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            aria-label="Abrir la publicación"
-                            className="grid h-8 w-8 shrink-0 place-items-center rounded-[var(--r-control)] text-[var(--text-subtle)] transition hover:bg-[var(--surface-3)] hover:text-[var(--text)]"
-                          >
-                            <ExternalLink size={15} />
-                          </Link>
-                        )}
-                        {puedeEditar && (
-                          <button
-                            onClick={() => setEditando(d)}
-                            aria-label="Editar la pieza"
-                            className="grid h-8 w-8 shrink-0 place-items-center rounded-[var(--r-control)] text-[var(--text-subtle)] transition hover:bg-[var(--surface-3)] hover:text-[var(--text)]"
-                          >
-                            <Pencil size={15} />
-                          </button>
+                        {puedeEditar ? (
+                          <DeliverableActions
+                            campaignId={campaign.id}
+                            deliverable={d}
+                            onEditar={() => setEditando(d)}
+                            onError={setErrorPieza}
+                            // Si era su última pieza, esta ficha deja de existir:
+                            // se vuelve a la campaña en vez de caer en un 404.
+                            onBorrada={
+                              deliverables.length === 1
+                                ? () => router.push(`/campanas/${campaign.id}`)
+                                : undefined
+                            }
+                          />
+                        ) : (
+                          d.videoUrl && (
+                            <Link
+                              href={d.videoUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              aria-label="Abrir la publicación"
+                              className="grid h-8 w-8 shrink-0 place-items-center rounded-[var(--r-control)] text-[var(--text-subtle)] transition hover:bg-[var(--surface-3)] hover:text-[var(--text)]"
+                            >
+                              <ExternalLink size={15} />
+                            </Link>
+                          )
                         )}
                       </span>
                     }

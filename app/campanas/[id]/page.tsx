@@ -11,8 +11,8 @@ import { Stat, StatBand } from "@/components/ui/stat";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { ViewsChart, type ChartPoint } from "@/components/campaigns/views-chart";
-import { DeliverablesSection } from "@/components/campaigns/deliverables-section";
 import { CampaignCreators } from "@/components/campaigns/campaign-creators";
+import { RefreshMetricsButton } from "@/components/campaigns/refresh-metrics-button";
 import { CampaignSwitch } from "@/components/campaigns/campaign-switch";
 import { EditCampaignButton } from "@/components/campaigns/edit-campaign-dialog";
 import {
@@ -240,27 +240,27 @@ export default async function CampanaPage({ params }: { params: Promise<{ id: st
           <Card>
             <CardHeader>
               <CardTitle>Vistas por entregable</CardTitle>
-              <span className="eyebrow">Barras claras = shorts</span>
+              <span className="flex items-center gap-3">
+                <span className="eyebrow hidden sm:inline">Barras claras = shorts</span>
+                <RefreshMetricsButton
+                  campaignId={campaign.id}
+                  disabled={campaign.deliverables.length === 0}
+                />
+              </span>
             </CardHeader>
             <ViewsChart data={chart} />
           </Card>
 
-          {/* Con quién se trabaja y cuánto se le debe. La lista de entregables
-              responde qué piezas hay, no eso. */}
+          {/* Con quién se trabaja y cuánto se le debe. Ya no hay lista de
+              entregables aparte: mezclaba las piezas de todos los creadores
+              sin agrupar. Cada pieza se gestiona en la ficha de su creador
+              dentro de la campaña, y las entregas, en la sesión maestra. */}
           <CampaignCreators
             campaign={campaign}
             creators={creators}
             currency={campaign.currency}
             kinds={kinds}
             empleados={empleados}
-          />
-
-          <DeliverablesSection
-            campaignId={campaign.id}
-            deliverables={campaign.deliverables}
-            creators={creators}
-            currency={campaign.currency}
-            kinds={kinds}
           />
         </div>
 

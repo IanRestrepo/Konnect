@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  Film,
   LoaderCircle,
   MoreHorizontal,
   Plus,
@@ -25,6 +26,7 @@ import { Modal } from "@/components/ui/modal";
 import { FieldHint, Label, Textarea } from "@/components/ui/field";
 import { useCan } from "@/components/session-provider";
 import { HireCreatorDialog } from "@/components/campaigns/hire-creator-dialog";
+import { AddDeliverableDialog } from "@/components/campaigns/add-deliverable-dialog";
 import { CreatorPaymentDialog } from "@/components/campaigns/creator-payment-dialog";
 import { Paginador, usePagina } from "@/components/ui/pager";
 import type { Empleado } from "@/components/campaigns/campaign-team";
@@ -91,6 +93,8 @@ export function CampaignCreators({
   const puedeEditar = can("editar_campanas");
 
   const [contratando, setContratando] = useState(false);
+  /** Registrar un video que ya salió, pegando su enlace. */
+  const [registrando, setRegistrando] = useState(false);
   const [cerrando, setCerrando] = useState<Participante | null>(null);
   const [quitando, setQuitando] = useState<Participante | null>(null);
   const [pagando, setPagando] = useState<Creator | null>(null);
@@ -192,10 +196,16 @@ export function CampaignCreators({
       <div className="mb-2.5 flex items-center justify-between gap-4">
         <SectionLabel className="mb-0">Creadores</SectionLabel>
         {puedeEditar && (
-          <Button variant="accent" size="sm" onClick={() => setContratando(true)}>
-            <Plus size={15} />
-            Añadir creador
-          </Button>
+          <span className="flex items-center gap-1.5">
+            <Button variant="secondary" size="sm" onClick={() => setRegistrando(true)}>
+              <Film size={14} />
+              Video publicado
+            </Button>
+            <Button variant="accent" size="sm" onClick={() => setContratando(true)}>
+              <Plus size={15} />
+              Añadir creador
+            </Button>
+          </span>
         )}
       </div>
 
@@ -376,6 +386,15 @@ export function CampaignCreators({
           creator={pagando}
         />
       )}
+
+      <AddDeliverableDialog
+        open={registrando}
+        onClose={() => setRegistrando(false)}
+        campaignId={campaign.id}
+        creators={creators}
+        kinds={catalogo}
+        onKindsChange={setCatalogo}
+      />
 
       <HireCreatorDialog
         open={contratando}
