@@ -24,12 +24,21 @@ import {
 export const dynamic = "force-dynamic";
 
 /**
- * Puerta del portal. Acepta dos formas de entrar:
+ * Puerta del portal.
  *
- *  - `code`: el código largo que entrega la agencia. Es el primer contacto y
- *    la vía de recuperación si se olvida el PIN.
- *  - `pin`: cuatro dígitos que el creador eligió, solo válidos en el
- *    dispositivo donde ya entró una vez.
+ * Ya no se teclea ningún código: la agencia manda un enlace personal que lo
+ * lleva dentro (`?acceso=…`). El enlace dice **quién** eres; el PIN de cuatro
+ * dígitos demuestra que eres tú. Por eso tener el enlace nunca basta para
+ * entrar: sin PIN elegido no se emite el acceso, y con PIN hay que acertarlo.
+ *
+ * Tres formas de llamar:
+ *
+ *  - `{ code }`: solo mira el enlace y dice qué toca —elegir PIN o
+ *    escribirlo—. No abre nada.
+ *  - `{ code, pin }`: entra con el enlace y el PIN. Sirve en cualquier
+ *    dispositivo.
+ *  - `{ pin }`: entra con el PIN en un dispositivo donde ya se entró antes,
+ *    para quien abre el portal desde un marcador sin el enlace.
  *
  * El freno vive en la base, no en memoria: en serverless cada instancia tiene
  * su propio proceso y un contador en RAM no frena nada.
@@ -39,7 +48,7 @@ const schema = z
     code: z.string().optional(),
     pin: z.string().optional(),
   })
-  .refine((v) => v.code || v.pin, { message: "Escribe el código." });
+  .refine((v) => v.code || v.pin, { message: "Abre el enlace que te mandó la agencia." });
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -56,84 +65,94 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.json({ error: "Escribe el código." }, { status: 400 });
+    return NextResponse.json({ error: "Abre el enlace que te mandó la agencia." }, { status: 400 });
   }
 
   const galleta = await cookies();
+  const { code, pin } = parsed.data;
 
-  /* ---------------- Entrada con PIN ---------------- */
+  /* ---------------- ¿Quién es? ---------------- */
 
-  if (parsed.data.pin) {
-    const pin = parsed.data.pin.trim();
-    const device = await readDeviceToken(galleta.get(DEVICE_COOKIE)?.value);
+  let accessId: string;
 
-    if (!device || device.sessionId !== id || !isValidPin(pin)) {
+  if (code) {
+    const acceso = await verifyPortalCode(id, code);
+    if (!acceso) {
       await registerFailure(id, ip);
-      return NextResponse.json({ error: "PIN no válido.", needsCode: !device }, { status: 401 });
-    }
-
-    const acceso = await getPortalAccess(device.accessId);
-    if (!acceso || !acceso.hasPin) {
-      return NextResponse.json({ error: "Entra con tu código de acceso.", needsCode: true }, { status: 401 });
-    }
-
-    if (acceso.lockedUntil && acceso.lockedUntil > new Date()) {
-      const minutos = Math.ceil((acceso.lockedUntil.getTime() - Date.now()) / 60_000);
+      // Mismo mensaje para enlace malo, acceso reiniciado y sesión cerrada.
       return NextResponse.json(
-        { error: `Acceso bloqueado. Prueba en ${minutos} minuto${minutos === 1 ? "" : "s"}.` },
-        { status: 429 },
-      );
-    }
-
-    if (!(await verifyPin(pin, acceso.pinHash))) {
-      await registerFailure(id, ip);
-      const restantes = await registerPinFailure(acceso.id);
-      return NextResponse.json(
-        {
-          error:
-            restantes > 0
-              ? `PIN incorrecto. Te ${restantes === 1 ? "queda 1 intento" : `quedan ${restantes} intentos`}.`
-              : "Demasiados intentos. Acceso bloqueado 15 minutos.",
-        },
+        { error: "Este enlace ya no sirve. Pídele a la agencia uno nuevo.", enlaceInvalido: true },
         { status: 401 },
       );
     }
 
-    await clearFailures(id, ip);
-    await clearPinFailures(acceso.id);
+    // Solo mirar: qué pantalla toca. No se abre nada todavía.
+    if (!pin) {
+      await clearFailures(id, ip);
+      return NextResponse.json(
+        acceso.hasPin ? { pidePin: true, label: acceso.label } : { debeElegirPin: true, label: acceso.label },
+      );
+    }
 
-    const token = await createPortalToken({
-      sessionId: id,
-      accessId: acceso.id,
-      role: acceso.role,
-      label: acceso.label,
-      canUpload: acceso.canUpload,
-    });
-
-    const response = NextResponse.json({ ok: true, role: acceso.role, label: acceso.label });
-    response.cookies.set(PORTAL_COOKIE, token, PORTAL_COOKIE_OPTIONS);
-    return response;
+    if (!acceso.hasPin) {
+      return NextResponse.json(
+        { error: "Primero elige tu PIN.", debeElegirPin: true },
+        { status: 409 },
+      );
+    }
+    accessId = acceso.id;
+  } else {
+    const device = await readDeviceToken(galleta.get(DEVICE_COOKIE)?.value);
+    if (!device || device.sessionId !== id) {
+      await registerFailure(id, ip);
+      return NextResponse.json(
+        { error: "Abre el enlace que te mandó la agencia.", sinEnlace: true },
+        { status: 401 },
+      );
+    }
+    accessId = device.accessId;
   }
 
-  /* ---------------- Entrada con código largo ---------------- */
+  /* ---------------- ¿Es él? ---------------- */
 
-  const acceso = await verifyPortalCode(id, parsed.data.code ?? "");
-  if (!acceso) {
+  const limpio = (pin ?? "").trim();
+  if (!isValidPin(limpio)) {
     await registerFailure(id, ip);
-    const restante = await checkGuard(id, ip);
-    // Mismo mensaje para código malo, acceso revocado y sesión cerrada.
+    return NextResponse.json({ error: "El PIN son 4 dígitos." }, { status: 401 });
+  }
+
+  const acceso = await getPortalAccess(accessId);
+  if (!acceso || acceso.sessionId !== id || !acceso.hasPin) {
+    return NextResponse.json(
+      { error: "Abre el enlace que te mandó la agencia.", sinEnlace: true },
+      { status: 401 },
+    );
+  }
+
+  if (acceso.lockedUntil && acceso.lockedUntil > new Date()) {
+    const minutos = Math.ceil((acceso.lockedUntil.getTime() - Date.now()) / 60_000);
+    return NextResponse.json(
+      { error: `Acceso bloqueado. Prueba en ${minutos} minuto${minutos === 1 ? "" : "s"}.` },
+      { status: 429 },
+    );
+  }
+
+  if (!(await verifyPin(limpio, acceso.pinHash))) {
+    await registerFailure(id, ip);
+    const restantes = await registerPinFailure(acceso.id);
     return NextResponse.json(
       {
         error:
-          restante.restantes > 0
-            ? `Código no válido. Te ${restante.restantes === 1 ? "queda 1 intento" : `quedan ${restante.restantes} intentos`}.`
-            : "Código no válido. Espera unos minutos antes de reintentar.",
+          restantes > 0
+            ? `PIN incorrecto. Te ${restantes === 1 ? "queda 1 intento" : `quedan ${restantes} intentos`}.`
+            : "Demasiados intentos. Acceso bloqueado 15 minutos.",
       },
       { status: 401 },
     );
   }
 
   await clearFailures(id, ip);
+  await clearPinFailures(acceso.id);
 
   const token = await createPortalToken({
     sessionId: id,
@@ -143,20 +162,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     canUpload: acceso.canUpload,
   });
 
-  const response = NextResponse.json({
-    ok: true,
-    role: acceso.role,
-    label: acceso.label,
-    /** Sin PIN todavía: la pantalla siguiente le pide elegir uno. */
-    debeElegirPin: !acceso.hasPin,
-  });
-
+  const response = NextResponse.json({ ok: true, role: acceso.role, label: acceso.label });
   response.cookies.set(PORTAL_COOKIE, token, PORTAL_COOKIE_OPTIONS);
-  // Identifica el dispositivo para poder pedir solo el PIN la próxima vez.
-  response.cookies.set(
-    DEVICE_COOKIE,
-    await createDeviceToken(id, acceso.id),
-    DEVICE_COOKIE_OPTIONS,
-  );
+  // Recuerda el dispositivo para que desde un marcador baste el PIN.
+  response.cookies.set(DEVICE_COOKIE, await createDeviceToken(id, acceso.id), DEVICE_COOKIE_OPTIONS);
   return response;
 }

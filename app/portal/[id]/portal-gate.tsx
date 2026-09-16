@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { KonnectMark } from "@/components/brand/logo";
 
@@ -11,24 +11,86 @@ import { KonnectMark } from "@/components/brand/logo";
  * aquí no es del equipo, entra desde el móvil y viene de un enlace de
  * WhatsApp. Superficie propia, tipografía grande y campos que se sienten como
  * los de un banco, no como un formulario más.
+ *
+ * Ya no hay código que teclear. El enlace personal lleva la llave dentro: la
+ * primera vez se elige un PIN y desde entonces se entra con él.
  */
 
-type Paso = "codigo" | "pin" | "crear-pin";
+type Paso =
+  /** Llegó con el enlace: se está mirando si toca elegir PIN o escribirlo. */
+  | "abriendo"
+  /** Llegó sin enlace y este dispositivo no es conocido. */
+  | "sin-enlace"
+  /** Dispositivo conocido, sin enlace a mano: basta el PIN. */
+  | "pin"
+  /** Con enlace y PIN ya elegido. */
+  | "pin-enlace"
+  /** Con enlace, primera vez. */
+  | "crear-pin";
+
+type Respuesta = {
+  error?: string;
+  debeElegirPin?: boolean;
+  pidePin?: boolean;
+  enlaceInvalido?: boolean;
+  sinEnlace?: boolean;
+  label?: string;
+};
 
 export function PortalGate({
   sessionId,
+  llave,
   aviso,
-  arranque = "codigo",
+  arranque,
 }: {
   sessionId: string;
+  /** La llave del acceso que viene en el enlace (`?acceso=`). */
+  llave: string | null;
   aviso?: string;
-  /** Si el dispositivo ya entró antes, se pide solo el PIN. */
-  arranque?: Paso;
+  arranque: Paso;
 }) {
   const router = useRouter();
   const [paso, setPaso] = useState<Paso>(arranque);
+  const [nombre, setNombre] = useState<string | null>(null);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(aviso ?? null);
+
+  /** Lleva a la pantalla que toca según lo que contestó el servidor. */
+  function seguir(data: Respuesta) {
+    if (data.label) setNombre(data.label);
+    if (data.enlaceInvalido || data.sinEnlace) setPaso("sin-enlace");
+    else if (data.debeElegirPin) setPaso("crear-pin");
+    else if (data.pidePin) setPaso(llave ? "pin-enlace" : "pin");
+  }
+
+  // Con el enlace en la mano, lo primero es saber si ya eligió PIN. No abre
+  // nada: solo decide la pantalla.
+  useEffect(() => {
+    if (arranque !== "abriendo" || !llave) return;
+    let vivo = true;
+    fetch(`/api/portal/${sessionId}/entrar`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: llave }),
+    })
+      .then(async (res) => {
+        const data = (await res.json().catch(() => ({}))) as Respuesta;
+        if (!vivo) return;
+        if (!res.ok) setError(data.error ?? "No pudimos abrir el enlace.");
+        seguir(data);
+        if (!res.ok && !data.enlaceInvalido) setPaso("sin-enlace");
+      })
+      .catch(() => {
+        if (!vivo) return;
+        setError("No hay conexión. Revisa tu internet y vuelve a abrir el enlace.");
+        setPaso("sin-enlace");
+      });
+    return () => {
+      vivo = false;
+    };
+    // `seguir` solo usa setters y la llave, que ya está en las dependencias.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [arranque, llave, sessionId]);
 
   async function enviar(cuerpo: Record<string, string>, ruta = "entrar") {
     setCargando(true);
@@ -39,12 +101,12 @@ export function PortalGate({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(cuerpo),
       });
-      const data = await res.json().catch(() => ({}));
+      const data = (await res.json().catch(() => ({}))) as Respuesta;
       if (!res.ok) {
-        if (data.needsCode) setPaso("codigo");
+        seguir(data);
         throw new Error(data.error ?? "No pudimos validarlo.");
       }
-      return data as { debeElegirPin?: boolean };
+      return data;
     } finally {
       setCargando(false);
     }
@@ -60,52 +122,47 @@ export function PortalGate({
           <span className="portal-gate__brandline">Entregas</span>
         </header>
 
-        {paso === "codigo" && (
-          <PasoCodigo
-            cargando={cargando}
-            error={error}
-            onEnviar={async (code) => {
-              try {
-                const data = await enviar({ code });
-                if (data.debeElegirPin) {
-                  setPaso("crear-pin");
-                  setError(null);
-                } else {
-                  router.refresh();
-                }
-              } catch (e) {
-                setError(e instanceof Error ? e.message : "Error inesperado");
-              }
-            }}
-          />
+        {paso === "abriendo" && (
+          <div className="portal-gate__form">
+            <h1 className="portal-gate__titulo">Abriendo tu espacio…</h1>
+            <p className="portal-gate__sub">Un momento.</p>
+          </div>
         )}
 
-        {paso === "pin" && (
+        {paso === "sin-enlace" && (
+          <div className="portal-gate__form">
+            <h1 className="portal-gate__titulo">Tu espacio de entregas</h1>
+            <p className="portal-gate__sub">
+              Para entrar, abre el enlace personal que te mandó la agencia.
+            </p>
+            {error && <Aviso>{error}</Aviso>}
+          </div>
+        )}
+
+        {(paso === "pin" || paso === "pin-enlace") && (
           <PasoPin
+            nombre={nombre}
             cargando={cargando}
             error={error}
             onEnviar={async (pin) => {
               try {
-                await enviar({ pin });
+                await enviar(llave && paso === "pin-enlace" ? { code: llave, pin } : { pin });
                 router.refresh();
               } catch (e) {
                 setError(e instanceof Error ? e.message : "Error inesperado");
               }
             }}
-            onUsarCodigo={() => {
-              setPaso("codigo");
-              setError(null);
-            }}
           />
         )}
 
-        {paso === "crear-pin" && (
+        {paso === "crear-pin" && llave && (
           <PasoCrearPin
+            nombre={nombre}
             cargando={cargando}
             error={error}
             onEnviar={async (pin, repetir) => {
               try {
-                await enviar({ pin, repetir }, "pin");
+                await enviar({ code: llave, pin, repetir }, "pin");
                 router.refresh();
               } catch (e) {
                 setError(e instanceof Error ? e.message : "Error inesperado");
@@ -122,120 +179,18 @@ export function PortalGate({
   );
 }
 
-/* ---------------- Paso 1: el código de la agencia ---------------- */
-
-function PasoCodigo({
-  cargando,
-  error,
-  onEnviar,
-}: {
-  cargando: boolean;
-  error: string | null;
-  onEnviar: (code: string) => void;
-}) {
-  const [bloques, setBloques] = useState(["", "", ""]);
-  const refs = [
-    useRef<HTMLInputElement>(null),
-    useRef<HTMLInputElement>(null),
-    useRef<HTMLInputElement>(null),
-  ];
-
-  const completo = bloques.every((b) => b.length === 4);
-
-  function escribir(indice: number, bruto: string) {
-    const limpio = bruto.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 4);
-    const siguiente = [...bloques];
-    siguiente[indice] = limpio;
-    setBloques(siguiente);
-    if (limpio.length === 4 && indice < 2) refs[indice + 1].current?.focus();
-  }
-
-  /**
-   * Reparte el código pegado entre los tres bloques.
-   *
-   * Hace falta interceptar el pegado: con `maxLength` el navegador recorta el
-   * texto a cuatro caracteres *antes* de avisar del cambio, así que desde
-   * `onChange` es imposible ver el código completo.
-   */
-  function pegar(e: React.ClipboardEvent, indice: number) {
-    const texto = e.clipboardData.getData("text").toUpperCase().replace(/[^A-Z0-9]/g, "");
-    if (texto.length <= 4) return; // Un bloque suelto: que lo maneje onChange.
-
-    e.preventDefault();
-    const siguiente = [...bloques];
-    // Empieza a repartir desde el bloque donde se pega, no siempre del primero.
-    for (let i = indice, pos = 0; i < 3 && pos < texto.length; i++, pos += 4) {
-      siguiente[i] = texto.slice(pos, pos + 4);
-    }
-    setBloques(siguiente);
-
-    const ultimo = siguiente.findIndex((b) => b.length < 4);
-    refs[ultimo === -1 ? 2 : ultimo].current?.focus();
-  }
-
-  function retroceder(indice: number, tecla: string) {
-    if (tecla === "Backspace" && !bloques[indice] && indice > 0) {
-      refs[indice - 1].current?.focus();
-    }
-  }
-
-  return (
-    <form
-      className="portal-gate__form"
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (completo) onEnviar(bloques.join(""));
-      }}
-    >
-      <h1 className="portal-gate__titulo">Tu espacio de entregas</h1>
-      <p className="portal-gate__sub">
-        Escribe el código que te pasó la agencia. Solo hace falta esta primera vez.
-      </p>
-
-      <div className="portal-code" role="group" aria-label="Código de acceso">
-        {bloques.map((valor, i) => (
-          <div className="portal-code__par" key={i}>
-            {i > 0 && <span className="portal-code__guion" aria-hidden />}
-            <input
-              ref={refs[i]}
-              className="portal-code__campo"
-              value={valor}
-              onChange={(e) => escribir(i, e.target.value)}
-              onPaste={(e) => pegar(e, i)}
-              onKeyDown={(e) => retroceder(i, e.key)}
-              inputMode="text"
-              autoCapitalize="characters"
-              autoComplete="off"
-              spellCheck={false}
-              maxLength={4}
-              aria-label={`Bloque ${i + 1} de 3`}
-              autoFocus={i === 0}
-            />
-          </div>
-        ))}
-      </div>
-
-      {error && <Aviso>{error}</Aviso>}
-
-      <button className="portal-btn" type="submit" disabled={!completo || cargando}>
-        {cargando ? "Comprobando…" : "Entrar"}
-      </button>
-    </form>
-  );
-}
-
-/* ---------------- Paso 2: entrar con PIN ---------------- */
+/* ---------------- Entrar con PIN ---------------- */
 
 function PasoPin({
+  nombre,
   cargando,
   error,
   onEnviar,
-  onUsarCodigo,
 }: {
+  nombre: string | null;
   cargando: boolean;
   error: string | null;
   onEnviar: (pin: string) => void;
-  onUsarCodigo: () => void;
 }) {
   const [pin, setPin] = useState("");
 
@@ -254,27 +209,29 @@ function PasoPin({
 
   return (
     <div className="portal-gate__form">
-      <h1 className="portal-gate__titulo">Hola de nuevo</h1>
+      <h1 className="portal-gate__titulo">{nombre ? `Hola, ${nombre}` : "Hola de nuevo"}</h1>
       <p className="portal-gate__sub">Escribe tu PIN de 4 dígitos.</p>
 
       <PinBoxes key={clave} valor={pin} onCambio={escribir} autoFocus />
 
       {error && <Aviso>{error}</Aviso>}
 
-      <button className="portal-link" type="button" onClick={onUsarCodigo}>
-        Olvidé mi PIN, usar el código de la agencia
-      </button>
+      <p className="portal-gate__sub" style={{ marginTop: 16 }}>
+        ¿Olvidaste tu PIN? Pídele a la agencia que reinicie tu acceso y te mande un enlace nuevo.
+      </p>
     </div>
   );
 }
 
-/* ---------------- Paso 3: elegir PIN ---------------- */
+/* ---------------- Elegir PIN, la primera vez ---------------- */
 
 function PasoCrearPin({
+  nombre,
   cargando,
   error,
   onEnviar,
 }: {
+  nombre: string | null;
   cargando: boolean;
   error: string | null;
   onEnviar: (pin: string, repetir: string) => void;
@@ -291,11 +248,13 @@ function PasoCrearPin({
         if (repetir.length === 4) onEnviar(pin, repetir);
       }}
     >
-      <h1 className="portal-gate__titulo">Elige tu PIN</h1>
+      <h1 className="portal-gate__titulo">
+        {nombre ? `Hola, ${nombre}` : "Elige tu PIN"}
+      </h1>
       <p className="portal-gate__sub">
         {confirmando
           ? "Repítelo para confirmar."
-          : "Cuatro dígitos para entrar la próxima vez, sin buscar el código."}
+          : "Elige un PIN de 4 dígitos. Lo usarás cada vez que entres."}
       </p>
 
       {confirmando ? (
@@ -309,7 +268,7 @@ function PasoCrearPin({
       {confirmando && (
         <>
           <button className="portal-btn" type="submit" disabled={repetir.length !== 4 || cargando}>
-            {cargando ? "Guardando…" : "Guardar PIN"}
+            {cargando ? "Guardando…" : "Guardar PIN y entrar"}
           </button>
           <button
             className="portal-link"

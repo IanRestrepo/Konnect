@@ -1810,34 +1810,52 @@ export async function addSessionAccess(
 
 /** Revoca o reactiva un acceso sin borrarlo, para no perder el rastro. */
 export async function setAccessRevoked(
+  sessionId: string,
   accessId: string,
   revoked: boolean,
 ): Promise<CollabSession | null> {
-  const access = await prisma.sessionAccess.findUnique({
-    where: { id: accessId },
-    select: { sessionId: true },
+  const { count } = await prisma.sessionAccess.updateMany({
+    where: { id: accessId, sessionId },
+    data: { revoked },
   });
-  if (!access) return null;
-
-  await prisma.sessionAccess.update({ where: { id: accessId }, data: { revoked } });
-  return getCollabSession(access.sessionId);
+  if (count === 0) return null;
+  return getCollabSession(sessionId);
 }
 
 /** Cambia el código y deja fuera a quien tuviera el anterior. */
-export async function regenerateAccessCode(accessId: string): Promise<CollabSession | null> {
-  const access = await prisma.sessionAccess.findUnique({
-    where: { id: accessId },
-    select: { sessionId: true },
-  });
-  if (!access) return null;
-
+/**
+ * Reinicia un acceso: enlace nuevo y PIN borrado.
+ *
+ * Es la salida para los dos problemas que trae entrar solo con enlace y PIN:
+ * que el creador olvide el PIN, y que el enlace se reenviara y otro eligiera
+ * el PIN antes que él. En los dos casos lo que hace falta es lo mismo —que el
+ * enlace viejo deje de servir y el PIN vuelva a estar libre—, así que es una
+ * sola acción y no dos.
+ *
+ * Recibe la sesión y la exige en la escritura: sin eso, cualquiera con permiso
+ * sobre una sesión podía reiniciar accesos de otra con solo su identificador.
+ */
+export async function resetAccess(
+  sessionId: string,
+  accessId: string,
+): Promise<CollabSession | null> {
   const code = generateAccessCode();
-  await prisma.sessionAccess.update({
-    where: { id: accessId },
-    data: { codeEnc: encrypt(code), codeHint: codeHint(code), revoked: false, lastSeenAt: null },
+  const { count } = await prisma.sessionAccess.updateMany({
+    where: { id: accessId, sessionId },
+    data: {
+      codeEnc: encrypt(code),
+      codeHint: codeHint(code),
+      revoked: false,
+      lastSeenAt: null,
+      pinHash: null,
+      pinSetAt: null,
+      failedAttempts: 0,
+      lockedUntil: null,
+    },
   });
+  if (count === 0) return null;
 
-  return getCollabSession(access.sessionId);
+  return getCollabSession(sessionId);
 }
 
 export async function addSessionItem(
@@ -2390,11 +2408,20 @@ export async function getPortalAccess(accessId: string): Promise<PortalAccess | 
   };
 }
 
-export async function setAccessPin(accessId: string, pinHash: string): Promise<void> {
-  await prisma.sessionAccess.update({
-    where: { id: accessId },
+/**
+ * Pone el PIN, pero solo si el acceso todavía no tiene uno.
+ *
+ * La condición va dentro de la escritura y no en una lectura previa: con dos
+ * personas abriendo el mismo enlace a la vez, leer primero dejaría a las dos
+ * pasar la comprobación y la segunda pisaría el PIN de la primera. Devuelve si
+ * lo consiguió.
+ */
+export async function claimAccessPin(accessId: string, pinHash: string): Promise<boolean> {
+  const { count } = await prisma.sessionAccess.updateMany({
+    where: { id: accessId, pinHash: null, revoked: false },
     data: { pinHash, pinSetAt: new Date(), failedAttempts: 0, lockedUntil: null },
   });
+  return count > 0;
 }
 
 /** Suma un fallo de PIN y bloquea el acceso al quinto. Devuelve los restantes. */

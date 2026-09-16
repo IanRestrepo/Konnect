@@ -1,28 +1,45 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { z } from "zod";
-import { PORTAL_COOKIE, readPortalToken } from "@/lib/portal";
-import { hashPin, isValidPin, isWeakPin } from "@/lib/portal-guard";
-import { setAccessPin } from "@/lib/store";
+import { PORTAL_COOKIE, PORTAL_COOKIE_OPTIONS, createPortalToken } from "@/lib/portal";
+import {
+  DEVICE_COOKIE,
+  DEVICE_COOKIE_OPTIONS,
+  checkGuard,
+  clearFailures,
+  clientIp,
+  createDeviceToken,
+  hashPin,
+  isValidPin,
+  isWeakPin,
+  registerFailure,
+} from "@/lib/portal-guard";
+import { claimAccessPin, verifyPortalCode } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
-const schema = z.object({ pin: z.string(), repetir: z.string() });
+const schema = z.object({ code: z.string(), pin: z.string(), repetir: z.string() });
 
 /**
- * Elige el PIN de cuatro dígitos.
+ * Elige el PIN la primera vez que se abre el enlace, y con eso entra.
  *
- * Solo se puede llamar con una sesión de portal ya abierta, es decir, después
- * de haber acertado el código largo: el PIN no es una vía alternativa de
- * entrada, es un atajo para quien ya demostró tener el código.
+ * Es el único momento en que el enlace solo basta, así que se protege en dos
+ * puntos. Hasta que no hay PIN no se emite ningún acceso: abrir el enlace y
+ * cerrar la pestaña no deja a nadie dentro. Y el PIN solo se puede poner una
+ * vez —la escritura exige que siga vacío—: si dos personas abren el mismo
+ * enlace a la vez, gana una y la otra tiene que escribirlo. Para cambiarlo, la
+ * agencia reinicia el acceso.
  */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const ip = clientIp(request);
 
-  const galleta = await cookies();
-  const sesion = await readPortalToken(galleta.get(PORTAL_COOKIE)?.value);
-  if (!sesion || sesion.sessionId !== id) {
-    return NextResponse.json({ error: "Entra con tu código primero." }, { status: 401 });
+  const guard = await checkGuard(id, ip);
+  if (guard.bloqueado) {
+    const minutos = Math.ceil(guard.esperaSegundos / 60);
+    return NextResponse.json(
+      { error: `Demasiados intentos. Prueba de nuevo en ${minutos} minuto${minutos === 1 ? "" : "s"}.` },
+      { status: 429 },
+    );
   }
 
   const parsed = schema.safeParse(await request.json().catch(() => null));
@@ -30,7 +47,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Escribe el PIN dos veces." }, { status: 400 });
   }
 
-  const { pin, repetir } = parsed.data;
+  const { code, pin, repetir } = parsed.data;
 
   if (!isValidPin(pin)) {
     return NextResponse.json({ error: "El PIN son exactamente 4 dígitos." }, { status: 400 });
@@ -45,7 +62,34 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     );
   }
 
-  await setAccessPin(sesion.accessId, await hashPin(pin));
+  const acceso = await verifyPortalCode(id, code);
+  if (!acceso) {
+    await registerFailure(id, ip);
+    return NextResponse.json(
+      { error: "Este enlace ya no sirve. Pídele a la agencia uno nuevo.", enlaceInvalido: true },
+      { status: 401 },
+    );
+  }
 
-  return NextResponse.json({ ok: true });
+  if (!(await claimAccessPin(acceso.id, await hashPin(pin)))) {
+    return NextResponse.json(
+      { error: "Este acceso ya tiene PIN. Escríbelo para entrar.", pidePin: true },
+      { status: 409 },
+    );
+  }
+
+  await clearFailures(id, ip);
+
+  const token = await createPortalToken({
+    sessionId: id,
+    accessId: acceso.id,
+    role: acceso.role,
+    label: acceso.label,
+    canUpload: acceso.canUpload,
+  });
+
+  const response = NextResponse.json({ ok: true });
+  response.cookies.set(PORTAL_COOKIE, token, PORTAL_COOKIE_OPTIONS);
+  response.cookies.set(DEVICE_COOKIE, await createDeviceToken(id, acceso.id), DEVICE_COOKIE_OPTIONS);
+  return response;
 }

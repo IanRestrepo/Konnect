@@ -112,7 +112,13 @@ export function SessionDetail({
   const [peticion, setPeticion] = useState({ ...PETICION_VACIA });
 
   const abierta = session.status === "abierta";
-  const enlace = portalUrl;
+
+  /** El enlace personal de un acceso: el del portal con su llave dentro. */
+  const enlaceDe = (code: string) => `${portalUrl}?acceso=${encodeURIComponent(code)}`;
+
+  // Se fija al montar: solo sirve para saber si un bloqueo sigue vigente, y
+  // leer el reloj en cada render hace que el resultado cambie sin motivo.
+  const [ahora] = useState(() => Date.now());
 
   async function copiar(texto: string, marca: string) {
     try {
@@ -525,7 +531,7 @@ export function SessionDetail({
 
           <SectionHead
             title="Accesos"
-            hint="Cada persona entra con su propio código."
+            hint="Cada persona tiene su enlace. La primera vez que lo abre elige un PIN."
             className="mt-7"
             action={
               puedeEditar && (
@@ -542,7 +548,8 @@ export function SessionDetail({
               <thead>
                 <tr>
                   <Th>Quién</Th>
-                  <Th>Código</Th>
+                  <Th>Enlace</Th>
+                  <Th>PIN</Th>
                   <Th>Última entrada</Th>
                   {puedeEditar && <Th align="right">Acciones</Th>}
                 </tr>
@@ -562,17 +569,28 @@ export function SessionDetail({
                       </div>
                     </Td>
                     <Td>
+                      {/* Se copia el enlace, no el código: el código ya no se
+                          teclea, va dentro del enlace. */}
                       {a.revoked ? (
-                        <span className="text-[var(--text-subtle)]">— — —</span>
+                        <span className="text-[var(--text-subtle)]">—</span>
                       ) : (
                         <button
-                          onClick={() => copiar(a.code, a.id)}
-                          title="Copiar código"
-                          className="tabular inline-flex items-center gap-2 rounded-[var(--r-control)] bg-[var(--surface-2)] px-2.5 py-1.5 text-[12.5px] tracking-wider transition hover:bg-[var(--surface-3,var(--surface-2))] hover:text-[var(--accent)]"
+                          onClick={() => copiar(enlaceDe(a.code), a.id)}
+                          title="Copiar su enlace personal"
+                          className="inline-flex items-center gap-2 rounded-[var(--r-control)] bg-[var(--surface-2)] px-2.5 py-1.5 text-[12.5px] transition hover:bg-[var(--surface-3,var(--surface-2))] hover:text-[var(--accent)]"
                         >
-                          {a.code}
                           {copiado === a.id ? <Check size={13} /> : <Copy size={13} />}
+                          {copiado === a.id ? "Copiado" : "Copiar enlace"}
                         </button>
+                      )}
+                    </Td>
+                    <Td>
+                      {a.lockedUntil && new Date(a.lockedUntil).getTime() > ahora ? (
+                        <Badge tone="danger">Bloqueado</Badge>
+                      ) : a.hasPin ? (
+                        <Badge tone="ok">Elegido</Badge>
+                      ) : (
+                        <Badge plain>Sin abrir</Badge>
                       )}
                     </Td>
                     <Td className="text-[var(--text-muted)]">
@@ -585,16 +603,23 @@ export function SessionDetail({
                             variant="ghost"
                             size="sm"
                             disabled={ocupado}
-                            title="Generar un código nuevo"
-                            onClick={() =>
-                              llamar(
+                            title="Enlace nuevo y PIN borrado"
+                            onClick={() => {
+                              // Pide confirmación: el enlace que ya tiene deja
+                              // de servir en el acto, y hay que mandarle otro.
+                              const seguro = window.confirm(
+                                `¿Reiniciar el acceso de ${a.label}? Su enlace actual deja de servir y tendrá que elegir un PIN nuevo con el enlace que le mandes.`,
+                              );
+                              if (!seguro) return;
+                              void llamar(
                                 `/api/sesiones/${session.id}/accesos`,
-                                json({ accessId: a.id, action: "regenerar" }, "PATCH"),
-                                "No se pudo cambiar el código.",
-                              )
-                            }
+                                json({ accessId: a.id, action: "reiniciar" }, "PATCH"),
+                                "No se pudo reiniciar el acceso.",
+                              );
+                            }}
                           >
                             <RefreshCw size={13} />
+                            Reiniciar
                           </Button>
                           <Button
                             variant="ghost"
@@ -624,22 +649,6 @@ export function SessionDetail({
         </section>
 
         <div className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Enlace del portal</CardTitle>
-              <Button variant="secondary" size="sm" onClick={() => copiar(enlace, "enlace")}>
-                {copiado === "enlace" ? <Check size={13} /> : <Copy size={13} />}
-                Copiar
-              </Button>
-            </CardHeader>
-            <div className="border-t border-[var(--line)] px-4 py-3">
-              <p className="truncate text-[12.5px] text-[var(--text-muted)]">{enlace}</p>
-              <p className="mt-1.5 text-[11.5px] text-[var(--text-subtle)]">
-                Mándalo junto con el código de cada persona. Sin código no se ve nada.
-              </p>
-            </div>
-          </Card>
-
           <Card>
             <CardHeader>
               <CardTitle>Resumen</CardTitle>

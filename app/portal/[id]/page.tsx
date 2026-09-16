@@ -10,14 +10,30 @@ import { PortalView, type PortalPago } from "@/app/portal/[id]/portal-view";
 import { tareaLabel } from "@/lib/socials";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Portal — Konnect", robots: { index: false, follow: false } };
+export const metadata = {
+  title: "Portal — Konnect",
+  robots: { index: false, follow: false },
+  // El enlace lleva la llave del acceso en la dirección. Sin esto, cualquier
+  // enlace que se abra desde el portal —el video en YouTube, un documento— le
+  // mandaría esa dirección a la otra página como procedencia.
+  referrer: "no-referrer" as const,
+};
 
 /**
- * Portal externo de una sesión. No hay cuenta: se entra con el código que la
- * agencia repartió. Fuera de la sesión no se expone absolutamente nada.
+ * Portal externo de una sesión. No hay cuenta: se entra con el enlace personal
+ * que manda la agencia y un PIN de cuatro dígitos. Fuera de la sesión no se
+ * expone absolutamente nada.
  */
-export default async function PortalPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function PortalPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ acceso?: string | string[] }>;
+}) {
   const { id } = await params;
+  const { acceso: bruto } = await searchParams;
+  const llave = Array.isArray(bruto) ? bruto[0] : bruto;
 
   const session = await getCollabSession(id);
   if (!session) notFound();
@@ -25,10 +41,10 @@ export default async function PortalPage({ params }: { params: Promise<{ id: str
   const store = await cookies();
   const portal = await readPortalToken(store.get(PORTAL_COOKIE)?.value);
 
-  // Sin token válido para esta sesión, solo se ve la pantalla del código.
+  // Sin token válido para esta sesión, solo se ve la puerta.
   if (!portal || portal.sessionId !== id) {
-    // Si este dispositivo ya entró y eligió PIN, se le piden los cuatro
-    // dígitos en vez del código largo, que ya no tiene a mano.
+    // Sin el enlace, un dispositivo donde ya se entró puede seguir con el PIN:
+    // es quien abre el portal desde un marcador.
     const device = await readDeviceToken(store.get(DEVICE_COOKIE)?.value);
     const conocido =
       device?.sessionId === id
@@ -38,7 +54,10 @@ export default async function PortalPage({ params }: { params: Promise<{ id: str
     return (
       <PortalGate
         sessionId={id}
-        arranque={conocido && conocido.hasPin && !conocido.revoked ? "pin" : "codigo"}
+        llave={llave ?? null}
+        arranque={
+          llave ? "abriendo" : conocido && conocido.hasPin && !conocido.revoked ? "pin" : "sin-enlace"
+        }
       />
     );
   }
@@ -46,7 +65,14 @@ export default async function PortalPage({ params }: { params: Promise<{ id: str
   // El acceso pudo revocarse después de emitir el token.
   const acceso = session.accesses.find((a) => a.id === portal.accessId);
   if (!acceso || acceso.revoked) {
-    return <PortalGate sessionId={id} aviso="Ese acceso ya no está activo. Pide uno nuevo." />;
+    return (
+      <PortalGate
+        sessionId={id}
+        llave={null}
+        arranque="sin-enlace"
+        aviso="Ese acceso ya no está activo. Pídele a la agencia un enlace nuevo."
+      />
+    );
   }
 
   /**

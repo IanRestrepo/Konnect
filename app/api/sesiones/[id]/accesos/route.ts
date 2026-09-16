@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getSession } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
-import { addSessionAccess, regenerateAccessCode, setAccessRevoked } from "@/lib/store";
+import { addSessionAccess, resetAccess, setAccessRevoked } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +15,8 @@ const nuevo = z.object({
 
 const cambio = z.object({
   accessId: z.string().min(1),
-  action: z.enum(["revocar", "reactivar", "regenerar"]),
+  /** «reiniciar»: enlace nuevo y PIN borrado. */
+  action: z.enum(["revocar", "reactivar", "reiniciar"]),
 });
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -41,7 +42,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   return NextResponse.json({ session: actualizada }, { status: 201 });
 }
 
-/** Revoca, reactiva o cambia el código de un acceso concreto. */
+/** Revoca, reactiva o reinicia un acceso concreto. */
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession();
   if (!session || !hasPermission(session.permissions, "editar_sesiones")) {
@@ -60,9 +61,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   const { accessId, action } = parsed.data;
   const actualizada =
-    action === "regenerar"
-      ? await regenerateAccessCode(accessId)
-      : await setAccessRevoked(accessId, action === "revocar");
+    action === "reiniciar"
+      ? await resetAccess(id, accessId)
+      : await setAccessRevoked(id, accessId, action === "revocar");
 
   if (!actualizada) return NextResponse.json({ error: "Acceso no encontrado." }, { status: 404 });
 
