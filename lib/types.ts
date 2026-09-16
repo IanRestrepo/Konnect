@@ -228,6 +228,8 @@ export type Campaign = {
   startDate: string;
   endDate: string | null;
   notes: string;
+  /** La nota de Notas que hace de apuntes. Null hasta el primer apunte. */
+  notesDocId: string | null;
   /** Quién la lleva. Null = sin responsable asignado. */
   managerId: string | null;
   /** Quién la dio de alta. Null en las anteriores a que se guardara. */

@@ -23,7 +23,8 @@ import {
   getCompany,
   getCreators,
 } from "@/lib/data";
-import { listDeliverableKinds, listSessions, listUsers } from "@/lib/store";
+import { getDoc, listDeliverableKinds, listSessions, listUsers } from "@/lib/store";
+import { CampaignNotesCard } from "@/components/campaigns/campaign-notes-card";
 import { puedeVerCampana } from "@/lib/campaign-access";
 import { CampaignTeam } from "@/components/campaigns/campaign-team";
 import { CampaignClientPayments } from "@/components/campaigns/campaign-client-payments";
@@ -43,13 +44,14 @@ export default async function CampanaPage({ params }: { params: Promise<{ id: st
   // confirmaría que la campaña está ahí.
   if (!puedeVerCampana(session, campaign)) notFound();
 
-  const [company, companies, creators, todasSesiones, usuarios, kinds] = await Promise.all([
+  const [company, companies, creators, todasSesiones, usuarios, kinds, apuntes] = await Promise.all([
     getCompany(campaign.companyId),
     getCompanies(),
     getCreators(),
     listSessions(),
     listUsers(),
     listDeliverableKinds(),
+    campaign.notesDocId ? getDoc(campaign.notesDocId) : null,
   ]);
   // Solo las cuentas activas: asignarle una campaña a alguien que ya no entra
   // deja la ficha diciendo que la lleva quien no la lleva.
@@ -364,14 +366,11 @@ export default async function CampanaPage({ params }: { params: Promise<{ id: st
             )}
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Apuntes de la campaña</CardTitle>
-            </CardHeader>
-            <p className="px-5 pb-5 text-[13px] leading-relaxed text-[var(--text-muted)]">
-              {campaign.notes || "Sin apuntes."}
-            </p>
-          </Card>
+          <CampaignNotesCard
+            campaignId={campaign.id}
+            doc={apuntes}
+            textoAnterior={campaign.notes}
+          />
 
           <CampaignTeam
             campaignId={campaign.id}

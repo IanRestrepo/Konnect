@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { LoaderCircle, Pencil, Plus, TriangleAlert } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
-import { FieldHint, Input, Label, Select, Textarea } from "@/components/ui/field";
+import { FieldHint, Input, Label, Select } from "@/components/ui/field";
 import { Picker } from "@/components/ui/picker";
 import { useCan } from "@/components/session-provider";
 import { QuickCompanyDialog } from "@/components/companies/quick-company-dialog";
@@ -116,7 +116,6 @@ export function EditCampaignButton({
           currency: form.currency,
           budget: Number(form.budget) || 0,
           ...fechas,
-          notes: form.notes,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -276,17 +275,8 @@ export function EditCampaignButton({
             <FieldHint>Déjalo vacío si sigue abierta.</FieldHint>
           </div>
         </div>
-
-        <div className="mt-3">
-          <Label htmlFor="ecp-notes">Notas internas</Label>
-          <Textarea
-            id="ecp-notes"
-            rows={3}
-            value={form.notes}
-            onChange={(e) => set("notes", e.target.value)}
-            placeholder="Contexto que le sirva al equipo."
-          />
-        </div>
+        {/* Los apuntes ya no se editan aquí: viven en su propia tarjeta de
+            la campaña, como nota de Notas. */}
         <QuickCompanyDialog
           open={creandoCliente}
           onClose={() => setCreandoCliente(false)}

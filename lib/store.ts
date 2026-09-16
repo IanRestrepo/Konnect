@@ -451,6 +451,7 @@ function toCampaign(row: CampaignRow): Campaign {
     startDate: iso(row.startDate),
     endDate: isoOrNull(row.endDate),
     notes: row.notes,
+    notesDocId: row.notesDocId,
     managerId: row.managerId,
     createdById: row.createdById,
     memberIds: row.members.map((m) => m.userId),
@@ -3567,6 +3568,63 @@ export async function searchDocs(texto: string): Promise<DocSummary[]> {
 export async function getDoc(id: string): Promise<Doc | null> {
   const row = await prisma.doc.findUnique({ where: { id }, include: docInclude });
   return row ? toDoc(row) : null;
+}
+
+/**
+ * La nota de apuntes de una campaña; la crea si todavía no existe.
+ *
+ * Nace enlazada a la campaña —así sale también en su tarjeta de notas y en la
+ * búsqueda— y con lo que hubiera en el campo de texto de antes, para que no
+ * se pierda nada al pasar a la nota. Si dos personas la abren a la vez, la
+ * restricción única de `notesDocId` impide que acaben siendo dos notas.
+ */
+export async function ensureCampaignNotesDoc(
+  campaignId: string,
+  createdById: string | null,
+): Promise<Doc | null> {
+  const campana = await prisma.campaign.findUnique({
+    where: { id: campaignId },
+    select: { name: true, notes: true, notesDocId: true },
+  });
+  if (!campana) return null;
+  if (campana.notesDocId) {
+    const existente = await getDoc(campana.notesDocId);
+    if (existente) return existente;
+  }
+
+  const texto = campana.notes.trim();
+  const content = {
+    type: "doc",
+    content: texto
+      ? texto.split(/\n+/).map((linea) => ({
+          type: "paragraph",
+          content: [{ type: "text", text: linea }],
+        }))
+      : [{ type: "paragraph" }],
+  };
+
+  const doc = await createDoc({
+    title: `Apuntes · ${campana.name}`,
+    createdById,
+    links: [{ campaignId, creatorId: null, companyId: null }],
+  });
+  await updateDoc(doc.id, { content, plainText: texto, updatedById: createdById });
+
+  const { count } = await prisma.campaign.updateMany({
+    where: { id: campaignId, notesDocId: null },
+    data: { notesDocId: doc.id },
+  });
+  if (count === 0) {
+    // Otro la creó mientras tanto: gana la suya y esta sobra.
+    await prisma.doc.delete({ where: { id: doc.id } });
+    const ganadora = await prisma.campaign.findUnique({
+      where: { id: campaignId },
+      select: { notesDocId: true },
+    });
+    return ganadora?.notesDocId ? getDoc(ganadora.notesDocId) : null;
+  }
+
+  return getDoc(doc.id);
 }
 
 export async function createDoc(input: {

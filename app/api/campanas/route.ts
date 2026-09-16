@@ -151,6 +151,7 @@ export async function POST(request: Request) {
     endedContracts: [],
     creatorLeads: [],
     clientPayments: [],
+    notesDocId: null,
     deliverables,
   });
 
