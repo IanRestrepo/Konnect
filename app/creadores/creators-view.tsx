@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Plus, Users } from "lucide-react";
 import { PageTitle, SectionLabel } from "@/components/ui/section";
 import { Segmented, SearchInput, Toolbar } from "@/components/shell/toolbar";
+import { Paginador, usePagina } from "@/components/ui/pager";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
@@ -58,15 +59,27 @@ export function CreatorsView({
     });
   }, [creators, query, status]);
 
+  // De diez en diez. Se pagina la lista ya ordenada por categoría y después se
+  // agrupa lo visible: agrupar primero y paginar cada grupo dejaría una
+  // categoría grande ocupando todas las páginas.
+  const ordenados = useMemo(
+    () =>
+      [...filtered].sort(
+        (a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name),
+      ),
+    [filtered],
+  );
+  const pagina = usePagina(ordenados, `${status}|${query}`);
+
   const byCategory = useMemo(() => {
     const groups = new Map<string, Creator[]>();
-    filtered.forEach((creator) => {
+    pagina.visibles.forEach((creator) => {
       const list = groups.get(creator.category) ?? [];
       list.push(creator);
       groups.set(creator.category, list);
     });
     return [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  }, [filtered]);
+  }, [pagina.visibles]);
 
   return (
     <div className="space-y-7">
@@ -136,6 +149,8 @@ export function CreatorsView({
           </section>
         ))
       )}
+
+      <Paginador {...pagina} />
 
       <NewCreatorDialog
         open={dialogOpen}

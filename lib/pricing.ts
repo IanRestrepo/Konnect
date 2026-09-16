@@ -6,6 +6,7 @@ import type {
   DeliverableType,
   SocialPlatform,
 } from "@/lib/types";
+import { formatMoney } from "@/lib/utils";
 
 /**
  * Precios de una campaña.
@@ -27,6 +28,18 @@ import type {
  * Postgres que no le dice nada a quien está rellenando el formulario.
  */
 export const IMPORTE_MAXIMO = 9_999_999_999.99;
+
+/**
+ * Lo que se queda la agencia de cada pieza, en % del cobro al cliente.
+ *
+ * Fijo. Antes cada campaña tenía un «margen sugerido» editable, pero la
+ * agencia trabaja siempre al 40%, y un campo que siempre se deja igual solo
+ * sirve para que alguien lo cambie sin querer. Con el porcentaje sobre el
+ * total, un creador que cobra 600 se le cobra al cliente 1.000.
+ *
+ * Cada pieza se puede seguir ajustando a mano: esto solo propone el precio.
+ */
+export const MARGEN_AGENCIA = 40;
 
 /** Comisión de la agencia sobre una pieza, en dinero. */
 export function agencyCut(deliverable: Deliverable, campaign: Campaign): number {
@@ -153,6 +166,23 @@ export function hasRateFor(
 export function clientPriceForRate(rate: number, commissionPct: number): number {
   const pct = Math.min(Math.max(commissionPct, 0), 99);
   return rate / (1 - pct / 100);
+}
+
+/**
+ * La tarifa base de un canal, lista para enseñarla junto a su nombre.
+ *
+ * Al elegir canal hay que ver cuánto cobra en cada uno antes de elegir, no
+ * después: un secundario suele cobrar menos, y descubrirlo solo al ver cómo
+ * cambia el importe obliga a ir probando canal por canal.
+ */
+export function tarifaCanal(
+  creator: Pick<Creator, "rates" | "rateVideo" | "rateShort" | "rateIntegration" | "currency">,
+  platform: SocialPlatform,
+  type: DeliverableType,
+  channelId: string,
+): string {
+  const tarifa = rateFor(creator, platform, type, channelId);
+  return tarifa > 0 ? formatMoney(tarifa, creator.currency) : "sin tarifa";
 }
 
 /** Plataformas para las que el creador tiene al menos una tarifa cargada. */

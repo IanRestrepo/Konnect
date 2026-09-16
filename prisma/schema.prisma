@@ -374,6 +374,12 @@ model Campaign {
   managerId String?
   manager   User?   @relation("CampaignManager", fields: [managerId], references: [id], onDelete: SetNull)
 
+  /// Quién la dio de alta. No es lo mismo que quién la lleva: la crea a menudo
+  /// quien cierra el trato y la lleva otro. Null en las campañas anteriores a
+  /// que se guardara, y si la cuenta se borra.
+  createdById String?
+  createdBy   User?   @relation("CampaignCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
   deliverables   Deliverable[]
   sessions       CollabSession[]
   members        CampaignMember[]
@@ -567,6 +573,7 @@ model User {
 
   /// Campañas que lleva y campañas en las que participa.
   managedCampaigns Campaign[]       @relation("CampaignManager")
+  createdCampaigns Campaign[]       @relation("CampaignCreatedBy")
   campaignMembers  CampaignMember[]
   creatorLeads     CampaignCreatorLead[]
 

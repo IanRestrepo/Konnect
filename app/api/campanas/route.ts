@@ -8,9 +8,10 @@ import {
   read,
   seedRequirementsFromCampaign,
 } from "@/lib/store";
-import { IMPORTE_MAXIMO } from "@/lib/pricing";
+import { IMPORTE_MAXIMO, MARGEN_AGENCIA } from "@/lib/pricing";
 import { getSession } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
+import { registrar } from "@/lib/audit";
 import type { Deliverable } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -60,7 +61,7 @@ const schema = z.object({
     .string({ error: "Falta el nombre de la campaña." })
     .min(1, "Falta el nombre de la campaña."),
   companyId: z.string({ error: "Selecciona un cliente." }).min(1, "Selecciona un cliente."),
-  status: z.enum(["borrador", "activa", "pausada", "finalizada", "cancelada"]).default("borrador"),
+  status: z.enum(["borrador", "activa", "pausada", "finalizada", "cancelada"]).default("activa"),
   objective: z.enum(["awareness", "trafico", "conversiones", "lanzamiento"]).default("awareness"),
   currency: z.enum(["USD", "MXN", "COP", "EUR"]).default("USD"),
   /** Tope de referencia, opcional. Null = sin tope. */
@@ -71,7 +72,8 @@ const schema = z.object({
     .nullable()
     .default(null),
   /** Margen por defecto de la agencia, en % sobre el pago al creador. */
-  agencyFee: z.number().min(0).nullable().default(null),
+  /** Se ignora lo que llegue: el margen de la agencia es fijo. Ver MARGEN_AGENCIA. */
+  agencyFee: z.number().min(0).nullable().optional(),
   startDate: z.string().default(() => new Date().toISOString()),
   endDate: z.string().nullable().default(null),
   notes: z.string().default(""),
@@ -110,7 +112,7 @@ export async function POST(request: Request) {
     const comision =
       l.commissionFixed !== null
         ? Math.min(l.commissionFixed, l.clientPrice)
-        : l.clientPrice * ((l.commissionPct ?? rest.agencyFee ?? 0) / 100);
+        : l.clientPrice * ((l.commissionPct ?? MARGEN_AGENCIA) / 100);
 
     return {
     id: newId("dl"),
@@ -144,9 +146,20 @@ export async function POST(request: Request) {
 
   const campaign = await createCampaign({
     ...rest,
+    agencyFee: MARGEN_AGENCIA,
+    createdById: session.userId,
     endedContracts: [],
     creatorLeads: [],
     deliverables,
+  });
+
+  await registrar({
+    actorId: session.userId,
+    actorName: session.name,
+    action: "campana.creada",
+    entity: "campaign",
+    entityId: campaign.id,
+    entityLabel: campaign.name,
   });
 
   /**

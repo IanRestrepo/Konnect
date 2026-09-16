@@ -9,7 +9,7 @@ import { FieldHint, Input, Label } from "@/components/ui/field";
 import { Picker } from "@/components/ui/picker";
 import { Badge } from "@/components/ui/badge";
 import { useCan } from "@/components/session-provider";
-import { PLATFORMS, PLATFORM_LABEL, TAREAS, tareaLabel } from "@/lib/socials";
+import { PLATFORMS, PLATFORM_LABEL, TAREAS, nombreCanal, tareaLabel } from "@/lib/socials";
 import { IMPORTE_MAXIMO } from "@/lib/pricing";
 import type {
   Creator,
@@ -228,8 +228,8 @@ export function RatesPanel({
                   { id: TODA_LA_RED, label: "Toda la red" },
                   ...channels.map((c) => ({
                     id: c.id,
-                    label: c.label || c.handle || "Canal",
-                    hint: c.handle,
+                    label: nombreCanal(c),
+                    hint: c.label && c.label !== c.handle ? c.label : undefined,
                   })),
                 ]}
               />
@@ -290,7 +290,7 @@ export function RatesPanel({
                   {rate.channelId && (
                     <span className="text-[var(--text-subtle)]">
                       {" · "}
-                      {canal?.label || canal?.handle || "Canal borrado"}
+                      {canal ? nombreCanal(canal) : "Canal borrado"}
                     </span>
                   )}
                 </span>

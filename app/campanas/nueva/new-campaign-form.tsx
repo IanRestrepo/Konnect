@@ -26,8 +26,23 @@ import { SearchInput, Segmented } from "@/components/shell/toolbar";
 import { useCan } from "@/components/session-provider";
 import { QuickCompanyDialog } from "@/components/companies/quick-company-dialog";
 import { DeliverableTypeField } from "@/components/campaigns/deliverable-type-field";
-import { PLATFORM_LABEL, PLATFORMS, TAREAS, piezaLabel, tareaLabel } from "@/lib/socials";
-import { IMPORTE_MAXIMO, clientPriceForRate, hasRateFor, rateFor } from "@/lib/pricing";
+import {
+  PLATFORM_LABEL,
+  PLATFORMS,
+  TAREAS,
+  nombreCanal,
+  piezaLabel,
+  tareaLabel,
+} from "@/lib/socials";
+import { Paginador, usePagina } from "@/components/ui/pager";
+import {
+  IMPORTE_MAXIMO,
+  MARGEN_AGENCIA,
+  clientPriceForRate,
+  hasRateFor,
+  rateFor,
+  tarifaCanal,
+} from "@/lib/pricing";
 import type {
   CampaignObjective,
   Company,
@@ -120,7 +135,9 @@ export function NewCampaignForm({
   // El catálogo llega del servidor pero puede crecer sin recargar: el campo de
   // tipo de pieza deja crear uno en el sitio.
   const [catalogo, setCatalogo] = useState(kinds);
-  const [status, setStatus] = useState("borrador");
+  // Activa de partida: casi todas las campañas se dan de alta cuando ya están
+  // cerradas con el cliente, y el borrador se quedaba olvidado en ese estado.
+  const [status, setStatus] = useState("activa");
   const [objective, setObjective] = useState<CampaignObjective>("awareness");
   const [currency, setCurrency] = useState("USD");
   const [startDate, setStartDate] = useState("");
@@ -130,7 +147,6 @@ export function NewCampaignForm({
 
   /** Tope de referencia, opcional. No reparte nada. */
   const [budget, setBudget] = useState("");
-  const [agencyFee, setAgencyFee] = useState("20");
 
   // Filtros del buscador de creadores.
   const [platform, setPlatform] = useState<SocialPlatform>("youtube");
@@ -149,6 +165,18 @@ export function NewCampaignForm({
    * haberlo elegido nunca.
    */
   const [avisoTipo, setAvisoTipo] = useState<string | null>(null);
+
+  /**
+   * Lo que se eligió en cada red, para devolverlo al volver a ella.
+   *
+   * El aviso de arriba no bastaba: pasar por Instagram «solo para mirar»
+   * cambiaba el video dedicado por un Reel, y al volver a YouTube se quedaba
+   * en Short porque YouTube también los tiene. Se contrataba un Short —a
+   * cero, si el creador no tenía tarifa de Short— sin haberlo pedido nunca.
+   */
+  const [tipoPorRed, setTipoPorRed] = useState<
+    Partial<Record<SocialPlatform, { type: DeliverableType; customType: string }>>
+  >({});
 
   const [lineas, setLineas] = useState<Linea[]>([]);
 
@@ -171,7 +199,10 @@ export function NewCampaignForm({
       );
   }, [creators, platform, categoria, busqueda]);
 
-  const comisionBase = Number(agencyFee) || 0;
+  const comisionBase = MARGEN_AGENCIA;
+
+  // De diez en diez: con cien creadores en YouTube la lista no se acababa.
+  const pagina = usePagina(resultados, `${platform}|${categoria}|${busqueda}`);
 
   /** Las tres cifras de una línea: lo que entra, lo que sale y la diferencia. */
   function cuentas(l: Linea) {
@@ -292,7 +323,7 @@ export function NewCampaignForm({
           objective,
           currency,
           budget: budget.trim() ? Number(budget) : null,
-          agencyFee: agencyFee.trim() ? Number(agencyFee) : null,
+          agencyFee: MARGEN_AGENCIA,
           startDate: startDate ? new Date(startDate).toISOString() : new Date().toISOString(),
           endDate: endDate ? new Date(endDate).toISOString() : null,
           notes: notes.trim(),
@@ -317,7 +348,7 @@ export function NewCampaignForm({
       // El cuerpo puede venir vacío en un 500: parsear a ciegas convierte el
       // fallo real en «Unexpected end of JSON input», que no dice nada.
       const texto = await res.text();
-      let data: { error?: string } = {};
+      let data: { error?: string; id?: string } = {};
       try {
         data = texto ? JSON.parse(texto) : {};
       } catch {
@@ -326,7 +357,9 @@ export function NewCampaignForm({
       if (!res.ok) {
         throw new Error(data.error ?? `No se pudo crear la campaña (error ${res.status}).`);
       }
-      router.push("/campanas/");
+      // A la campaña recién creada, no al listado: lo siguiente que se hace
+      // siempre es entrar en ella, y había que buscarla.
+      router.push(data.id ? `/campanas/${data.id}` : "/campanas");
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error inesperado");
@@ -478,9 +511,10 @@ export function NewCampaignForm({
                   </div>
                 </div>
 
-                {/* Moneda y comisión van aquí, antes de poner precios: es lo
-                    que decide con qué números se rellena el paso siguiente. */}
-                <div className="grid gap-4 sm:grid-cols-3">
+                {/* La moneda va aquí, antes de poner precios: es lo que decide
+                    con qué números se rellena el paso siguiente. El margen ya
+                    no se pregunta: es siempre el de la agencia. */}
+                <div className="grid gap-4 sm:grid-cols-2">
                   <div>
                     <Label htmlFor="moneda">Moneda</Label>
                     <Picker
@@ -494,16 +528,6 @@ export function NewCampaignForm({
                         { id: "EUR", label: "EUR" },
                       ]}
                     />
-                  </div>
-                  <div>
-                    <Label htmlFor="agencyFee">Margen sugerido (%)</Label>
-                    <Importe
-                      id="agencyFee"
-                      value={agencyFee}
-                      onChange={setAgencyFee}
-                      placeholder="20"
-                    />
-                    <FieldHint>Solo propone el pago de partida. Los importes se ajustan uno a uno.</FieldHint>
                   </div>
                   <div>
                     <Label htmlFor="budget">Tope de referencia</Label>
@@ -525,9 +549,9 @@ export function NewCampaignForm({
                       value={status}
                       onChange={setStatus}
                       options={[
-                        { id: "borrador", label: "Borrador" },
                         { id: "activa", label: "Activa" },
                         { id: "pausada", label: "Pausada" },
+                        { id: "borrador", label: "Borrador" },
                       ]}
                     />
                   </div>
@@ -600,8 +624,23 @@ export function NewCampaignForm({
                         }))}
                         value={platform}
                         onChange={(id) => {
+                          // Se apunta lo de la red que se deja antes de irse,
+                          // para devolverlo intacto al volver.
+                          setTipoPorRed((prev) => ({
+                            ...prev,
+                            [platform]: { type: tipo, customType: tipoPropio },
+                          }));
                           setPlatform(id);
                           setCategoria("");
+
+                          const guardado = tipoPorRed[id];
+                          if (guardado) {
+                            setTipo(guardado.type);
+                            setTipoPropio(guardado.customType);
+                            setAvisoTipo(null);
+                            return;
+                          }
+
                           // Un Reel no existe en Twitch: se cae a la primera
                           // tarea que sí tenga sentido en la red elegida, pero
                           // diciéndolo, que es lo que faltaba.
@@ -675,6 +714,44 @@ export function NewCampaignForm({
                     placeholder="Buscar por nombre o usuario"
                   />
 
+                  {/* Los elegidos, siempre a la vista. Sin esto, cambiar el
+                      filtro de categoría o el tipo de pieza hacía desaparecer
+                      la marca, y parecía que el creador se había quitado
+                      aunque seguía dentro. */}
+                  {lineas.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-1.5 rounded-[var(--r-control)] bg-[var(--surface-2)] p-2">
+                      <span className="px-1 text-[12px] text-[var(--text-muted)]">
+                        Elegidos ({lineas.length}):
+                      </span>
+                      {lineas.map((l, i) => {
+                        const quien = creators.find((c) => c.id === l.creatorId);
+                        return (
+                          <span
+                            key={`${l.creatorId}-${l.platform}-${l.type}-${l.customType}`}
+                            className="inline-flex h-7 items-center gap-1.5 rounded-[var(--r-pill)] border border-[var(--line)] bg-[var(--surface)] pr-1 pl-1 text-[12px]"
+                          >
+                            <Avatar src={quien?.avatarUrl ?? null} name={quien?.name ?? "?"} size={18} />
+                            <span className="max-w-[180px] truncate">
+                              {quien?.name ?? "Creador"} ·{" "}
+                              <span className="text-[var(--text-muted)]">
+                                {PLATFORM_LABEL[l.platform]} ·{" "}
+                                {piezaLabel(l.platform, l.type, l.customType)}
+                              </span>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setLineas((p) => p.filter((_, j) => j !== i))}
+                              aria-label={`Quitar a ${quien?.name ?? "este creador"}`}
+                              className="grid h-5 w-5 place-items-center rounded-full text-[var(--text-subtle)] transition hover:bg-[var(--surface-3)] hover:text-[var(--danger)]"
+                            >
+                              <X size={12} />
+                            </button>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+
                   {resultados.length === 0 ? (
                     <p className="py-6 text-center text-[13px] text-[var(--text-muted)]">
                       Ningún creador con perfil en {PLATFORM_LABEL[platform]}
@@ -682,13 +759,21 @@ export function NewCampaignForm({
                     </p>
                   ) : (
                     <div className="space-y-1.5">
-                      {resultados.map((creator) => {
+                      {pagina.visibles.map((creator) => {
                         const active = lineas.some(
                           (l) =>
                             l.creatorId === creator.id &&
                             l.platform === platform &&
                             l.type === tipo &&
                             l.customType === tipoPropio,
+                        );
+                        // Ya contratado en esta red para otra pieza: se dice,
+                        // para que no parezca que la marca se perdió.
+                        const otras = lineas.filter(
+                          (l) =>
+                            l.creatorId === creator.id &&
+                            l.platform === platform &&
+                            !(l.type === tipo && l.customType === tipoPropio),
                         );
                         const precio = rateFor(creator, platform, tipo);
                         const propia = hasRateFor(creator, platform, tipo);
@@ -719,6 +804,12 @@ export function NewCampaignForm({
                                 )}
                               </p>
                             </div>
+                            {otras.length > 0 && (
+                              <Badge tone="accent">
+                                Ya tiene {piezaLabel(platform, otras[0]!.type, otras[0]!.customType)}
+                                {otras.length > 1 ? ` +${otras.length - 1}` : ""}
+                              </Badge>
+                            )}
                             <span
                               className={cn(
                                 "grid h-5 w-5 place-items-center rounded-md border transition",
@@ -732,6 +823,7 @@ export function NewCampaignForm({
                           </button>
                         );
                       })}
+                      <Paginador {...pagina} className="pt-2" />
                     </div>
                   )}
                 </CardContent>
@@ -789,11 +881,15 @@ export function NewCampaignForm({
                                   value={linea.channelId}
                                   onChange={(v) => cambiarCanal(i, v)}
                                   options={[
-                                    { id: "", label: "Canal principal", hint: creator.handle },
+                                    {
+                                      id: "",
+                                      label: creator.handle || "Canal principal",
+                                      hint: `Principal · ${tarifaCanal(creator, linea.platform, linea.type, "")}`,
+                                    },
                                     ...creator.channels.map((c) => ({
                                       id: c.id,
-                                      label: c.label || c.handle || "Canal",
-                                      hint: c.handle,
+                                      label: nombreCanal(c),
+                                      hint: tarifaCanal(creator, linea.platform, linea.type, c.id),
                                     })),
                                   ]}
                                 />

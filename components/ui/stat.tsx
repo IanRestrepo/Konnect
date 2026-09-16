@@ -17,6 +17,7 @@ export function Stat({
   hint,
   delta,
   series,
+  tone,
   className,
 }: {
   label: string;
@@ -24,6 +25,8 @@ export function Stat({
   hint?: string;
   delta?: number;
   series?: number[];
+  /** Color de la cifra, cuando dice algo por sí mismo: la ganancia en verde. */
+  tone?: "ok" | "danger";
   className?: string;
 }) {
   const positive = (delta ?? 0) >= 0;
@@ -40,7 +43,13 @@ export function Stat({
       <div className="mt-2 flex items-end justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-            <p className="tabular text-[23px] leading-none font-semibold tracking-[-0.035em]">
+            <p
+              className={cn(
+                "tabular text-[23px] leading-none font-semibold tracking-[-0.035em]",
+                tone === "ok" && "text-[var(--ok)]",
+                tone === "danger" && "text-[var(--danger)]",
+              )}
+            >
               {value}
             </p>
             {delta !== undefined && (

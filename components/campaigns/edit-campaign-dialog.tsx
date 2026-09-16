@@ -28,7 +28,6 @@ type Campos = {
   status: Campaign["status"];
   currency: string;
   budget: string;
-  agencyFee: string;
   startDate: string;
   endDate: string;
   notes: string;
@@ -42,7 +41,6 @@ function desde(campaign: Campaign): Campos {
     status: campaign.status,
     currency: campaign.currency,
     budget: String(campaign.budget),
-    agencyFee: campaign.agencyFee === null ? "" : String(campaign.agencyFee),
     startDate: aInput(campaign.startDate),
     endDate: aInput(campaign.endDate),
     notes: campaign.notes,
@@ -117,7 +115,6 @@ export function EditCampaignButton({
           status: form.status,
           currency: form.currency,
           budget: Number(form.budget) || 0,
-          agencyFee: form.agencyFee.trim() ? Number(form.agencyFee) : null,
           ...fechas,
           notes: form.notes,
         }),
@@ -256,22 +253,6 @@ export function EditCampaignButton({
               onChange={(e) => set("budget", e.target.value)}
             />
             <FieldHint>Solo para comparar. No reparte nada.</FieldHint>
-          </div>
-
-          <div>
-            <Label htmlFor="ecp-fee">Margen sugerido (%)</Label>
-            <Input
-              id="ecp-fee"
-              type="number"
-              min={0}
-              max={100}
-              value={form.agencyFee}
-              onChange={(e) => set("agencyFee", e.target.value)}
-              placeholder="20"
-            />
-            <FieldHint>
-              Propone el cobro al contratar. Los importes ya pactados no se tocan.
-            </FieldHint>
           </div>
 
           <div>

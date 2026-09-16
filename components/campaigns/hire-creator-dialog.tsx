@@ -9,9 +9,10 @@ import { Avatar } from "@/components/ui/avatar";
 import { FieldHint, Input, Label } from "@/components/ui/field";
 import { Picker } from "@/components/ui/picker";
 import { SearchInput } from "@/components/shell/toolbar";
+import { Paginador, usePagina } from "@/components/ui/pager";
 import { DeliverableTypeField } from "@/components/campaigns/deliverable-type-field";
-import { PLATFORM_LABEL, PLATFORMS, TAREAS, piezaLabel } from "@/lib/socials";
-import { IMPORTE_MAXIMO, clientPriceForRate, rateFor } from "@/lib/pricing";
+import { PLATFORM_LABEL, PLATFORMS, TAREAS, nombreCanal, piezaLabel } from "@/lib/socials";
+import { IMPORTE_MAXIMO, MARGEN_AGENCIA, clientPriceForRate, rateFor, tarifaCanal } from "@/lib/pricing";
 import type {
   Creator,
   Currency,
@@ -39,7 +40,6 @@ export function HireCreatorDialog({
   onClose,
   campaignId,
   creators,
-  agencyFee,
   currency,
   kinds,
   onKindsChange,
@@ -48,8 +48,6 @@ export function HireCreatorDialog({
   onClose: () => void;
   campaignId: string;
   creators: Creator[];
-  /** Comisión por defecto de la campaña, para proponer el cobro. */
-  agencyFee: number;
   currency: Currency;
   /** Tipos de pieza propios de la agencia, además de los de fábrica. */
   kinds: DeliverableKind[];
@@ -73,10 +71,12 @@ export function HireCreatorDialog({
 
   const resultados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
-    return creators
-      .filter((c) => !q || c.name.toLowerCase().includes(q) || c.handle.toLowerCase().includes(q))
-      .slice(0, 40);
+    return creators.filter(
+      (c) => !q || c.name.toLowerCase().includes(q) || c.handle.toLowerCase().includes(q),
+    );
   }, [creators, busqueda]);
+
+  const pagina = usePagina(resultados, busqueda);
 
   /** Propone el precio con la tarifa del creador para esa red y pieza. */
   function proponer(
@@ -89,7 +89,7 @@ export function HireCreatorDialog({
     setCosto(tarifa > 0 ? String(tarifa) : "");
     // Lo que se le cobra al cliente incluye la comisión: si pide 1.000 y la
     // agencia se lleva el 20%, hay que cobrar 1.250, no 1.200.
-    setCobro(tarifa > 0 ? String(Math.round(clientPriceForRate(tarifa, agencyFee))) : "");
+    setCobro(tarifa > 0 ? String(Math.round(clientPriceForRate(tarifa, MARGEN_AGENCIA))) : "");
   }
 
   function elegir(creator: Creator) {
@@ -192,13 +192,13 @@ export function HireCreatorDialog({
             onChange={setBusqueda}
             placeholder="Buscar por nombre o usuario"
           />
-          <div className="mt-2 max-h-56 space-y-1.5 overflow-y-auto">
+          <div className="mt-2 space-y-1.5">
             {resultados.length === 0 ? (
               <p className="py-5 text-center text-[13px] text-[var(--text-muted)]">
                 Ningún creador con ese nombre.
               </p>
             ) : (
-              resultados.map((creator) => {
+              pagina.visibles.map((creator) => {
                 const activo = creator.id === creatorId;
                 return (
                   <button
@@ -224,6 +224,7 @@ export function HireCreatorDialog({
                 );
               })
             )}
+            <Paginador {...pagina} className="pt-1" />
           </div>
         </div>
 
@@ -282,11 +283,15 @@ export function HireCreatorDialog({
                       proponer(elegido, platform, tipo, canal);
                     }}
                     options={[
-                      { id: "", label: "Canal principal", hint: elegido.handle },
+                      {
+                        id: "",
+                        label: elegido.handle || "Canal principal",
+                        hint: `Principal · ${tarifaCanal(elegido, platform, tipo, "")}`,
+                      },
                       ...elegido.channels.map((c) => ({
                         id: c.id,
-                        label: c.label || c.handle || "Canal",
-                        hint: c.handle,
+                        label: nombreCanal(c),
+                        hint: tarifaCanal(elegido, platform, tipo, c.id),
                       })),
                     ]}
                   />

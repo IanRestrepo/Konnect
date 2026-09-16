@@ -9,7 +9,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { FieldHint, Input, Label } from "@/components/ui/field";
 import { Picker } from "@/components/ui/picker";
 import { DeliverableTypeField } from "@/components/campaigns/deliverable-type-field";
-import { PLATFORMS } from "@/lib/socials";
+import { PLATFORMS, nombreCanal } from "@/lib/socials";
 import { DELIVERABLE_STATUS } from "@/lib/labels";
 import { IMPORTE_MAXIMO } from "@/lib/pricing";
 import type {
@@ -107,6 +107,14 @@ export function EditDeliverableDialog({
     }
     if (ganancia < 0) {
       setError("El pago al creador no puede superar lo que paga el cliente.");
+      return;
+    }
+    if (
+      !deliverable.receiptUrl &&
+      paymentStatus !== "pendiente" &&
+      paymentStatus !== deliverable.paymentStatus
+    ) {
+      setError("Adjunta el comprobante de pago antes de aprobarlo o marcarlo como pagado.");
       return;
     }
 
@@ -223,8 +231,8 @@ export function EditDeliverableDialog({
                   { id: "", label: "Canal principal", hint: creator.handle },
                   ...creator.channels.map((c) => ({
                     id: c.id,
-                    label: c.label || c.handle || "Canal",
-                    hint: c.handle,
+                    label: nombreCanal(c),
+                    hint: c.label && c.label !== c.handle ? c.label : undefined,
                   })),
                 ]}
               />
@@ -294,8 +302,22 @@ export function EditDeliverableDialog({
 
           <div className="sm:col-span-2">
             <Label htmlFor="ed-pago">Estado del pago</Label>
-            <Picker id="ed-pago" value={paymentStatus} onChange={setPaymentStatus} options={PAGOS} />
-            <FieldHint>Lo ve el creador en su portal.</FieldHint>
+            <Picker
+              id="ed-pago"
+              value={paymentStatus}
+              onChange={setPaymentStatus}
+              // Sin comprobante solo se puede dejar como está.
+              options={
+                deliverable.receiptUrl
+                  ? PAGOS
+                  : PAGOS.filter((p) => p.id === "pendiente" || p.id === deliverable.paymentStatus)
+              }
+            />
+            <FieldHint>
+              {deliverable.receiptUrl
+                ? "Lo ve el creador en su portal."
+                : "Para aprobarlo o marcarlo pagado, sube antes el comprobante desde el menú de la pieza."}
+            </FieldHint>
           </div>
         </div>
 

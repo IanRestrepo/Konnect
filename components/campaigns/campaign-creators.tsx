@@ -24,6 +24,7 @@ import { Modal } from "@/components/ui/modal";
 import { FieldHint, Label, Textarea } from "@/components/ui/field";
 import { useCan } from "@/components/session-provider";
 import { HireCreatorDialog } from "@/components/campaigns/hire-creator-dialog";
+import { Paginador, usePagina } from "@/components/ui/pager";
 import type { Empleado } from "@/components/campaigns/campaign-team";
 import { creatorPayout } from "@/lib/pricing";
 import type { Campaign, Creator, Currency, DeliverableKind } from "@/lib/types";
@@ -118,6 +119,8 @@ export function CampaignCreators({
     })
     .filter((p): p is Participante => p !== null);
 
+  const pagina = usePagina(participantes, campaign.id);
+
   async function contrato(creatorId: string, accion: "finalizar" | "reabrir", reason = "") {
     setOcupado(true);
     setError(null);
@@ -192,7 +195,7 @@ export function CampaignCreators({
         />
       ) : (
         <ListBox>
-          {participantes.map((p) => {
+          {pagina.visibles.map((p) => {
             const ficha = `/campanas/${campaign.id}/creador/${p.creator.id}`;
             return (
               <ListRow
@@ -314,13 +317,13 @@ export function CampaignCreators({
           })}
         </ListBox>
       )}
+      <Paginador {...pagina} className="mt-2.5" />
 
       <HireCreatorDialog
         open={contratando}
         onClose={() => setContratando(false)}
         campaignId={campaign.id}
         creators={creators}
-        agencyFee={campaign.agencyFee ?? 20}
         currency={currency}
         kinds={catalogo}
         onKindsChange={setCatalogo}

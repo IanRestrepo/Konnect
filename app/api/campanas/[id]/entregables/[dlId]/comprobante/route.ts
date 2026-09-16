@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "@/lib/session";
 import { setDeliverableReceipt } from "@/lib/store";
+import { getCampaign } from "@/lib/data";
+import { puedeEditarCampana } from "@/lib/campaign-access";
 import { MAXIMO_COMPROBANTE, TIPOS_COMPROBANTE, esFallo, subirArchivo } from "@/lib/uploads";
 import { registrar } from "@/lib/audit";
 
@@ -63,6 +65,22 @@ export async function DELETE(
 ) {
   const session = await requirePermission("editar_campanas");
   const { id, dlId } = await params;
+
+  const antes = await getCampaign(id);
+  if (!antes) return NextResponse.json({ error: "Esa campaña no existe." }, { status: 404 });
+  if (!puedeEditarCampana(session, antes)) {
+    return NextResponse.json({ error: "Esa campaña no es tuya." }, { status: 403 });
+  }
+
+  // Quitarlo con el pago ya aprobado o hecho dejaría justo lo que el
+  // comprobante obligatorio quiere evitar: un pago dado por bueno sin papel.
+  const pieza = antes.deliverables.find((d) => d.id === dlId);
+  if (pieza && pieza.paymentStatus !== "pendiente") {
+    return NextResponse.json(
+      { error: "Ese pago ya está aprobado. Vuélvelo a «sin pagar» antes de quitar el comprobante." },
+      { status: 400 },
+    );
+  }
 
   const campaign = await setDeliverableReceipt(id, dlId, {
     receiptUrl: null,

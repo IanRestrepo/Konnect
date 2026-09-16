@@ -442,7 +442,13 @@ function Acciones({
           )}
 
           <Grupo>Pago al creador</Grupo>
-          {d.paymentStatus !== "aprobado" && (
+          {/* Sin comprobante no se aprueba ni se paga: se pide primero. */}
+          {!d.receiptUrl && d.paymentStatus === "pendiente" && (
+            <p className="px-2.5 pb-1 text-[11.5px] leading-snug text-[var(--text-subtle)]">
+              Sube el comprobante para poder aprobar o marcar pagado.
+            </p>
+          )}
+          {d.receiptUrl && d.paymentStatus !== "aprobado" && (
             <Opcion
               icono={Wallet}
               onClick={() => {
@@ -453,7 +459,7 @@ function Acciones({
               Aprobar pago
             </Opcion>
           )}
-          {d.paymentStatus !== "pagado" && (
+          {d.receiptUrl && d.paymentStatus !== "pagado" && (
             <Opcion
               icono={Check}
               onClick={() => {

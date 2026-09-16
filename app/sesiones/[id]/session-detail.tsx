@@ -234,12 +234,14 @@ export function SessionDetail({
 
   return (
     <div className="space-y-7">
+      {/* Se vuelve a la campaña: a una sesión se llega desde ahí, y volver a
+          la lista general de sesiones obligaba a buscar la campaña otra vez. */}
       <Link
-        href="/sesiones"
+        href={session.campaignId ? `/campanas/${session.campaignId}` : "/campanas"}
         className="inline-flex items-center gap-1.5 text-[13px] text-[var(--text-muted)] transition hover:text-[var(--text)]"
       >
         <ArrowLeft size={15} />
-        Sesiones
+        {campaignName ?? "Campañas"}
       </Link>
 
       <div>

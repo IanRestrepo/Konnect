@@ -207,6 +207,8 @@ export type Campaign = {
   notes: string;
   /** Quién la lleva. Null = sin responsable asignado. */
   managerId: string | null;
+  /** Quién la dio de alta. Null en las anteriores a que se guardara. */
+  createdById: string | null;
   /** Empleados asignados, además del responsable. */
   memberIds: string[];
   /** Creadores cuyo contrato se cerró. Sin entrada = sigue activo. */

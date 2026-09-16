@@ -54,6 +54,15 @@ export default async function CampanaPage({ params }: { params: Promise<{ id: st
   const empleados = usuarios
     .filter((u) => u.active)
     .map((u) => ({ id: u.id, name: u.name, avatarUrl: u.avatarUrl }));
+
+  // La cabecera enseña a todos, activos o no: una cuenta desactivada que creó
+  // la campaña sigue siendo quien la creó.
+  const persona = (id: string | null) => usuarios.find((u) => u.id === id) ?? null;
+  const responsable = persona(campaign.managerId);
+  const encargados = campaign.memberIds
+    .map((id) => persona(id))
+    .filter((u): u is NonNullable<typeof u> => u !== null);
+  const creadaPor = persona(campaign.createdById);
   const sessions = todasSesiones.filter((s) => s.campaignId === campaign.id);
   const status = CAMPAIGN_STATUS[campaign.status];
   const metrics = campaignMetrics(campaign);
@@ -125,6 +134,47 @@ export default async function CampanaPage({ params }: { params: Promise<{ id: st
             </span>
           }
         />
+        {/* Quién la lleva, a la vista junto al nombre: es lo primero que se
+            pregunta al entrar, y antes había que bajar hasta la tarjeta de
+            Equipo para saberlo. */}
+        {(responsable || encargados.length > 0 || creadaPor) && (
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[12.5px] text-[var(--text-muted)]">
+            {(responsable || encargados.length > 0) && (
+              <span className="flex items-center gap-2">
+                <span className="flex -space-x-2">
+                  {[responsable, ...encargados]
+                    .filter((u): u is NonNullable<typeof u> => u !== null)
+                    .map((u) => (
+                      <span
+                        key={u.id}
+                        title={u.name}
+                        className="rounded-full ring-2 ring-[var(--canvas)]"
+                      >
+                        <Avatar src={u.avatarUrl} name={u.name} size={26} />
+                      </span>
+                    ))}
+                </span>
+                <span>
+                  {responsable ? (
+                    <>
+                      Lleva <span className="font-medium text-[var(--text)]">{responsable.name}</span>
+                    </>
+                  ) : (
+                    "Sin responsable"
+                  )}
+                  {encargados.length > 0 &&
+                    ` · con ${encargados.map((u) => u.name.split(" ")[0]).join(", ")}`}
+                </span>
+              </span>
+            )}
+            {creadaPor && (
+              <span>
+                Creada por <span className="text-[var(--text)]">{creadaPor.name}</span>
+              </span>
+            )}
+          </div>
+        )}
+
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <CampaignSwitch campaignId={campaign.id} status={campaign.status} />
           <Badge tone={status.tone}>{status.label}</Badge>
@@ -134,7 +184,7 @@ export default async function CampanaPage({ params }: { params: Promise<{ id: st
         </div>
       </div>
 
-      <StatBand>
+      <StatBand className="xl:grid-cols-5">
         <Stat
           label="Vistas totales"
           value={formatCompact(metrics.views)}
@@ -154,6 +204,18 @@ export default async function CampanaPage({ params }: { params: Promise<{ id: st
           label="Comprometido"
           value={formatMoney(metrics.spent, campaign.currency)}
           hint={`de ${formatMoney(campaign.budget, campaign.currency)}`}
+        />
+        {/* Lo comprometido solo dice cuánto sale. Lo que se queda la agencia
+            es la otra mitad de la cuenta, y la que se quería ver. */}
+        <Stat
+          label="Ganancia"
+          value={formatMoney(metrics.grossProfit, campaign.currency)}
+          hint={
+            metrics.clientTotal > 0
+              ? `${((metrics.grossProfit / metrics.clientTotal) * 100).toFixed(0)}% de ${formatMoney(metrics.clientTotal, campaign.currency)} cobrados`
+              : "sin cobros pactados"
+          }
+          tone={metrics.grossProfit < 0 ? "danger" : "ok"}
         />
       </StatBand>
 

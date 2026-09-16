@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { decrypt, encrypt } from "@/lib/crypto";
 import { codeHint, generateAccessCode, normalizeAccessCode } from "@/lib/portal";
 import { piezaLabel } from "@/lib/socials";
+import { MARGEN_AGENCIA } from "@/lib/pricing";
 import { CATEGORIAS_INICIALES } from "@/lib/labels";
 import type {
   Announcement,
@@ -441,6 +442,7 @@ function toCampaign(row: CampaignRow): Campaign {
     endDate: isoOrNull(row.endDate),
     notes: row.notes,
     managerId: row.managerId,
+    createdById: row.createdById,
     memberIds: row.members.map((m) => m.userId),
     endedContracts: row.endedContracts.map((e) => ({
       creatorId: e.creatorId,
@@ -1048,10 +1050,13 @@ export async function createCampaign(
       objective: input.objective,
       currency: input.currency,
       budget: input.budget ?? 0,
+      // Fijo, no lo que llegue: el margen de la agencia ya no se elige.
+      agencyFee: MARGEN_AGENCIA,
       startDate,
       endDate: toDate(input.endDate),
       notes: input.notes ?? "",
       managerId: input.managerId || null,
+      createdById: input.createdById || null,
       deliverables: {
         create: (input.deliverables ?? []).map((d) => ({
           id: d.id || newId("dl"),

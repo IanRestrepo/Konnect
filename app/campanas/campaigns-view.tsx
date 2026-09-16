@@ -24,29 +24,40 @@ export type CampaignRow = {
   creators: Creator[];
 };
 
-type Filter = CampaignStatus | "todas";
+type Filter = "activas" | "inactivas" | "borradores" | "todas";
+
+/**
+ * Qué estados entran en cada pestaña.
+ *
+ * Pausada, finalizada y cancelada van juntas en «Inactivas»: lo que se mira a
+ * diario es lo que está en marcha, y cinco pestañas con cero dentro solo
+ * empujaban «Activas» a la segunda posición.
+ */
+const ESTADOS: Record<Exclude<Filter, "todas">, CampaignStatus[]> = {
+  activas: ["activa"],
+  inactivas: ["pausada", "finalizada", "cancelada"],
+  borradores: ["borrador"],
+};
 
 export function CampaignsView({ rows }: { rows: CampaignRow[] }) {
-  const [tab, setTab] = useState<Filter>("todas");
+  const [tab, setTab] = useState<Filter>("activas");
   const [query, setQuery] = useState("");
 
   const tabs = useMemo<{ id: Filter; label: string; count: number }[]>(() => {
-    const count = (status: CampaignStatus) =>
-      rows.filter((r) => r.campaign.status === status).length;
+    const count = (filtro: Exclude<Filter, "todas">) =>
+      rows.filter((r) => ESTADOS[filtro].includes(r.campaign.status)).length;
     return [
+      { id: "activas", label: "Activas", count: count("activas") },
+      { id: "inactivas", label: "Inactivas", count: count("inactivas") },
+      { id: "borradores", label: "Borradores", count: count("borradores") },
       { id: "todas", label: "Todas", count: rows.length },
-      { id: "activa", label: "Activas", count: count("activa") },
-      { id: "pausada", label: "Pausadas", count: count("pausada") },
-      { id: "borrador", label: "Borradores", count: count("borrador") },
-      { id: "finalizada", label: "Finalizadas", count: count("finalizada") },
-      { id: "cancelada", label: "Canceladas", count: count("cancelada") },
     ];
   }, [rows]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return rows.filter(({ campaign, company }) => {
-      if (tab !== "todas" && campaign.status !== tab) return false;
+      if (tab !== "todas" && !ESTADOS[tab].includes(campaign.status)) return false;
       if (!q) return true;
       return `${campaign.name} ${company?.name ?? ""}`.toLowerCase().includes(q);
     });

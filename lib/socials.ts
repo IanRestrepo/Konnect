@@ -1,4 +1,17 @@
-import type { DeliverableType, SocialPlatform } from "@/lib/types";
+import type { CreatorChannel, DeliverableType, SocialPlatform } from "@/lib/types";
+
+/**
+ * Cómo se nombra un canal secundario.
+ *
+ * Manda el @handle y no la etiqueta: la etiqueta nace «Secundario» y casi nadie
+ * la cambia, así que un creador con dos canales extra acababa con dos
+ * «Secundario» en su lista de precios y no había forma de saber cuál era cuál.
+ */
+export function nombreCanal(
+  canal: Pick<CreatorChannel, "handle" | "label" | "channelId">,
+): string {
+  return canal.handle || canal.label || canal.channelId || "Canal";
+}
 
 /** Cómo se muestra y cómo se arma el enlace de cada plataforma. */
 export const PLATFORMS: { id: SocialPlatform; label: string; placeholder: string }[] = [

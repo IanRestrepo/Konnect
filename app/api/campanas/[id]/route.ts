@@ -20,8 +20,6 @@ const schema = z.object({
   objective: z.enum(["awareness", "trafico", "conversiones", "lanzamiento"]).optional(),
   currency: z.enum(["USD", "MXN", "COP", "EUR"]).optional(),
   budget: z.number().optional(),
-  /** Margen por defecto de la agencia, en %. Null = sin margen propuesto. */
-  agencyFee: z.number().min(0).max(100).nullable().optional(),
   notes: z.string().optional(),
   startDate: z.string().optional(),
   endDate: z.string().nullable().optional(),
