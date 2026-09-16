@@ -25,6 +25,8 @@ export const AUDIT_ACTIONS = {
   "pago.estado": "Cambió el estado de pago",
   "pago.comprobante": "Adjuntó el comprobante de pago",
   "pago.comprobante.quitado": "Quitó el comprobante de pago",
+  "cobro.registrado": "Apuntó un cobro al cliente",
+  "cobro.quitado": "Quitó un cobro al cliente",
   "entregable.aprobado": "Aprobó una entrega",
   "sesion.creada": "Creó la sesión",
   "sesion.material": "Subió material a la sesión",

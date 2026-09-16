@@ -144,6 +144,7 @@ export const CONTACT_FIELD_SUGGESTIONS = [
   "Discord",
   "Telegram",
   "WhatsApp",
+  "WeChat",
   "X / Twitter",
   "Correo del mánager",
   "Skype",

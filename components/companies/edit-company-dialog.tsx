@@ -8,10 +8,12 @@ import { Button } from "@/components/ui/button";
 import { FieldHint, Input, Label, Select, Textarea } from "@/components/ui/field";
 import { useCan } from "@/components/session-provider";
 import { INDUSTRIES } from "@/lib/labels";
-import type { Company } from "@/lib/types";
+import type { Company, CompanyKind } from "@/lib/types";
+import { CompanyKindField } from "@/components/companies/company-kind-field";
 
 /** Los contactos tienen su propio panel; aquí va la ficha de la empresa. */
 type Campos = {
+  kind: CompanyKind;
   name: string;
   industry: string;
   website: string;
@@ -25,6 +27,7 @@ type Campos = {
 
 function desde(company: Company): Campos {
   return {
+    kind: company.kind,
     name: company.name,
     industry: company.industry,
     website: company.website ?? "",
@@ -59,7 +62,7 @@ export function EditCompanyButton({ company }: { company: Company }) {
 
   async function guardar() {
     if (!form.name.trim()) {
-      setError("Falta el nombre de la empresa.");
+      setError("Falta el nombre.");
       return;
     }
     setGuardando(true);
@@ -69,6 +72,7 @@ export function EditCompanyButton({ company }: { company: Company }) {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          kind: form.kind,
           name: form.name.trim(),
           industry: form.industry,
           website: form.website.trim() || null,
@@ -103,7 +107,7 @@ export function EditCompanyButton({ company }: { company: Company }) {
       <Modal
         open={open}
         onClose={() => setOpen(false)}
-        title="Editar empresa"
+        title="Editar cliente"
         description="Las personas de contacto se gestionan en su propio panel."
         size="lg"
         footer={
@@ -124,6 +128,10 @@ export function EditCompanyButton({ company }: { company: Company }) {
             {error}
           </p>
         )}
+
+        <div className="mb-3">
+          <CompanyKindField value={form.kind} onChange={(k) => set("kind", k)} />
+        </div>
 
         <div className="grid gap-3 sm:grid-cols-2">
           <div>

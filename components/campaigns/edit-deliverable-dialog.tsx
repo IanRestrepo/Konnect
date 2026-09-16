@@ -19,7 +19,6 @@ import type {
   DeliverableKind,
   DeliverableStatus,
   DeliverableType,
-  PaymentStatus,
   SocialPlatform,
 } from "@/lib/types";
 import { formatMoney } from "@/lib/utils";
@@ -28,12 +27,6 @@ const ESTADOS = Object.entries(DELIVERABLE_STATUS).map(([id, v]) => ({
   id: id as DeliverableStatus,
   label: v.label,
 }));
-
-const PAGOS: { id: PaymentStatus; label: string }[] = [
-  { id: "pendiente", label: "Sin pagar" },
-  { id: "aprobado", label: "Aprobado" },
-  { id: "pagado", label: "Pagado" },
-];
 
 /** `yyyy-mm-dd` para el campo de fecha; cadena vacía si no hay valor. */
 function aInput(iso: string | null): string {
@@ -82,9 +75,6 @@ export function EditDeliverableDialog({
   const [customType, setCustomType] = useState(deliverable?.customType ?? "");
   const [channelId, setChannelId] = useState(deliverable?.channelId ?? "");
   const [status, setStatus] = useState<DeliverableStatus>(deliverable?.status ?? "pendiente");
-  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>(
-    deliverable?.paymentStatus ?? "pendiente",
-  );
   const [videoUrl, setVideoUrl] = useState(deliverable?.videoUrl ?? "");
   const [publishedAt, setPublishedAt] = useState(aInput(deliverable?.publishedAt ?? null));
   const [cobro, setCobro] = useState(String(deliverable?.clientPrice ?? 0));
@@ -109,14 +99,6 @@ export function EditDeliverableDialog({
       setError("El pago al creador no puede superar lo que paga el cliente.");
       return;
     }
-    if (
-      !deliverable.receiptUrl &&
-      paymentStatus !== "pendiente" &&
-      paymentStatus !== deliverable.paymentStatus
-    ) {
-      setError("Adjunta el comprobante de pago antes de aprobarlo o marcarlo como pagado.");
-      return;
-    }
 
     setGuardando(true);
     setError(null);
@@ -130,7 +112,6 @@ export function EditDeliverableDialog({
           customType,
           channelId,
           status,
-          paymentStatus,
           videoUrl: videoUrl.trim() || null,
           publishedAt: publishedAt ? new Date(`${publishedAt}T00:00:00`).toISOString() : null,
           clientPrice: Number(cobro) || 0,
@@ -300,25 +281,6 @@ export function EditDeliverableDialog({
             />
           </div>
 
-          <div className="sm:col-span-2">
-            <Label htmlFor="ed-pago">Estado del pago</Label>
-            <Picker
-              id="ed-pago"
-              value={paymentStatus}
-              onChange={setPaymentStatus}
-              // Sin comprobante solo se puede dejar como está.
-              options={
-                deliverable.receiptUrl
-                  ? PAGOS
-                  : PAGOS.filter((p) => p.id === "pendiente" || p.id === deliverable.paymentStatus)
-              }
-            />
-            <FieldHint>
-              {deliverable.receiptUrl
-                ? "Lo ve el creador en su portal."
-                : "Para aprobarlo o marcarlo pagado, sube antes el comprobante desde el menú de la pieza."}
-            </FieldHint>
-          </div>
         </div>
 
         {/* Las tres cifras a la vista, como al contratar: no debe quedar duda

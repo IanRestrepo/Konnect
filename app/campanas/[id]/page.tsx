@@ -26,6 +26,7 @@ import {
 import { listDeliverableKinds, listSessions, listUsers } from "@/lib/store";
 import { puedeVerCampana } from "@/lib/campaign-access";
 import { CampaignTeam } from "@/components/campaigns/campaign-team";
+import { CampaignClientPayments } from "@/components/campaigns/campaign-client-payments";
 import { LinkedNotes } from "@/components/notes/linked-notes";
 import { DuplicateCampaignButton } from "@/components/campaigns/duplicate-campaign";
 import { DeleteCampaignButton } from "@/components/campaigns/delete-campaign";
@@ -296,6 +297,13 @@ export default async function CampanaPage({ params }: { params: Promise<{ id: st
               </DefRow>
             </DefList>
           </Card>
+
+          <CampaignClientPayments
+            campaignId={campaign.id}
+            currency={campaign.currency}
+            facturado={metrics.clientTotal}
+            cobros={campaign.clientPayments}
+          />
 
           {/* Un resumen: el trabajo con las sesiones se hace en la maestra,
               que las enseña todas juntas. */}

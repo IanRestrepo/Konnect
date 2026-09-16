@@ -8,7 +8,9 @@ import { hasPermission } from "@/lib/permissions";
 export const dynamic = "force-dynamic";
 
 const schema = z.object({
-  name: z.string({ error: "Falta el nombre de la empresa." }).min(1, "Falta el nombre de la empresa."),
+  /** Empresa o persona natural. */
+  kind: z.enum(["empresa", "persona"]).default("empresa"),
+  name: z.string({ error: "Falta el nombre." }).min(1, "Falta el nombre."),
   industry: z.string().default("Otro"),
   website: z.string().nullable().default(null),
   contactName: z.string().default(""),
@@ -48,6 +50,7 @@ export async function POST(request: Request) {
   // El contacto del alta se guarda además como contacto principal.
   const company = await createCompany({
     ...parsed.data,
+    contactFields: [],
     contacts: parsed.data.contactName.trim()
       ? [
           {

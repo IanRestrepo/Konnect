@@ -359,6 +359,7 @@ async function readApiConnections(): Promise<Map<string, CreatorApiConnection[]>
 
 const companyInclude = {
   contacts: { orderBy: { createdAt: "asc" } },
+  contactFields: { orderBy: { position: "asc" } },
 } satisfies Prisma.CompanyInclude;
 
 type CompanyRow = Prisma.CompanyGetPayload<{ include: typeof companyInclude }>;
@@ -366,6 +367,7 @@ type CompanyRow = Prisma.CompanyGetPayload<{ include: typeof companyInclude }>;
 function toCompany(row: CompanyRow): Company {
   return {
     id: row.id,
+    kind: row.kind,
     name: row.name,
     industry: row.industry,
     website: row.website,
@@ -382,6 +384,7 @@ function toCompany(row: CompanyRow): Company {
       primary: c.primary,
       notes: c.notes,
     })),
+    contactFields: row.contactFields.map((f) => ({ id: f.id, label: f.label, value: f.value })),
     socials: {
       instagram: row.instagram ?? undefined,
       tiktok: row.tiktok ?? undefined,
@@ -399,6 +402,7 @@ const campaignInclude = {
   members: { select: { userId: true } },
   endedContracts: { orderBy: { endedAt: "desc" } },
   creatorLeads: { select: { creatorId: true, userId: true } },
+  clientPayments: { orderBy: { paidAt: "desc" } },
 } satisfies Prisma.CampaignInclude;
 
 type CampaignRow = Prisma.CampaignGetPayload<{ include: typeof campaignInclude }>;
@@ -458,6 +462,16 @@ function toCampaign(row: CampaignRow): Campaign {
     creatorLeads: row.creatorLeads.map((l) => ({
       creatorId: l.creatorId,
       userId: l.userId,
+    })),
+    clientPayments: row.clientPayments.map((p) => ({
+      id: p.id,
+      amount: num(p.amount),
+      paidAt: iso(p.paidAt),
+      notes: p.notes,
+      receiptUrl: p.receiptUrl,
+      receiptName: p.receiptName,
+      createdByName: p.createdByName,
+      createdAt: iso(p.createdAt),
     })),
     deliverables: row.deliverables.map(toDeliverable),
     createdAt: iso(row.createdAt),
@@ -965,6 +979,7 @@ export async function createCompany(input: Omit<Company, "id" | "createdAt">): P
   const row = await prisma.company.create({
     data: {
       id: newId("co"),
+      kind: input.kind ?? "empresa",
       name: input.name,
       industry: input.industry,
       website: input.website,
@@ -1001,6 +1016,7 @@ export async function updateCompany(id: string, patch: Partial<Company>): Promis
   if (!actual) return null;
 
   const data: Prisma.CompanyUpdateInput = {};
+  if (patch.kind !== undefined) data.kind = patch.kind;
   if (patch.name !== undefined) data.name = patch.name;
   if (patch.industry !== undefined) data.industry = patch.industry;
   if (patch.website !== undefined) data.website = patch.website;
@@ -2231,6 +2247,29 @@ export async function setCreatorContactFields(
   });
 }
 
+/** Reemplaza los contactos de nombre libre (Discord, WeChat…) de un cliente. */
+export async function setCompanyContactFields(
+  companyId: string,
+  fields: Omit<ContactField, "id">[],
+): Promise<boolean> {
+  const existe = await prisma.company.findUnique({ where: { id: companyId }, select: { id: true } });
+  if (!existe) return false;
+
+  await prisma.$transaction([
+    prisma.companyContactField.deleteMany({ where: { companyId } }),
+    prisma.companyContactField.createMany({
+      data: fields.map((f, i) => ({
+        id: newId("ccf"),
+        companyId,
+        label: f.label,
+        value: f.value,
+        position: i,
+      })),
+    }),
+  ]);
+  return true;
+}
+
 /** Reemplaza las cuentas de cobro del creador. Cifra al escribir. */
 export async function setCreatorBankAccounts(
   creatorId: string,
@@ -2747,6 +2786,95 @@ export async function ensureCreatorSession(
     accesses: [{ role: "creador", label: creador.name, canUpload: false }],
   });
   return nueva.id;
+}
+
+/* ---------------- Pagos por creador ---------------- */
+
+/**
+ * Cambia el pago de varias piezas de un creador a la vez.
+ *
+ * El pago se lleva por creador y no por pieza: una transferencia paga todo lo
+ * que se le debía en la campaña, con un solo comprobante. Hacerlo pieza a
+ * pieza obligaba a subir el mismo archivo cinco veces. Solo toca piezas de ese
+ * creador en esa campaña, aunque lleguen otros identificadores.
+ *
+ * Devuelve cuántas cambió. Avisa al creador una sola vez, no una por pieza.
+ */
+export async function setCreatorPayment(
+  campaignId: string,
+  creatorId: string,
+  deliverableIds: string[],
+  cambio: {
+    receipt?: { receiptUrl: string; receiptName: string };
+    paymentStatus?: Deliverable["paymentStatus"];
+  },
+): Promise<number> {
+  const where = { campaignId, creatorId, id: { in: deliverableIds }, status: { not: "cancelado" as const } };
+  let cambiadas = 0;
+
+  if (cambio.receipt) {
+    const { count } = await prisma.deliverable.updateMany({
+      where,
+      data: {
+        receiptUrl: cambio.receipt.receiptUrl,
+        receiptName: cambio.receipt.receiptName,
+        receiptUploadedAt: new Date(),
+      },
+    });
+    cambiadas = count;
+  }
+
+  if (cambio.paymentStatus) {
+    const { count } = await prisma.deliverable.updateMany({
+      where,
+      data: {
+        paymentStatus: cambio.paymentStatus,
+        paidAt: cambio.paymentStatus === "pagado" ? new Date() : null,
+      },
+    });
+    cambiadas = count;
+    if (count > 0) await avisarPago(campaignId, creatorId, cambio.paymentStatus);
+  }
+
+  return cambiadas;
+}
+
+/* ---------------- Cobros al cliente ---------------- */
+
+export async function addCampaignPayment(
+  campaignId: string,
+  input: {
+    amount: number;
+    paidAt: string;
+    notes?: string;
+    receiptUrl?: string | null;
+    receiptName?: string | null;
+    createdByName: string;
+  },
+): Promise<boolean> {
+  const existe = await prisma.campaign.findUnique({ where: { id: campaignId }, select: { id: true } });
+  if (!existe) return false;
+
+  await prisma.campaignPayment.create({
+    data: {
+      id: newId("cob"),
+      campaignId,
+      amount: input.amount,
+      paidAt: toDate(input.paidAt) ?? new Date(),
+      notes: input.notes ?? "",
+      receiptUrl: input.receiptUrl ?? null,
+      receiptName: input.receiptName ?? null,
+      createdByName: input.createdByName,
+    },
+  });
+  return true;
+}
+
+export async function removeCampaignPayment(campaignId: string, paymentId: string): Promise<boolean> {
+  const { count } = await prisma.campaignPayment.deleteMany({
+    where: { id: paymentId, campaignId },
+  });
+  return count > 0;
 }
 
 /** Deja constancia del pago en la sesión del creador, para que se entere él. */

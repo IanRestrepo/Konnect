@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { ContactsPanel } from "@/components/companies/contacts-panel";
+import { ContactCard } from "@/components/creators/contact-card";
 import { LinkedNotes } from "@/components/notes/linked-notes";
 import { EditCompanyButton } from "@/components/companies/edit-company-dialog";
 import { campaignMetrics, companyCampaigns, getCampaigns, getCompany } from "@/lib/data";
@@ -49,11 +50,18 @@ export default async function EmpresaPage({ params }: { params: Promise<{ id: st
       </Link>
 
       <div className="flex items-start gap-4">
-        <Avatar name={company.name} size={64} rounded="lg" />
+        {/* Una persona lleva avatar redondo, como la gente; una empresa, cuadrado. */}
+        <Avatar name={company.name} size={64} rounded={company.kind === "persona" ? undefined : "lg"} />
         <div className="min-w-0 flex-1">
           <PageTitle
             title={company.name}
-            description={company.industry}
+            description={
+              company.kind === "persona"
+                ? ["Persona natural", company.industry !== "Otro" ? company.industry : null]
+                    .filter(Boolean)
+                    .join(" · ")
+                : company.industry
+            }
             actions={
               <>
                 {company.website && (
@@ -141,6 +149,16 @@ export default async function EmpresaPage({ params }: { params: Promise<{ id: st
         </section>
 
         <div className="space-y-6">
+          <ContactCard
+            endpoint={`/api/empresas/${company.id}/campos-contacto`}
+            permiso="editar_empresas"
+            desdeLabel="Cliente desde"
+            email={company.email}
+            phone={company.phone}
+            createdAt={company.createdAt}
+            fields={company.contactFields}
+          />
+
           <LinkedNotes companyId={company.id} />
 
           <ContactsPanel

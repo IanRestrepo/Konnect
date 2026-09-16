@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { CompanyKindField } from "@/components/companies/company-kind-field";
+import type { CompanyKind } from "@/lib/types";
 import { LoaderCircle, TriangleAlert } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
@@ -21,6 +23,7 @@ const INDUSTRIES = [
 ];
 
 const EMPTY = {
+  kind: "empresa" as CompanyKind,
   name: "",
   industry: INDUSTRIES[0],
   website: "",
@@ -42,7 +45,7 @@ export function NewCompanyDialog({ open, onClose }: { open: boolean; onClose: ()
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  function set<K extends keyof typeof EMPTY>(key: K, value: string) {
+  function set<K extends keyof typeof EMPTY>(key: K, value: (typeof EMPTY)[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
@@ -55,7 +58,7 @@ export function NewCompanyDialog({ open, onClose }: { open: boolean; onClose: ()
 
   async function save() {
     if (!form.name.trim()) {
-      setError("La empresa necesita un nombre.");
+      setError(form.kind === "persona" ? "Falta el nombre." : "La empresa necesita un nombre.");
       return;
     }
     setSaving(true);
@@ -65,6 +68,7 @@ export function NewCompanyDialog({ open, onClose }: { open: boolean; onClose: ()
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          kind: form.kind,
           name: form.name.trim(),
           industry: form.industry,
           website: form.website.trim() || null,
@@ -98,7 +102,7 @@ export function NewCompanyDialog({ open, onClose }: { open: boolean; onClose: ()
       open={open}
       onClose={close}
       size="lg"
-      title="Añadir empresa"
+      title="Añadir cliente"
       description="Datos del cliente que contrata las campañas."
       footer={
         <>
@@ -113,6 +117,8 @@ export function NewCompanyDialog({ open, onClose }: { open: boolean; onClose: ()
       }
     >
       <div className="space-y-4">
+        <CompanyKindField value={form.kind} onChange={(k) => set("kind", k)} />
+
         {error && (
           <p className="flex items-start gap-2 rounded-[var(--r-control)] bg-[var(--danger-soft)] px-3 py-2 text-[12.5px] text-[var(--danger)]">
             <TriangleAlert size={14} className="mt-px shrink-0" />
@@ -122,7 +128,9 @@ export function NewCompanyDialog({ open, onClose }: { open: boolean; onClose: ()
 
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
-            <Label htmlFor="company-name">Nombre de la empresa</Label>
+            <Label htmlFor="company-name">
+              {form.kind === "persona" ? "Nombre y apellido" : "Nombre de la empresa"}
+            </Label>
             <Input
               id="company-name"
               value={form.name}

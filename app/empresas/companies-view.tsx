@@ -109,9 +109,15 @@ export function CompaniesView({ companies, stats }: { companies: Company[]; stat
                   <ListRow
                     key={company.id}
                     href={`/empresas/${company.id}`}
-                    leading={<Avatar name={company.name} size={38} rounded="lg" />}
+                    leading={
+                      <Avatar
+                        name={company.name}
+                        size={38}
+                        rounded={company.kind === "persona" ? "full" : "lg"}
+                      />
+                    }
                     title={company.name}
-                    subtitle={`${company.contactName} · ${s?.campaigns ?? 0} campañas · ${formatCompact(s?.views ?? 0)} vistas`}
+                    subtitle={`${company.kind === "persona" ? "Persona natural · " : ""}${company.contactName} · ${s?.campaigns ?? 0} campañas · ${formatCompact(s?.views ?? 0)} vistas`}
                     trailing={
                       <span className="flex items-center gap-4">
                         <span className="tabular hidden text-[14px] font-semibold sm:block">

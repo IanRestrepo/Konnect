@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { FieldHint, Input, Label } from "@/components/ui/field";
 import { Picker } from "@/components/ui/picker";
 import { INDUSTRIES } from "@/lib/labels";
-import type { Company } from "@/lib/types";
+import type { Company, CompanyKind } from "@/lib/types";
+import { CompanyKindField } from "@/components/companies/company-kind-field";
 
 const ESTADOS = [
   { id: "prospecto", label: "Prospecto" },
@@ -35,6 +36,7 @@ export function QuickCompanyDialog({
   onClose: () => void;
   onCreated: (company: Company) => void;
 }) {
+  const [kind, setKind] = useState<CompanyKind>("empresa");
   const [name, setName] = useState("");
   const [industry, setIndustry] = useState(INDUSTRIES[0] ?? "Otro");
   const [status, setStatus] = useState<Company["status"]>("activo");
@@ -43,6 +45,7 @@ export function QuickCompanyDialog({
 
   function cerrar() {
     setName("");
+    setKind("empresa");
     setIndustry(INDUSTRIES[0] ?? "Otro");
     setStatus("activo");
     setError(null);
@@ -52,7 +55,7 @@ export function QuickCompanyDialog({
   async function guardar() {
     const limpio = name.trim();
     if (!limpio) {
-      setError("La empresa necesita un nombre.");
+      setError(kind === "persona" ? "Falta el nombre." : "La empresa necesita un nombre.");
       return;
     }
 
@@ -62,7 +65,7 @@ export function QuickCompanyDialog({
       const res = await fetch("/api/empresas", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: limpio, industry, status }),
+        body: JSON.stringify({ kind, name: limpio, industry, status }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? "No se pudo crear el cliente.");
@@ -103,8 +106,10 @@ export function QuickCompanyDialog({
           </p>
         )}
 
+        <CompanyKindField value={kind} onChange={setKind} />
+
         <div>
-          <Label htmlFor="qc-name">Nombre de la empresa</Label>
+          <Label htmlFor="qc-name">{kind === "persona" ? "Nombre y apellido" : "Nombre de la empresa"}</Label>
           <Input
             id="qc-name"
             autoFocus

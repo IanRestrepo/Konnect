@@ -121,8 +121,12 @@ export type Creator = {
   createdAt: string;
 };
 
+/** Una empresa, o una persona que contrata a su nombre. */
+export type CompanyKind = "empresa" | "persona";
+
 export type Company = {
   id: string;
+  kind: CompanyKind;
   name: string;
   industry: string;
   website: string | null;
@@ -133,6 +137,8 @@ export type Company = {
   phone: string;
   /** Todas las personas con las que se habla en esa empresa. */
   contacts: Contact[];
+  /** Contactos sueltos con nombre libre: Discord, WeChat, lo que haga falta. */
+  contactFields: ContactField[];
   socials: { instagram?: string; tiktok?: string; youtube?: string; linkedin?: string };
   status: "activo" | "prospecto" | "inactivo";
   notes: string;
@@ -232,6 +238,8 @@ export type Campaign = {
   endedContracts: CampaignCreatorEnd[];
   /** Quién responde por cada creador. Sin entrada = responde el manager. */
   creatorLeads: CampaignCreatorLead[];
+  /** Lo que el cliente ha pagado de la campaña, del más reciente al más viejo. */
+  clientPayments: CampaignPayment[];
   deliverables: Deliverable[];
   createdAt: string;
 };
@@ -255,6 +263,21 @@ export type CampaignCreatorEnd = {
  * pregunta por este influencer. Sin entradas responde el manager de la
  * campaña, que es lo que ya se asumía antes de que esto existiera.
  */
+/**
+ * Un cobro al cliente. Pueden ser varios —anticipo y resto—, así que lo
+ * cobrado es la suma y lo pendiente, lo facturado menos eso.
+ */
+export type CampaignPayment = {
+  id: string;
+  amount: number;
+  paidAt: string;
+  notes: string;
+  receiptUrl: string | null;
+  receiptName: string | null;
+  createdByName: string;
+  createdAt: string;
+};
+
 export type CampaignCreatorLead = {
   creatorId: string;
   userId: string;

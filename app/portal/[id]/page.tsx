@@ -7,7 +7,7 @@ import { getCampaign } from "@/lib/data";
 import { creatorPayout } from "@/lib/pricing";
 import { PortalGate } from "@/app/portal/[id]/portal-gate";
 import { PortalView, type PortalPago } from "@/app/portal/[id]/portal-view";
-import { tareaLabel } from "@/lib/socials";
+import { piezaLabel } from "@/lib/socials";
 
 export const dynamic = "force-dynamic";
 export const metadata = {
@@ -104,9 +104,10 @@ export default async function PortalPage({
           // Con el nombre de la red, no el genérico: al creador se le encargó
           // «Mención dentro de un video», y leer «Fracción publicitaria» —o
           // peor, «Reel / Short»— le hace dudar de qué tiene que entregar.
-          titulo: d.title ?? tareaLabel(d.platform, d.type),
+          titulo: d.title ?? piezaLabel(d.platform, d.type, d.customType),
           importe: creatorPayout(d, campaign),
           estado: d.paymentStatus,
+          comprobante: d.paymentStatus === "pagado" ? d.receiptUrl : null,
         })),
       };
     }

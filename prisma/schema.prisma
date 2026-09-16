@@ -23,6 +23,15 @@ enum CompanyStatus {
   inactivo
 }
 
+/// Quién contrata: una empresa o una persona que factura a su nombre.
+enum CompanyKind {
+  empresa
+  /// Persona natural: no es una empresa, pero contrata igual y tiene sus
+  /// propios contactos —su asistente, su mánager—. Antes había que darla de
+  /// alta como empresa inventándole un sector.
+  persona
+}
+
 /// `finalizada` es que se cumplió; `cancelada`, que se cayó. Las dos cierran la
 /// campaña, pero mezclarlas falsea los informes: lo cancelado no se facturó.
 enum CampaignStatus {
@@ -317,7 +326,8 @@ model CreatorApiConnection {
 }
 
 model Company {
-  id       String  @id
+  id       String      @id
+  kind     CompanyKind @default(empresa)
   name     String
   industry String
   website  String?
@@ -336,8 +346,9 @@ model Company {
   status CompanyStatus @default(prospecto)
   notes  String        @default("")
 
-  contacts  Contact[]
-  campaigns Campaign[]
+  contacts      Contact[]
+  contactFields CompanyContactField[]
+  campaigns     Campaign[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -397,6 +408,8 @@ model Campaign {
   /// Lo que se manda a todas sus sesiones a la vez, desde la sesión maestra.
   masterRequirements CampaignRequirement[]
   masterMaterials    CampaignMaterial[]
+  /// Lo que el cliente ha pagado de la campaña, cobro a cobro.
+  clientPayments     CampaignPayment[]
   members        CampaignMember[]
   endedContracts CampaignCreatorEnd[]
   creatorLeads   CampaignCreatorLead[]
@@ -1158,4 +1171,49 @@ model CampaignMaterial {
   createdAt DateTime @default(now())
 
   @@index([campaignId, createdAt])
+}
+
+/// Un cobro al cliente por una campaña.
+///
+/// Es el otro lado del dinero: el pago al creador ya vivía en cada pieza, pero
+/// lo que la empresa le paga a la agencia no se apuntaba en ningún sitio, así
+/// que «¿ya nos pagaron?» solo se contestaba mirando el banco. Son filas y no un
+/// estado porque el cliente no siempre paga de una vez: un anticipo y el resto
+/// al cerrar son dos cobros.
+model CampaignPayment {
+  id         String   @id
+  campaignId String
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  amount Decimal  @db.Decimal(12, 2)
+  paidAt DateTime
+  notes  String   @default("")
+
+  /// Comprobante de la transferencia del cliente, en Vercel Blob.
+  receiptUrl  String?
+  receiptName String?
+
+  /// Quién lo apuntó. Texto y no relación: la cuenta puede borrarse después.
+  createdByName String @default("")
+
+  createdAt DateTime @default(now())
+
+  @@index([campaignId, paidAt])
+}
+
+/// Dato de contacto de nombre libre de un cliente: Discord, WeChat, Telegram…
+/// Lo mismo que ya tenían los creadores: cada cliente se habla por un sitio y
+/// no cabe en los campos fijos de correo y teléfono.
+model CompanyContactField {
+  id        String  @id
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  label    String
+  value    String @default("")
+  position Int    @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@index([companyId])
 }

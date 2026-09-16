@@ -26,7 +26,13 @@ export type PortalPago = {
   total: number;
   moneda: string;
   estado: "pendiente" | "aprobado" | "pagado";
-  piezas: { titulo: string; importe: number; estado: string }[];
+  piezas: {
+    titulo: string;
+    importe: number;
+    estado: string;
+    /** El soporte del pago, solo cuando ya está pagado. */
+    comprobante: string | null;
+  }[];
 };
 
 const ESTADO_PAGO: Record<PortalPago["estado"], { texto: string; nota: string }> = {
@@ -166,6 +172,19 @@ export function PortalView({
                 <div className="portal-pago__linea" key={i}>
                   <span className="portal-pago__etiqueta">{p.titulo}</span>
                   <span>
+                    {/* Con el pago hecho, el creador ve el comprobante: es lo
+                        que le enseña a su banco cuando pregunta de dónde vino. */}
+                    {p.comprobante && (
+                      <a
+                        className="portal-enlace"
+                        href={p.comprobante}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ marginRight: 10 }}
+                      >
+                        Comprobante
+                      </a>
+                    )}
                     {pago.moneda} {p.importe.toLocaleString("es", { maximumFractionDigits: 2 })}
                   </span>
                 </div>

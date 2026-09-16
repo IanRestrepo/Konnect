@@ -1,13 +1,12 @@
 "use client";
 
 /* eslint-disable @next/next/no-img-element */
-import { useRef, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Check,
   ExternalLink,
-  FileCheck,
   Film,
   LoaderCircle,
   MoreHorizontal,
@@ -15,8 +14,6 @@ import {
   Plus,
   RefreshCw,
   Trash2,
-  Upload,
-  Wallet,
 } from "lucide-react";
 import { Popover } from "@/components/ui/popover";
 import { SectionLabel } from "@/components/ui/section";
@@ -31,13 +28,6 @@ import { DELIVERABLE_STATUS } from "@/lib/labels";
 import { piezaLabel } from "@/lib/socials";
 import type { Creator, Currency, Deliverable, DeliverableKind } from "@/lib/types";
 import { formatCompact, formatDate, formatMoney } from "@/lib/utils";
-
-/** Estado de pago, con el tono del badge. */
-const PAGO: Record<Deliverable["paymentStatus"], { label: string; tone: "neutral" | "accent" | "ok" }> = {
-  pendiente: { label: "Sin pagar", tone: "neutral" },
-  aprobado: { label: "Aprobado", tone: "accent" },
-  pagado: { label: "Pagado", tone: "ok" },
-};
 
 export function DeliverablesSection({
   campaignId,
@@ -85,59 +75,6 @@ export function DeliverablesSection({
     });
 
   const borrar = (id: string) => llamar(id, { method: "DELETE" });
-
-  /**
-   * Comprobante de pago. El selector de archivo es uno solo y se apunta a la
-   * pieza que lo pidió: montar un input por fila llenaría el DOM de campos
-   * ocultos que nunca se usan.
-   */
-  const comprobante = useRef<HTMLInputElement>(null);
-  const [paraComprobante, setParaComprobante] = useState<string | null>(null);
-
-  function pedirComprobante(id: string) {
-    setParaComprobante(id);
-    comprobante.current?.click();
-  }
-
-  async function subirComprobante(id: string, archivo: File) {
-    setOcupado(id);
-    setError(null);
-    try {
-      const cuerpo = new FormData();
-      cuerpo.append("archivo", archivo);
-      const res = await fetch(
-        `/api/campanas/${campaignId}/entregables/${id}/comprobante`,
-        { method: "POST", body: cuerpo },
-      );
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? "No se pudo subir el comprobante.");
-      router.refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Error inesperado");
-    } finally {
-      setOcupado(null);
-    }
-  }
-
-  async function quitarComprobante(id: string) {
-    setOcupado(id);
-    setError(null);
-    try {
-      const res = await fetch(
-        `/api/campanas/${campaignId}/entregables/${id}/comprobante`,
-        { method: "DELETE" },
-      );
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error ?? "No se pudo quitar el comprobante.");
-      }
-      router.refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Error inesperado");
-    } finally {
-      setOcupado(null);
-    }
-  }
 
   const [refrescando, setRefrescando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
@@ -269,9 +206,6 @@ export function DeliverablesSection({
                     </span>
 
                     <Badge tone={status.tone}>{status.label}</Badge>
-                    <Badge tone={PAGO[d.paymentStatus].tone}>
-                      {PAGO[d.paymentStatus].label}
-                    </Badge>
 
                     {/* Sin esto la pieza se quedaba estática: no había forma de
                         publicarla ni de marcar que el creador ya cobró. */}
@@ -281,8 +215,6 @@ export function DeliverablesSection({
                       onEditar={() => setEditando(d)}
                       onCambiar={(patch) => cambiar(d.id, patch)}
                       onBorrar={() => borrar(d.id)}
-                      onSubirComprobante={() => pedirComprobante(d.id)}
-                      onQuitarComprobante={() => quitarComprobante(d.id)}
                     />
                   </span>
                 }
@@ -291,20 +223,6 @@ export function DeliverablesSection({
           })}
         </ListBox>
       )}
-
-      {/* Un solo selector para todas las filas; apunta a la que lo pidió. */}
-      <input
-        ref={comprobante}
-        type="file"
-        hidden
-        accept="image/png,image/jpeg,image/webp,application/pdf"
-        onChange={(e) => {
-          const archivo = e.target.files?.[0];
-          if (archivo && paraComprobante) void subirComprobante(paraComprobante, archivo);
-          e.target.value = "";
-          setParaComprobante(null);
-        }}
-      />
 
       <AddDeliverableDialog
         open={open}
@@ -342,16 +260,12 @@ function Acciones({
   onEditar,
   onCambiar,
   onBorrar,
-  onSubirComprobante,
-  onQuitarComprobante,
 }: {
   deliverable: Deliverable;
   ocupado: boolean;
   onEditar: () => void;
   onCambiar: (patch: Record<string, string>) => void;
   onBorrar: () => void;
-  onSubirComprobante: () => void;
-  onQuitarComprobante: () => void;
 }) {
   const d = deliverable;
 
@@ -441,86 +355,8 @@ function Acciones({
             </Opcion>
           )}
 
-          <Grupo>Pago al creador</Grupo>
-          {/* Sin comprobante no se aprueba ni se paga: se pide primero. */}
-          {!d.receiptUrl && d.paymentStatus === "pendiente" && (
-            <p className="px-2.5 pb-1 text-[11.5px] leading-snug text-[var(--text-subtle)]">
-              Sube el comprobante para poder aprobar o marcar pagado.
-            </p>
-          )}
-          {d.receiptUrl && d.paymentStatus !== "aprobado" && (
-            <Opcion
-              icono={Wallet}
-              onClick={() => {
-                onCambiar({ paymentStatus: "aprobado" });
-                close();
-              }}
-            >
-              Aprobar pago
-            </Opcion>
-          )}
-          {d.receiptUrl && d.paymentStatus !== "pagado" && (
-            <Opcion
-              icono={Check}
-              onClick={() => {
-                onCambiar({ paymentStatus: "pagado" });
-                close();
-              }}
-            >
-              Marcar pagado
-            </Opcion>
-          )}
-          {d.paymentStatus !== "pendiente" && (
-            <Opcion
-              icono={RefreshCw}
-              onClick={() => {
-                onCambiar({ paymentStatus: "pendiente" });
-                close();
-              }}
-            >
-              Marcar sin pagar
-            </Opcion>
-          )}
-
-          {/* «Pagado» es una afirmación sin respaldo hasta que hay papel: el
-              comprobante vive junto a la pieza que se pagó. */}
-          {d.receiptUrl ? (
-            <>
-              <Link
-                href={d.receiptUrl}
-                target="_blank"
-                rel="noreferrer"
-                onClick={close}
-                className="flex w-full items-center gap-2.5 rounded-[var(--r-chip)] px-2.5 py-1.5 text-left text-[13px] transition hover:bg-[var(--surface-3)]"
-              >
-                <FileCheck size={14} className="shrink-0" />
-                <span className="min-w-0 flex-1 truncate">
-                  {d.receiptName ?? "Ver comprobante"}
-                </span>
-              </Link>
-              <Opcion
-                icono={Trash2}
-                peligro
-                onClick={() => {
-                  onQuitarComprobante();
-                  close();
-                }}
-              >
-                Quitar comprobante
-              </Opcion>
-            </>
-          ) : (
-            <Opcion
-              icono={Upload}
-              onClick={() => {
-                onSubirComprobante();
-                close();
-              }}
-            >
-              Subir comprobante
-            </Opcion>
-          )}
-
+          {/* El pago ya no va aquí: se lleva por creador, en su sección,
+              porque se paga lo que se le debe y no video a video. */}
           <div className="my-1 h-px bg-[var(--line)]" />
           <Opcion
             icono={Trash2}

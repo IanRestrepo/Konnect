@@ -8,7 +8,8 @@ import { updateCompany } from "@/lib/store";
 export const dynamic = "force-dynamic";
 
 const schema = z.object({
-  name: z.string().min(1, "Falta el nombre de la empresa.").optional(),
+  kind: z.enum(["empresa", "persona"]).optional(),
+  name: z.string().min(1, "Falta el nombre.").optional(),
   industry: z.string().optional(),
   website: z.string().nullable().optional(),
   status: z.enum(["activo", "prospecto", "inactivo"]).optional(),

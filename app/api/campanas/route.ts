@@ -150,6 +150,7 @@ export async function POST(request: Request) {
     createdById: session.userId,
     endedContracts: [],
     creatorLeads: [],
+    clientPayments: [],
     deliverables,
   });
 

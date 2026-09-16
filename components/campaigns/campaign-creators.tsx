@@ -12,6 +12,7 @@ import {
   Trash2,
   UserMinus,
   Users,
+  Wallet,
 } from "lucide-react";
 import { SectionLabel } from "@/components/ui/section";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,7 @@ import { Modal } from "@/components/ui/modal";
 import { FieldHint, Label, Textarea } from "@/components/ui/field";
 import { useCan } from "@/components/session-provider";
 import { HireCreatorDialog } from "@/components/campaigns/hire-creator-dialog";
+import { CreatorPaymentDialog } from "@/components/campaigns/creator-payment-dialog";
 import { Paginador, usePagina } from "@/components/ui/pager";
 import type { Empleado } from "@/components/campaigns/campaign-team";
 import { creatorPayout } from "@/lib/pricing";
@@ -44,6 +46,19 @@ type Participante = {
   finalizado: { endedAt: string; reason: string } | null;
   /** Quién responde por él. Vacío = responde el manager de la campaña. */
   encargados: Empleado[];
+  /** Cómo va su pago, mirando todas sus piezas vivas. */
+  estadoPago: "sin-piezas" | "pagado" | "aprobado" | "parcial" | "pendiente";
+};
+
+/** El pago de un creador, en una etiqueta. */
+const ESTADO_PAGO: Record<
+  Exclude<Participante["estadoPago"], "sin-piezas">,
+  { label: string; tone: "neutral" | "accent" | "ok" | "warn" }
+> = {
+  pagado: { label: "Pagado", tone: "ok" },
+  aprobado: { label: "Pago aprobado", tone: "accent" },
+  parcial: { label: "Pago parcial", tone: "warn" },
+  pendiente: { label: "Sin pagar", tone: "neutral" },
 };
 
 /**
@@ -78,6 +93,7 @@ export function CampaignCreators({
   const [contratando, setContratando] = useState(false);
   const [cerrando, setCerrando] = useState<Participante | null>(null);
   const [quitando, setQuitando] = useState<Participante | null>(null);
+  const [pagando, setPagando] = useState<Creator | null>(null);
   const [razon, setRazon] = useState("");
   const [ocupado, setOcupado] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -115,7 +131,17 @@ export function CampaignCreators({
           .filter((l) => l.creatorId === creatorId)
           .map((l) => empleadoPorId.get(l.userId))
           .filter((e): e is Empleado => Boolean(e)),
-      };
+        estadoPago:
+          vivas.length === 0
+            ? "sin-piezas"
+            : vivas.every((d) => d.paymentStatus === "pagado")
+              ? "pagado"
+              : vivas.some((d) => d.paymentStatus === "pagado")
+                ? "parcial"
+                : vivas.some((d) => d.paymentStatus === "aprobado")
+                  ? "aprobado"
+                  : "pendiente",
+      } satisfies Participante;
     })
     .filter((p): p is Participante => p !== null);
 
@@ -235,7 +261,15 @@ export function CampaignCreators({
                       </span>
                     </span>
 
-                    {p.finalizado && <Badge tone="neutral">Finalizado</Badge>}
+                    {p.finalizado ? (
+                      <Badge tone="neutral">Finalizado</Badge>
+                    ) : (
+                      p.estadoPago !== "sin-piezas" && (
+                        <Badge tone={ESTADO_PAGO[p.estadoPago].tone}>
+                          {ESTADO_PAGO[p.estadoPago].label}
+                        </Badge>
+                      )
+                    )}
 
                     {puedeEditar && (
                       <Popover
@@ -265,6 +299,20 @@ export function CampaignCreators({
                             >
                               Ver su ficha
                             </Enlace>
+
+                            <div className="my-1 h-px bg-[var(--line)]" />
+
+                            {/* El pago va aquí, por creador: se le paga lo que
+                                se le debe, no pieza a pieza. */}
+                            <Opcion
+                              icono={Wallet}
+                              onClick={() => {
+                                close();
+                                setPagando(p.creator);
+                              }}
+                            >
+                              Pagos y comprobantes
+                            </Opcion>
 
                             <div className="my-1 h-px bg-[var(--line)]" />
 
@@ -318,6 +366,16 @@ export function CampaignCreators({
         </ListBox>
       )}
       <Paginador {...pagina} className="mt-2.5" />
+
+      {pagando && (
+        <CreatorPaymentDialog
+          key={pagando.id}
+          open
+          onClose={() => setPagando(null)}
+          campaign={campaign}
+          creator={pagando}
+        />
+      )}
 
       <HireCreatorDialog
         open={contratando}

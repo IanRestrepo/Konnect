@@ -9,6 +9,7 @@ import { DefList, DefRow } from "@/components/ui/def-list";
 import { useCan } from "@/components/session-provider";
 import { ContactFieldsEditor } from "@/components/creators/contact-fields-editor";
 import type { ContactField } from "@/lib/types";
+import type { PermissionId } from "@/lib/permissions";
 import { formatDate } from "@/lib/utils";
 
 /** Un valor que se puede pulsar: correo, teléfono o enlace. */
@@ -22,18 +23,29 @@ function valorContacto(value: string) {
 }
 
 /**
- * Contacto del creador: los campos fijos de la ficha y los que le añade el
- * equipo —Discord, Telegram, el correo del mánager—, que cambian según por
- * dónde se le hable a cada uno.
+ * Contacto de un creador o de un cliente: los campos fijos de la ficha y los
+ * que le añade el equipo —Discord, WeChat, el correo del mánager—, que cambian
+ * según por dónde se le hable a cada uno.
+ *
+ * Nació para creadores; los clientes lo usan igual pasando su ruta y su
+ * permiso, en vez de tener una copia que se desincronice.
  */
 export function ContactCard({
   creatorId,
+  endpoint,
+  permiso = "editar_creadores",
+  desdeLabel = "En cartera desde",
   email,
   phone,
   createdAt,
   fields,
 }: {
-  creatorId: string;
+  /** Creador al que pertenece. Se ignora si llega `endpoint`. */
+  creatorId?: string;
+  /** Ruta PUT que reemplaza la lista de campos. */
+  endpoint?: string;
+  permiso?: PermissionId;
+  desdeLabel?: string;
   email: string;
   phone: string;
   createdAt: string;
@@ -41,7 +53,8 @@ export function ContactCard({
 }) {
   const router = useRouter();
   const can = useCan();
-  const puedeEditar = can("editar_creadores");
+  const puedeEditar = can(permiso);
+  const ruta = endpoint ?? `/api/creadores/${creatorId}/campos-contacto`;
 
   const [editando, setEditando] = useState(false);
   const [borrador, setBorrador] = useState<ContactField[]>([]);
@@ -58,7 +71,7 @@ export function ContactCard({
     setGuardando(true);
     setError(null);
     try {
-      const res = await fetch(`/api/creadores/${creatorId}/campos-contacto`, {
+      const res = await fetch(ruta, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -148,7 +161,7 @@ export function ContactCard({
             );
           })}
 
-        <DefRow label="En cartera desde">{formatDate(createdAt)}</DefRow>
+        <DefRow label={desdeLabel}>{formatDate(createdAt)}</DefRow>
       </DefList>
 
       {editando && (
