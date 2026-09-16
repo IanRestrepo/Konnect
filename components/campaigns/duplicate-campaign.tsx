@@ -111,7 +111,7 @@ export function DuplicateCampaignButton({
             <span>
               Crear sesiones de entrega
               <span className="block text-[12px] text-[var(--text-subtle)]">
-                Con códigos nuevos: los de la campaña original siguen sirviendo para aquella.
+                Con enlaces nuevos: los de la campaña original siguen sirviendo para aquella.
               </span>
             </span>
           </label>

@@ -12,9 +12,9 @@ const schema = z.object({
   status: z.enum(["abierta", "cerrada"]).optional(),
   notes: z.string().optional(),
   showMetrics: z.boolean().optional(),
-  /** Cadena vacía = desvincular. Sirve para recolocar sesiones sueltas. */
-  campaignId: z.string().nullable().optional(),
-  creatorId: z.string().nullable().optional(),
+  // La campaña y el creador de una sesión ya no se cambian: la sesión es la de
+  // ese creador en esa campaña, y moverla dejaba su checklist y sus entregas
+  // hablando de piezas de otra campaña.
 });
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {

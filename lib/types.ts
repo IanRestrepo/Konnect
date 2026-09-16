@@ -414,6 +414,8 @@ export type SessionRequirement = {
   required: boolean;
   /** Para cuándo se espera. Null = sin fecha pactada. */
   dueDate: string | null;
+  /** Petición común de la que es copia. Null = solo de esta sesión. */
+  masterId: string | null;
   /** Pieza de la campaña que completa. Aprobarla la rellena sola. */
   deliverableId: string | null;
   status: RequirementStatus;
@@ -448,6 +450,40 @@ export type SessionItem = {
   fileSize: number | null;
   contentType: string | null;
   authorRole: PortalRole | null;
+  authorLabel: string;
+  /** Material común del que es copia. Null = solo de esta sesión. */
+  masterId: string | null;
+  createdAt: string;
+};
+
+/**
+ * Petición común de la sesión maestra: la que se manda a todas las sesiones de
+ * una campaña. Cada sesión tiene su copia, con su propia entrega y revisión.
+ */
+export type CampaignRequirement = {
+  id: string;
+  campaignId: string;
+  kind: SessionItemKind;
+  title: string;
+  instructions: string;
+  steps: string[];
+  required: boolean;
+  dueDate: string | null;
+  position: number;
+  createdAt: string;
+};
+
+/** Material común de la sesión maestra, copiado a cada sesión. */
+export type CampaignMaterial = {
+  id: string;
+  campaignId: string;
+  kind: SessionItemKind;
+  title: string;
+  url: string | null;
+  notes: string;
+  fileName: string | null;
+  fileSize: number | null;
+  contentType: string | null;
   authorLabel: string;
   createdAt: string;
 };

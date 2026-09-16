@@ -47,7 +47,8 @@ export function PortalView({
   name,
   role,
   label,
-  canUpload,
+  puedeEntregar,
+  puedeSubirMaterial,
   requirements,
   items,
   pago,
@@ -56,7 +57,10 @@ export function PortalView({
   name: string;
   role: PortalRole;
   label: string;
-  canUpload: boolean;
+  /** Entregar contra una petición. */
+  puedeEntregar: boolean;
+  /** Subir material suelto. Nunca el creador. */
+  puedeSubirMaterial: boolean;
   requirements: SessionRequirement[];
   /** Material compartido en los dos sentidos: lo que sube la agencia y lo que suben ellos. */
   items: SessionItem[];
@@ -119,7 +123,7 @@ export function PortalView({
                   key={req.id}
                   sessionId={sessionId}
                   req={req}
-                  puedeSubir={canUpload}
+                  puedeSubir={puedeEntregar}
                   onListo={() => router.refresh()}
                 />
               ))
@@ -127,14 +131,18 @@ export function PortalView({
           </section>
         )}
 
-        {/* ---------------- Material ---------------- */}
-        <Material
-          sessionId={sessionId}
-          items={items}
-          puedeSubir={canUpload}
-          role={role}
-          onListo={() => router.refresh()}
-        />
+        {/* ---------------- Material ----------------
+            El creador solo lo ve si la agencia le compartió algo: no sube
+            material suelto, y una sección vacía le haría buscar dónde. */}
+        {(puedeSubirMaterial || items.length > 0) && (
+          <Material
+            sessionId={sessionId}
+            items={items}
+            puedeSubir={puedeSubirMaterial}
+            role={role}
+            onListo={() => router.refresh()}
+          />
+        )}
 
         {/* ---------------- El pago ---------------- */}
         {pago && (

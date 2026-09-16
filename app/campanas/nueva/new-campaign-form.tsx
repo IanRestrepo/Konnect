@@ -1036,7 +1036,7 @@ export function NewCampaignForm({
             )}
 
             <p className="pt-2 text-[12px] text-[var(--text-subtle)]">
-              Cada creador recibirá su propia sesión de entregas con un código independiente.
+              Cada creador recibirá su propia sesión de entregas con su enlace personal.
             </p>
           </CardContent>
         </Card>

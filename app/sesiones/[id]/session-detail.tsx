@@ -33,7 +33,6 @@ import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { FieldHint, Input, Label, Select, Textarea } from "@/components/ui/field";
-import { Picker } from "@/components/ui/picker";
 import { MATERIAL_VACIO, MaterialFields, type MaterialDraft } from "@/components/sessions/material-fields";
 import { useCan } from "@/components/session-provider";
 import {
@@ -77,16 +76,12 @@ export function SessionDetail({
   session,
   portalUrl,
   campaignName,
-  campanas,
-  creadores,
   creator,
 }: {
   session: CollabSession;
   /** Se arma en el servidor para que servidor y cliente pinten lo mismo. */
   portalUrl: string;
   campaignName: string | null;
-  campanas: { id: string; name: string }[];
-  creadores: { id: string; name: string }[];
   creator: CreatorResumen | null;
 }) {
   const router = useRouter();
@@ -96,7 +91,6 @@ export function SessionDetail({
   const [error, setError] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const [copiado, setCopiado] = useState<string | null>(null);
-  const [trayendo, setTrayendo] = useState(false);
 
   const [itemOpen, setItemOpen] = useState(false);
   const [item, setItem] = useState<MaterialDraft>({ ...MATERIAL_VACIO });
@@ -152,22 +146,6 @@ export function SessionDetail({
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-
-  /**
-   * Trae al checklist las piezas pactadas en la campaña.
-   *
-   * Las campañas nuevas lo hacen solas al crearse; esto es para las de antes.
-   * Se puede pulsar dos veces: solo entra lo que aún no está.
-   */
-  async function traerDelAcuerdo() {
-    setTrayendo(true);
-    await llamar(
-      `/api/sesiones/${session.id}/peticiones/acuerdo`,
-      { method: "POST" },
-      "No se pudieron traer las piezas del acuerdo.",
-    );
-    setTrayendo(false);
-  }
 
   /** Aprueba o pide cambios sobre lo que el creador entregó. */
   async function revisar(requirementId: string, accion: "aprobar" | "cambios", reviewNotes = "") {
@@ -319,25 +297,10 @@ export function SessionDetail({
             }
             action={
               puedeEditar && session.requirements.length > 0 ? (
-                <span className="flex items-center gap-1.5">
-                  {/* Para las campañas anteriores a esto, que se quedaron sin
-                      checklist. No duplica: solo trae lo que aún no está. */}
-                  {session.campaignId && (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={traerDelAcuerdo}
-                      disabled={trayendo}
-                    >
-                      {trayendo && <LoaderCircle size={13} className="animate-spin" />}
-                      Traer del acuerdo
-                    </Button>
-                  )}
-                  <Button variant="secondary" size="sm" onClick={() => setPeticionOpen(true)}>
-                    <Plus size={15} />
-                    Añadir
-                  </Button>
-                </span>
+                <Button variant="secondary" size="sm" onClick={() => setPeticionOpen(true)}>
+                  <Plus size={15} />
+                  Añadir
+                </Button>
               ) : undefined
             }
           />
@@ -349,18 +312,10 @@ export function SessionDetail({
               description="Define qué tiene que entregar el creador. Le aparecerá como una lista de casillas en su portal."
               action={
                 puedeEditar && (
-                  <span className="flex flex-wrap items-center justify-center gap-2">
-                    {session.campaignId && (
-                      <Button variant="secondary" onClick={traerDelAcuerdo} disabled={trayendo}>
-                        {trayendo && <LoaderCircle size={14} className="animate-spin" />}
-                        Traer del acuerdo
-                      </Button>
-                    )}
-                    <Button variant="accent" onClick={() => setPeticionOpen(true)}>
-                      <Plus size={16} />
-                      Crear petición
-                    </Button>
-                  </span>
+                  <Button variant="accent" onClick={() => setPeticionOpen(true)}>
+                    <Plus size={16} />
+                    Crear petición
+                  </Button>
                 )
               }
             />
@@ -381,6 +336,9 @@ export function SessionDetail({
                     title={req.title}
                     subtitle={
                       [
+                        // Lo que vino de la sesión maestra se dice: editarlo o
+                        // borrarlo aquí solo cambia esta sesión, no las demás.
+                        req.masterId ? "Común a la campaña" : null,
                         kind.label,
                         req.steps.length ? `${req.steps.length} pasos` : null,
                         req.dueDate ? `para el ${formatDate(req.dueDate)}` : null,
@@ -663,57 +621,6 @@ export function SessionDetail({
             </DefList>
           </Card>
 
-          {/* Recolocar la sesión. Una campaña borrada deja su sesión suelta
-              con todo el material dentro: esto la devuelve a su sitio en vez
-              de obligar a tirarla. */}
-          {puedeEditar && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Asignación</CardTitle>
-              </CardHeader>
-              <div className="space-y-3 px-4 pb-4">
-                <div>
-                  <Label htmlFor="asig-campana">Campaña</Label>
-                  <Picker
-                    id="asig-campana"
-                    value={session.campaignId ?? ""}
-                    onChange={(v) =>
-                      llamar(
-                        `/api/sesiones/${session.id}`,
-                        json({ campaignId: v || null }, "PATCH"),
-                        "No se pudo cambiar la campaña.",
-                      )
-                    }
-                    placeholder="Sin campaña"
-                    options={[
-                      { id: "", label: "Sin campaña" },
-                      ...campanas.map((c) => ({ id: c.id, label: c.name })),
-                    ]}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="asig-creador">Creador</Label>
-                  <Picker
-                    id="asig-creador"
-                    value={session.creatorId ?? ""}
-                    onChange={(v) =>
-                      llamar(
-                        `/api/sesiones/${session.id}`,
-                        json({ creatorId: v || null }, "PATCH"),
-                        "No se pudo cambiar el creador.",
-                      )
-                    }
-                    placeholder="Sin creador"
-                    options={[
-                      { id: "", label: "Sin creador" },
-                      ...creadores.map((c) => ({ id: c.id, label: c.name })),
-                    ]}
-                  />
-                </div>
-              </div>
-            </Card>
-          )}
-
           {creator && (
             <Card>
               <CardHeader>
@@ -762,7 +669,7 @@ export function SessionDetail({
         onClose={() => setAccesoOpen(false)}
         icon={KeyRound}
         title="Nuevo acceso"
-        description="Se genera un código propio, que podrás copiar en la tabla."
+        description="Se genera su enlace personal, que podrás copiar en la tabla."
         footer={
           <>
             <Button variant="ghost" onClick={() => setAccesoOpen(false)}>

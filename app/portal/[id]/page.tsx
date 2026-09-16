@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
-import { PORTAL_COOKIE, readPortalToken } from "@/lib/portal";
+import { PORTAL_COOKIE, puedeEntregar, puedeSubirMaterial, readPortalToken } from "@/lib/portal";
 import { DEVICE_COOKIE, readDeviceToken } from "@/lib/portal-guard";
 import { getCollabSession } from "@/lib/store";
 import { getCampaign } from "@/lib/data";
@@ -118,7 +118,11 @@ export default async function PortalPage({
       name={session.name}
       role={portal.role}
       label={portal.label}
-      canUpload={acceso.canUpload && session.status === "abierta"}
+      puedeEntregar={puedeEntregar({ role: portal.role, canUpload: acceso.canUpload }) && session.status === "abierta"}
+      puedeSubirMaterial={
+        puedeSubirMaterial({ role: portal.role, canUpload: acceso.canUpload }) &&
+        session.status === "abierta"
+      }
       requirements={session.requirements}
       items={session.items}
       pago={pago}

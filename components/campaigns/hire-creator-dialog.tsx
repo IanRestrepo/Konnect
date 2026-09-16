@@ -163,7 +163,7 @@ export function HireCreatorDialog({
       size="lg"
       icon={UserPlus}
       title="Añadir creador a la campaña"
-      description="Se pacta la pieza y se le abre su sesión de entrega con su código."
+      description="Se pacta la pieza y se le abre su sesión de entrega con su enlace."
       footerNote={elegido ? undefined : "Elige a quién contratas"}
       footer={
         <>

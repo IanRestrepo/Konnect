@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { PORTAL_COOKIE, readPortalToken } from "@/lib/portal";
+import { PORTAL_COOKIE, puedeEntregar, readPortalToken } from "@/lib/portal";
 import {
   applyDeliveryToDeliverable,
   requirementDeliverableId,
@@ -27,7 +27,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!sesion || sesion.sessionId !== id) {
     return NextResponse.json({ error: "Sesión no válida." }, { status: 401 });
   }
-  if (!sesion.canUpload) {
+  if (!puedeEntregar(sesion)) {
     return NextResponse.json({ error: "Tu acceso es de solo lectura." }, { status: 403 });
   }
 

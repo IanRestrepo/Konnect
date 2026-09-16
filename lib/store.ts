@@ -10,6 +10,8 @@ import type {
   BankingAccount,
   BankingInfo,
   Campaign,
+  CampaignMaterial,
+  CampaignRequirement,
   CollabSession,
   Company,
   Contact,
@@ -1241,28 +1243,16 @@ export async function hireCreator(
 
   await prisma.campaignCreatorEnd.deleteMany({ where: { campaignId, creatorId: input.creatorId } });
 
-  let sesion = await prisma.collabSession.findFirst({
-    where: { campaignId, creatorId: input.creatorId },
-    select: { id: true },
-  });
+  const sesionId = await ensureCreatorSession(campaignId, input.creatorId);
+  if (!sesionId) return null;
 
-  if (!sesion) {
-    const nueva = await createCollabSession({
-      name: `${campana.name} · ${input.creatorName}`,
-      campaignId,
-      creatorId: input.creatorId,
-      accesses: [{ role: "creador", label: input.creatorName, canUpload: true }],
-    });
-    sesion = { id: nueva.id };
-  }
-
-  await seedRequirementsFromCampaign(sesion.id, campaignId, input.creatorId);
+  await seedRequirementsFromCampaign(sesionId, campaignId, input.creatorId);
 
   const row = await prisma.campaign.findUnique({
     where: { id: campaignId },
     include: campaignInclude,
   });
-  return row ? { campaign: toCampaign(row), sessionId: sesion.id } : null;
+  return row ? { campaign: toCampaign(row), sessionId: sesionId } : null;
 }
 
 /**
@@ -1663,6 +1653,7 @@ function toSession(row: SessionRow): CollabSession {
       contentType: i.contentType,
       authorRole: i.authorRole,
       authorLabel: i.authorLabel,
+      masterId: i.masterId,
       createdAt: iso(i.createdAt),
     })),
     requirements: row.requirements.map(toRequirement),
@@ -1689,6 +1680,7 @@ function toRequirement(row: SessionRow["requirements"][number]): SessionRequirem
     position: row.position,
     required: row.required,
     dueDate: isoOrNull(row.dueDate),
+    masterId: row.masterId,
     deliverableId: row.deliverableId,
     status: row.status,
     url: row.url,
@@ -1744,6 +1736,20 @@ export async function createCollabSession(input: {
     },
     include: sessionInclude,
   });
+
+  // Quien llega a una campaña ya empezada recibe también lo que se mandó a
+  // todos antes de que llegara: la petición común es de la campaña, no de las
+  // sesiones que existían el día que se escribió.
+  if (row.campaignId) {
+    const copiadas = await syncMasterToSession(row.id, row.campaignId);
+    if (copiadas > 0) {
+      const fresca = await prisma.collabSession.findUnique({
+        where: { id: row.id },
+        include: sessionInclude,
+      });
+      if (fresca) return toSession(fresca);
+    }
+  }
 
   return toSession(row);
 }
@@ -1906,6 +1912,7 @@ export async function addSessionItem(
     contentType: row.contentType,
     authorRole: row.authorRole,
     authorLabel: row.authorLabel,
+    masterId: row.masterId,
     createdAt: iso(row.createdAt),
   };
 }
@@ -2326,6 +2333,24 @@ export async function updateDeliverable(
 
   await prisma.deliverable.updateMany({ where: { id: deliverableId, campaignId }, data });
 
+  // Si la pieza cambió de nombre, su petición en el checklist también. Solo si
+  // la petición seguía llamándose como la pieza: un título que la agencia
+  // escribió a mano no se pisa.
+  if (patch.type !== undefined || patch.platform !== undefined || patch.customType !== undefined) {
+    const antes = piezaLabel(actual.platform as SocialPlatform, actual.type, actual.customType);
+    const ahora = piezaLabel(
+      (patch.platform ?? actual.platform) as SocialPlatform,
+      patch.type ?? actual.type,
+      patch.customType ?? actual.customType,
+    );
+    if (antes !== ahora) {
+      await prisma.sessionRequirement.updateMany({
+        where: { deliverableId, title: antes },
+        data: { title: ahora },
+      });
+    }
+  }
+
   if (patch.paymentStatus !== undefined) {
     await avisarPago(campaignId, actual.creatorId, patch.paymentStatus);
   }
@@ -2344,7 +2369,336 @@ export async function removeDeliverable(
   const { count } = await prisma.deliverable.deleteMany({
     where: { id: deliverableId, campaignId },
   });
+  if (count === 0) return false;
+
+  // La petición de esa pieza se va con ella mientras siga sin entregar. Si ya
+  // hubo entrega se deja, suelta: es trabajo que el creador mandó, y borrarlo
+  // por quitar la pieza de la campaña sería perderlo.
+  await prisma.sessionRequirement.deleteMany({ where: { deliverableId, status: "pendiente" } });
+  await prisma.sessionRequirement.updateMany({
+    where: { deliverableId },
+    data: { deliverableId: null },
+  });
+  return true;
+}
+
+/* ---------------- Sesión maestra ---------------- */
+
+type MasterRequirementRow = Prisma.CampaignRequirementGetPayload<object>;
+type MasterMaterialRow = Prisma.CampaignMaterialGetPayload<object>;
+
+function toMasterRequirement(row: MasterRequirementRow): CampaignRequirement {
+  return {
+    id: row.id,
+    campaignId: row.campaignId,
+    kind: row.kind,
+    title: row.title,
+    instructions: row.instructions,
+    steps: row.steps,
+    required: row.required,
+    dueDate: isoOrNull(row.dueDate),
+    position: row.position,
+    createdAt: iso(row.createdAt),
+  };
+}
+
+function toMasterMaterial(row: MasterMaterialRow): CampaignMaterial {
+  return {
+    id: row.id,
+    campaignId: row.campaignId,
+    kind: row.kind,
+    title: row.title,
+    url: row.url,
+    notes: row.notes,
+    fileName: row.fileName,
+    fileSize: row.fileSize,
+    contentType: row.contentType,
+    authorLabel: row.authorLabel,
+    createdAt: iso(row.createdAt),
+  };
+}
+
+/** Lo que se mandó a todas las sesiones de una campaña. */
+export async function getCampaignMaster(
+  campaignId: string,
+): Promise<{ requirements: CampaignRequirement[]; materials: CampaignMaterial[] }> {
+  const [requirements, materials] = await Promise.all([
+    prisma.campaignRequirement.findMany({
+      where: { campaignId },
+      orderBy: { position: "asc" },
+    }),
+    prisma.campaignMaterial.findMany({
+      where: { campaignId },
+      orderBy: { createdAt: "desc" },
+    }),
+  ]);
+  return {
+    requirements: requirements.map(toMasterRequirement),
+    materials: materials.map(toMasterMaterial),
+  };
+}
+
+/**
+ * Copia a una sesión lo común de su campaña que todavía no tenga.
+ *
+ * Se compara por `masterId` y no por título: si la agencia borró la copia en
+ * una sesión concreta —una excepción para un creador—, volver a sincronizar no
+ * tiene que resucitarla… salvo que no la tuviera nunca. Por eso solo se llama
+ * al abrir la sesión, no cada vez que se mira. Devuelve cuántas copió.
+ */
+export async function syncMasterToSession(sessionId: string, campaignId: string): Promise<number> {
+  const [peticiones, materiales, yaPeticiones, yaMateriales, ultimo] = await Promise.all([
+    prisma.campaignRequirement.findMany({ where: { campaignId }, orderBy: { position: "asc" } }),
+    prisma.campaignMaterial.findMany({ where: { campaignId }, orderBy: { createdAt: "asc" } }),
+    prisma.sessionRequirement.findMany({
+      where: { sessionId, masterId: { not: null } },
+      select: { masterId: true },
+    }),
+    prisma.sessionItem.findMany({
+      where: { sessionId, masterId: { not: null } },
+      select: { masterId: true },
+    }),
+    prisma.sessionRequirement.findFirst({
+      where: { sessionId },
+      orderBy: { position: "desc" },
+      select: { position: true },
+    }),
+  ]);
+
+  const tiene = new Set(yaPeticiones.map((r) => r.masterId));
+  const tieneMaterial = new Set(yaMateriales.map((i) => i.masterId));
+  const faltan = peticiones.filter((p) => !tiene.has(p.id));
+  const faltanMateriales = materiales.filter((m) => !tieneMaterial.has(m.id));
+  const desde = (ultimo?.position ?? -1) + 1;
+
+  if (faltan.length > 0) {
+    await prisma.sessionRequirement.createMany({
+      data: faltan.map((p, i) => ({
+        id: newId("rq"),
+        sessionId,
+        masterId: p.id,
+        kind: p.kind,
+        title: p.title,
+        instructions: p.instructions,
+        steps: p.steps,
+        required: p.required,
+        dueDate: p.dueDate,
+        position: desde + i,
+      })),
+    });
+  }
+
+  if (faltanMateriales.length > 0) {
+    await prisma.sessionItem.createMany({
+      data: faltanMateriales.map((m) => ({
+        id: newId("it"),
+        sessionId,
+        masterId: m.id,
+        kind: m.kind,
+        title: m.title,
+        url: m.url,
+        notes: m.notes,
+        fileName: m.fileName,
+        fileSize: m.fileSize,
+        contentType: m.contentType,
+        authorRole: null,
+        authorLabel: m.authorLabel,
+      })),
+    });
+  }
+
+  return faltan.length + faltanMateriales.length;
+}
+
+/** Sesiones de una campaña, para repartir lo común entre ellas. */
+async function sesionesDeCampana(campaignId: string): Promise<{ id: string }[]> {
+  return prisma.collabSession.findMany({ where: { campaignId }, select: { id: true } });
+}
+
+/**
+ * Crea una petición común y la copia a cada sesión de la campaña.
+ *
+ * Todo en una transacción: una petición común que llegó a medias —a tres
+ * creadores de cinco— es peor que ninguna, porque nadie sabría a quién le
+ * falta.
+ */
+export async function addCampaignRequirement(
+  campaignId: string,
+  input: {
+    kind: SessionItemKind;
+    title: string;
+    instructions?: string;
+    steps?: string[];
+    required?: boolean;
+    dueDate?: string | null;
+  },
+): Promise<CampaignRequirement | null> {
+  const existe = await prisma.campaign.findUnique({ where: { id: campaignId }, select: { id: true } });
+  if (!existe) return null;
+
+  const sesiones = await sesionesDeCampana(campaignId);
+  const ultimas = await prisma.sessionRequirement.groupBy({
+    by: ["sessionId"],
+    where: { sessionId: { in: sesiones.map((s) => s.id) } },
+    _max: { position: true },
+  });
+  const posicion = new Map(ultimas.map((u) => [u.sessionId, (u._max.position ?? -1) + 1]));
+  const ultimaComun = await prisma.campaignRequirement.findFirst({
+    where: { campaignId },
+    orderBy: { position: "desc" },
+    select: { position: true },
+  });
+
+  const id = newId("cr");
+  const datos = {
+    kind: input.kind,
+    title: input.title,
+    instructions: input.instructions ?? "",
+    steps: input.steps ?? [],
+    required: input.required ?? true,
+    dueDate: toDate(input.dueDate ?? null),
+  };
+
+  const [row] = await prisma.$transaction([
+    prisma.campaignRequirement.create({
+      data: { id, campaignId, ...datos, position: (ultimaComun?.position ?? -1) + 1 },
+    }),
+    prisma.sessionRequirement.createMany({
+      data: sesiones.map((s) => ({
+        id: newId("rq"),
+        sessionId: s.id,
+        masterId: id,
+        ...datos,
+        position: posicion.get(s.id) ?? 0,
+      })),
+    }),
+  ]);
+
+  return toMasterRequirement(row);
+}
+
+/** Cambia el enunciado de una petición común, en todas sus copias a la vez. */
+export async function updateCampaignRequirement(
+  campaignId: string,
+  masterId: string,
+  patch: Partial<{
+    title: string;
+    instructions: string;
+    steps: string[];
+    required: boolean;
+    dueDate: string | null;
+  }>,
+): Promise<boolean> {
+  const { dueDate, ...resto } = patch;
+  const data = dueDate === undefined ? resto : { ...resto, dueDate: toDate(dueDate) };
+
+  const [original] = await prisma.$transaction([
+    prisma.campaignRequirement.updateMany({ where: { id: masterId, campaignId }, data }),
+    // Solo el enunciado: la entrega y la revisión de cada copia no se tocan.
+    prisma.sessionRequirement.updateMany({ where: { masterId }, data }),
+  ]);
+  return original.count > 0;
+}
+
+/** Borra una petición común. Sus copias caen en cascada. */
+export async function removeCampaignRequirement(
+  campaignId: string,
+  masterId: string,
+): Promise<boolean> {
+  const { count } = await prisma.campaignRequirement.deleteMany({
+    where: { id: masterId, campaignId },
+  });
   return count > 0;
+}
+
+/** Comparte material con todas las sesiones de la campaña. */
+export async function addCampaignMaterial(
+  campaignId: string,
+  input: {
+    kind: SessionItemKind;
+    title: string;
+    url?: string | null;
+    notes?: string;
+    fileName?: string | null;
+    fileSize?: number | null;
+    contentType?: string | null;
+    authorLabel: string;
+  },
+): Promise<CampaignMaterial | null> {
+  const existe = await prisma.campaign.findUnique({ where: { id: campaignId }, select: { id: true } });
+  if (!existe) return null;
+
+  const sesiones = await sesionesDeCampana(campaignId);
+  const id = newId("cm");
+  const datos = {
+    kind: input.kind,
+    title: input.title,
+    url: input.url || null,
+    notes: input.notes ?? "",
+    fileName: input.fileName ?? null,
+    fileSize: input.fileSize ?? null,
+    contentType: input.contentType ?? null,
+    authorLabel: input.authorLabel,
+  };
+
+  const [row] = await prisma.$transaction([
+    prisma.campaignMaterial.create({ data: { id, campaignId, ...datos } }),
+    prisma.sessionItem.createMany({
+      data: sesiones.map((s) => ({
+        id: newId("it"),
+        sessionId: s.id,
+        masterId: id,
+        authorRole: null,
+        ...datos,
+      })),
+    }),
+  ]);
+
+  return toMasterMaterial(row);
+}
+
+/** Retira material común de todas las sesiones. Las copias caen en cascada. */
+export async function removeCampaignMaterial(
+  campaignId: string,
+  masterId: string,
+): Promise<boolean> {
+  const { count } = await prisma.campaignMaterial.deleteMany({
+    where: { id: masterId, campaignId },
+  });
+  return count > 0;
+}
+
+/**
+ * La sesión de un creador en una campaña; la abre si no la tiene.
+ *
+ * En una campaña cada creador tiene exactamente una sesión, y existe desde que
+ * tiene alguna pieza. Antes solo la abría «contratar»: una pieza añadida
+ * pegando un video ya publicado dejaba al creador en la campaña sin sesión, y
+ * había que crearla a mano desde otra pantalla.
+ */
+export async function ensureCreatorSession(
+  campaignId: string,
+  creatorId: string,
+): Promise<string | null> {
+  const existente = await prisma.collabSession.findFirst({
+    where: { campaignId, creatorId },
+    select: { id: true },
+  });
+  if (existente) return existente.id;
+
+  const [campana, creador] = await Promise.all([
+    prisma.campaign.findUnique({ where: { id: campaignId }, select: { name: true } }),
+    prisma.creator.findUnique({ where: { id: creatorId }, select: { name: true } }),
+  ]);
+  if (!campana || !creador) return null;
+
+  const nueva = await createCollabSession({
+    name: `${campana.name} · ${creador.name}`,
+    campaignId,
+    creatorId,
+    accesses: [{ role: "creador", label: creador.name, canUpload: false }],
+  });
+  return nueva.id;
 }
 
 /** Deja constancia del pago en la sesión del creador, para que se entere él. */

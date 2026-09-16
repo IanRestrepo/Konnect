@@ -419,7 +419,7 @@ export function CampaignCreators({
               Se borran sus {quitando?.piezas ?? 0} pieza
               {quitando?.piezas === 1 ? "" : "s"} de esta campaña, publicadas o no.
             </li>
-            <li>Se borra su sesión de entrega y su código de portal deja de servir.</li>
+            <li>Se borra su sesión de entrega y su enlace del portal deja de servir.</li>
             <li>
               <span className="font-medium text-[var(--text)]">No hay papelera.</span> Su ficha de
               creador y sus otras campañas no se tocan.

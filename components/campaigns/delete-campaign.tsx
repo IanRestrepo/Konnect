@@ -94,7 +94,7 @@ export function DeleteCampaignButton({
             {sesiones > 0 && (
               <li>
                 Se borran {sesiones === 1 ? "su sesión de entrega" : `sus ${sesiones} sesiones`} y{" "}
-                {sesiones === 1 ? "su código" : "sus códigos"} de portal dejan de abrir.
+                {sesiones === 1 ? "su enlace del portal deja" : "sus enlaces del portal dejan"} de servir.
               </li>
             )}
             <li>Las fichas de los creadores y del cliente no se tocan.</li>

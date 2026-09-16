@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { addDeliverable } from "@/lib/store";
+import { addDeliverable, ensureCreatorSession, seedRequirementsFromCampaign } from "@/lib/store";
 import { getSession } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
 import { getCampaign } from "@/lib/data";
@@ -76,7 +76,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "Campaña no encontrada." }, { status: 404 });
   }
 
+  // El acuerdo se mantiene solo: la pieza nueva aparece en el checklist del
+  // creador sin pasar por «Traer del acuerdo», y si el creador no tenía sesión
+  // en esta campaña —llegó pegando un video ya publicado— se le abre.
+  const sesionId = await ensureCreatorSession(id, deliverable.creatorId);
+  if (sesionId) await seedRequirementsFromCampaign(sesionId, id, deliverable.creatorId);
+
   revalidatePath(`/campanas/${id}`);
+  revalidatePath(`/campanas/${id}/sesion`);
   revalidatePath("/campanas");
   return NextResponse.json({ deliverable }, { status: 201 });
 }

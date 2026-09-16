@@ -1,38 +1,37 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FolderKanban, LoaderCircle, Plus, TriangleAlert, X } from "lucide-react";
-import { PageTitle } from "@/components/ui/section";
+import { FolderKanban, Layers, Trash2 } from "lucide-react";
+import { PageTitle, SectionLabel } from "@/components/ui/section";
 import { Segmented, SearchInput, Toolbar } from "@/components/shell/toolbar";
 import { ListBox, ListRow, RowIcon } from "@/components/ui/list";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Modal } from "@/components/ui/modal";
-import { FieldHint, Input, Label, Select, Textarea } from "@/components/ui/field";
+import { Paginador, usePagina } from "@/components/ui/pager";
 import { useCan } from "@/components/session-provider";
-import { PORTAL_ROLE, SESSION_STATUS } from "@/lib/labels";
-import type { CollabSession, PortalRole, SessionStatus } from "@/lib/types";
+import { CAMPAIGN_STATUS } from "@/lib/labels";
+import type { CampaignStatus, CollabSession } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
 
-type Opcion = { id: string; name: string };
-type Filtro = SessionStatus | "todas";
-type AccesoBorrador = { role: PortalRole; label: string; canUpload: boolean };
+type CampanaResumen = { id: string; name: string; status: CampaignStatus };
+type Filtro = "revisar" | "todas";
 
-const ACCESOS_INICIALES: AccesoBorrador[] = [
-  { role: "creador", label: "", canUpload: true },
-  { role: "cliente", label: "", canUpload: false },
-];
-
+/**
+ * Las sesiones, agrupadas por campaña.
+ *
+ * Ya no se crean desde aquí: una sesión es la de un creador en una campaña y
+ * nace sola al contratarlo. Esta pantalla es el atajo para llegar a la sesión
+ * maestra de cada campaña sin pasar por Campañas, y ordena primero lo que
+ * tiene entregas esperando respuesta, que es por lo que se entra.
+ */
 export function SessionsView({
   sessions,
   campaigns,
-  creators,
 }: {
   sessions: CollabSession[];
-  campaigns: Opcion[];
-  creators: Opcion[];
+  campaigns: CampanaResumen[];
 }) {
   const router = useRouter();
   const can = useCan();
@@ -40,338 +39,179 @@ export function SessionsView({
 
   const [query, setQuery] = useState("");
   const [filtro, setFiltro] = useState<Filtro>("todas");
-  const [open, setOpen] = useState(false);
-  const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [form, setForm] = useState({
-    name: "",
-    campaignId: "",
-    creatorId: "",
-    notes: "",
-    showMetrics: true,
-  });
-  const [accesos, setAccesos] = useState<AccesoBorrador[]>(ACCESOS_INICIALES);
+  const grupos = useMemo(() => {
+    const porCampana = new Map<string, CollabSession[]>();
+    for (const s of sessions) {
+      if (!s.campaignId) continue;
+      porCampana.set(s.campaignId, [...(porCampana.get(s.campaignId) ?? []), s]);
+    }
+    return campaigns
+      .filter((c) => porCampana.has(c.id))
+      .map((c) => {
+        const suyas = porCampana.get(c.id)!;
+        const reqs = suyas.flatMap((s) => s.requirements);
+        const abiertas = reqs.filter((r) => r.status !== "aprobado");
+        return {
+          campaign: c,
+          sesiones: suyas.length,
+          porRevisar: reqs.filter((r) => r.status === "enviado").length,
+          pendientes: abiertas.length,
+          proxima: abiertas
+            .map((r) => r.dueDate)
+            .filter((d): d is string => Boolean(d))
+            .sort()[0],
+        };
+      })
+      .sort((a, b) => b.porRevisar - a.porRevisar || a.campaign.name.localeCompare(b.campaign.name));
+  }, [sessions, campaigns]);
 
-  const filtros = useMemo<{ id: Filtro; label: string; count: number }[]>(
-    () => [
-      { id: "todas", label: "Todas", count: sessions.length },
-      {
-        id: "abierta",
-        label: "Abiertas",
-        count: sessions.filter((s) => s.status === "abierta").length,
-      },
-      {
-        id: "cerrada",
-        label: "Cerradas",
-        count: sessions.filter((s) => s.status === "cerrada").length,
-      },
-    ],
-    [sessions],
-  );
-
-  const nombreCreador = useMemo(
-    () => new Map(creators.map((c) => [c.id, c.name])),
-    [creators],
-  );
+  /** Sesiones de antes de que no pudiera haberlas sin campaña. */
+  const sueltas = useMemo(() => sessions.filter((s) => !s.campaignId), [sessions]);
 
   const visibles = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return sessions.filter((s) => {
-      if (filtro !== "todas" && s.status !== filtro) return false;
-      if (!q) return true;
-      const creador = s.creatorId ? (nombreCreador.get(s.creatorId) ?? "") : "";
-      const etiquetas = s.accesses.map((a) => a.label).join(" ");
-      return [s.name, creador, etiquetas].join(" ").toLowerCase().includes(q);
+    return grupos.filter((g) => {
+      if (filtro === "revisar" && g.porRevisar === 0) return false;
+      return !q || g.campaign.name.toLowerCase().includes(q);
     });
-  }, [sessions, query, filtro, nombreCreador]);
+  }, [grupos, query, filtro]);
 
-  function abrir() {
-    setForm({ name: "", campaignId: "", creatorId: "", notes: "", showMetrics: true });
-    setAccesos(ACCESOS_INICIALES.map((a) => ({ ...a })));
-    setError(null);
-    setOpen(true);
-  }
+  const pagina = usePagina(visibles, `${filtro}|${query}`);
 
-  async function crear() {
-    const limpios = accesos.filter((a) => a.label.trim());
-    if (!form.name.trim()) {
-      setError("Falta el nombre de la sesión.");
+  async function borrarSuelta(s: CollabSession) {
+    if (!window.confirm(`¿Eliminar la sesión «${s.name}»? Se borra con su material y sus accesos.`)) {
       return;
     }
-    if (!limpios.length) {
-      setError("Ponle nombre a por lo menos un acceso.");
-      return;
-    }
-
-    setGuardando(true);
     setError(null);
-    try {
-      const res = await fetch("/api/sesiones", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: form.name.trim(),
-          campaignId: form.campaignId || null,
-          creatorId: form.creatorId || null,
-          notes: form.notes,
-          showMetrics: form.showMetrics,
-          accesses: limpios.map((a) => ({ ...a, label: a.label.trim() })),
-        }),
-      });
+    const res = await fetch(`/api/sesiones/${s.id}`, { method: "DELETE" });
+    if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? "No se pudo crear la sesión.");
-
-      setOpen(false);
-      router.push(`/sesiones/${data.session.id}`);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Error inesperado");
-    } finally {
-      setGuardando(false);
+      setError((data as { error?: string }).error ?? "No se pudo eliminar la sesión.");
+      return;
     }
+    router.refresh();
   }
 
   return (
     <div className="space-y-6">
       <PageTitle
         title="Sesiones"
-        description="Espacios compartidos con el creador y el cliente para cada entrega."
-        actions={
-          puedeEditar && (
-            <Button variant="accent" size="lg" onClick={abrir}>
-              <Plus size={16} />
-              Nueva sesión
-            </Button>
-          )
-        }
+        description="Cada campaña tiene su sesión maestra con las de todos sus creadores. Se abren solas al contratar."
       />
 
       <Toolbar>
-        <Segmented options={filtros} value={filtro} onChange={setFiltro} />
-        <SearchInput
-          value={query}
-          onChange={setQuery}
-          placeholder="Buscar por nombre, creador o acceso…"
+        <Segmented
+          options={[
+            { id: "todas", label: "Todas", count: grupos.length },
+            {
+              id: "revisar",
+              label: "Por revisar",
+              count: grupos.filter((g) => g.porRevisar > 0).length,
+            },
+          ]}
+          value={filtro}
+          onChange={setFiltro}
         />
+        <SearchInput value={query} onChange={setQuery} placeholder="Buscar campaña…" />
       </Toolbar>
+
+      {error && (
+        <p className="rounded-[var(--r-control)] bg-[var(--danger-soft)] px-3 py-2 text-[12.5px] text-[var(--danger)]">
+          {error}
+        </p>
+      )}
 
       {visibles.length === 0 ? (
         <EmptyState
           icon={FolderKanban}
-          title={sessions.length === 0 ? "Todavía no hay sesiones" : "Sin resultados"}
+          title={grupos.length === 0 ? "Todavía no hay sesiones" : "Sin resultados"}
           description={
-            sessions.length === 0
-              ? "Una sesión es el espacio donde el creador sube su material y el cliente lo revisa, cada uno con su propio código."
-              : "Ajusta los filtros o prueba con otro nombre."
-          }
-          action={
-            puedeEditar && (
-              <Button variant="accent" onClick={abrir}>
-                <Plus size={16} />
-                Nueva sesión
-              </Button>
-            )
+            grupos.length === 0
+              ? "Contrata a un creador en una campaña y su sesión aparecerá aquí."
+              : filtro === "revisar"
+                ? "Nada esperando revisión."
+                : "Prueba con otro nombre."
           }
         />
       ) : (
-        <ListBox>
-          {visibles.map((s) => {
-            const estado = SESSION_STATUS[s.status];
-            const vivos = s.accesses.filter((a) => !a.revoked);
-            const creador = s.creatorId ? nombreCreador.get(s.creatorId) : null;
+        <>
+          <ListBox>
+            {pagina.visibles.map((g) => {
+              const estado = CAMPAIGN_STATUS[g.campaign.status];
+              return (
+                <ListRow
+                  key={g.campaign.id}
+                  href={`/campanas/${g.campaign.id}/sesion`}
+                  leading={
+                    <RowIcon>
+                      <Layers size={17} strokeWidth={1.75} />
+                    </RowIcon>
+                  }
+                  title={g.campaign.name}
+                  subtitle={[
+                    `${g.sesiones} sesi${g.sesiones === 1 ? "ón" : "ones"}`,
+                    g.pendientes ? `${g.pendientes} por resolver` : "todo aprobado",
+                    g.proxima ? `próxima el ${formatDate(g.proxima)}` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                  trailing={
+                    <span className="flex items-center gap-2">
+                      {g.porRevisar > 0 && <Badge tone="accent">{g.porRevisar} por revisar</Badge>}
+                      <Badge tone={estado.tone}>{estado.label}</Badge>
+                    </span>
+                  }
+                />
+              );
+            })}
+          </ListBox>
+          <Paginador {...pagina} />
+        </>
+      )}
 
-            return (
+      {sueltas.length > 0 && (
+        <section>
+          <SectionLabel>Sueltas, de antes</SectionLabel>
+          <p className="mb-2.5 text-[12.5px] text-[var(--text-muted)]">
+            Sesiones creadas antes de que toda sesión tuviera que ser de una campaña. Siguen
+            funcionando, pero ya no se pueden mover a otra campaña.
+          </p>
+          <ListBox>
+            {sueltas.map((s) => (
               <ListRow
                 key={s.id}
-                href={`/sesiones/${s.id}`}
+                chevron={false}
                 leading={
                   <RowIcon>
                     <FolderKanban size={17} strokeWidth={1.75} />
                   </RowIcon>
                 }
-                title={s.name}
-                subtitle={[creador, `${s.items.length} elementos`, formatDate(s.createdAt)]
-                  .filter(Boolean)
-                  .join(" · ")}
+                // El nombre es el enlace y no la fila: la fila lleva el botón
+                // de borrar, y un botón dentro de un enlace se porta mal.
+                title={
+                  <Link href={`/sesiones/${s.id}`} className="transition hover:text-[var(--accent)]">
+                    {s.name}
+                  </Link>
+                }
+                subtitle={`${s.requirements.length} peticiones · ${s.items.length} elementos · ${formatDate(s.createdAt)}`}
                 trailing={
-                  <span className="flex items-center gap-4">
-                    <span className="hidden text-right sm:block">
-                      <span className="tabular block text-[14px] font-semibold">{vivos.length}</span>
-                      <span className="block text-[11.5px] text-[var(--text-subtle)]">accesos</span>
-                    </span>
-                    <Badge tone={estado.tone}>{estado.label}</Badge>
-                  </span>
+                  puedeEditar ? (
+                    <button
+                      onClick={() => void borrarSuelta(s)}
+                      aria-label={`Eliminar ${s.name}`}
+                      className="grid h-8 w-8 shrink-0 place-items-center rounded-[var(--r-control)] text-[var(--text-subtle)] transition hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  ) : undefined
                 }
               />
-            );
-          })}
-        </ListBox>
-      )}
-
-      <Modal
-        open={open}
-        onClose={() => setOpen(false)}
-        title="Nueva sesión"
-        description="Cada acceso recibe su propio código. Podrás copiarlos al terminar."
-        size="lg"
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => setOpen(false)}>
-              Cancelar
-            </Button>
-            <Button variant="primary" onClick={crear} disabled={guardando}>
-              {guardando && <LoaderCircle size={14} className="animate-spin" />}
-              Crear sesión
-            </Button>
-          </>
-        }
-      >
-        {error && (
-          <p className="mb-3 flex items-start gap-2 rounded-[var(--r-control)] bg-[var(--danger-soft)] px-3 py-2 text-[12.5px] text-[var(--danger)]">
-            <TriangleAlert size={14} className="mt-px shrink-0" />
-            {error}
-          </p>
-        )}
-
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="sm:col-span-2">
-            <Label htmlFor="se-name">Nombre</Label>
-            <Input
-              id="se-name"
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder="Lanzamiento verano · Zerflox"
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="se-campaign">Campaña</Label>
-            <Select
-              id="se-campaign"
-              value={form.campaignId}
-              onChange={(e) => setForm({ ...form, campaignId: e.target.value })}
-            >
-              <option value="">Sin campaña</option>
-              {campaigns.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </Select>
-          </div>
-
-          <div>
-            <Label htmlFor="se-creator">Creador</Label>
-            <Select
-              id="se-creator"
-              value={form.creatorId}
-              onChange={(e) => setForm({ ...form, creatorId: e.target.value })}
-            >
-              <option value="">Sin creador</option>
-              {creators.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </Select>
-          </div>
-        </div>
-
-        <div className="mt-4">
-          <Label>Accesos</Label>
-          <FieldHint>Uno por cada persona o empresa a la que le pases el enlace.</FieldHint>
-
-          <div className="mt-1.5 space-y-2">
-            {accesos.map((a, i) => (
-              <div key={i} className="flex gap-2">
-                <Select
-                  value={a.role}
-                  onChange={(e) =>
-                    setAccesos((prev) =>
-                      prev.map((x, j) =>
-                        j === i ? { ...x, role: e.target.value as PortalRole } : x,
-                      ),
-                    )
-                  }
-                  className="w-32 shrink-0"
-                  aria-label="Tipo de acceso"
-                >
-                  {Object.entries(PORTAL_ROLE).map(([id, label]) => (
-                    <option key={id} value={id}>
-                      {label}
-                    </option>
-                  ))}
-                </Select>
-
-                <Input
-                  value={a.label}
-                  onChange={(e) =>
-                    setAccesos((prev) =>
-                      prev.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)),
-                    )
-                  }
-                  placeholder="A quién se lo das"
-                  aria-label="Nombre del acceso"
-                />
-
-                <label className="flex shrink-0 items-center gap-1.5 px-1 text-[12.5px] text-[var(--text-muted)]">
-                  <input
-                    type="checkbox"
-                    checked={a.canUpload}
-                    onChange={(e) =>
-                      setAccesos((prev) =>
-                        prev.map((x, j) => (j === i ? { ...x, canUpload: e.target.checked } : x)),
-                      )
-                    }
-                  />
-                  Sube
-                </label>
-
-                <button
-                  type="button"
-                  onClick={() => setAccesos((prev) => prev.filter((_, j) => j !== i))}
-                  aria-label="Quitar acceso"
-                  className="grid h-10 w-10 shrink-0 place-items-center rounded-[var(--r-control)] text-[var(--text-subtle)] transition hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"
-                >
-                  <X size={14} />
-                </button>
-              </div>
             ))}
-          </div>
-
-          <Button
-            variant="secondary"
-            size="sm"
-            className="mt-2"
-            onClick={() =>
-              setAccesos((prev) => [...prev, { role: "invitado", label: "", canUpload: false }])
-            }
-          >
-            <Plus size={14} />
-            Añadir acceso
-          </Button>
-        </div>
-
-        <label className="mt-4 flex items-center gap-2 text-[12.5px] text-[var(--text-muted)]">
-          <input
-            type="checkbox"
-            checked={form.showMetrics}
-            onChange={(e) => setForm({ ...form, showMetrics: e.target.checked })}
-          />
-          Mostrar las métricas del creador dentro del portal
-        </label>
-
-        <div className="mt-3">
-          <Label htmlFor="se-notes">Notas</Label>
-          <Textarea
-            id="se-notes"
-            rows={2}
-            value={form.notes}
-            onChange={(e) => setForm({ ...form, notes: e.target.value })}
-            placeholder="Lo que verá quien entre al portal."
-          />
-        </div>
-      </Modal>
+          </ListBox>
+        </section>
+      )}
     </div>
   );
 }

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { z } from "zod";
-import { PORTAL_COOKIE, readPortalToken } from "@/lib/portal";
+import { PORTAL_COOKIE, puedeSubirMaterial, readPortalToken } from "@/lib/portal";
 import { addSessionItem } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -25,8 +25,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!portal || portal.sessionId !== id) {
     return NextResponse.json({ error: "Acceso no válido." }, { status: 401 });
   }
-  if (!portal.canUpload) {
-    return NextResponse.json({ error: "Tu acceso es solo de lectura." }, { status: 403 });
+  if (!puedeSubirMaterial(portal)) {
+    return NextResponse.json(
+      { error: "Lo que tengas que mandar, súbelo en su petición." },
+      { status: 403 },
+    );
   }
 
   const body = await request.json().catch(() => null);

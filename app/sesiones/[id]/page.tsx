@@ -1,8 +1,8 @@
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { requirePermission } from "@/lib/session";
-import { getCampaign, getCampaigns, getCreator, getCreators } from "@/lib/data";
-import { getCollabSession } from "@/lib/store";
+import { getCampaign, getCreator } from "@/lib/data";
+import { getCollabSession, seedRequirementsFromCampaign } from "@/lib/store";
 import { SessionDetail } from "@/app/sesiones/[id]/session-detail";
 import { puedeVerCampana, soloLoSuyo } from "@/lib/campaign-access";
 
@@ -12,7 +12,7 @@ export default async function SesionPage({ params }: { params: Promise<{ id: str
   const cuenta = await requirePermission("ver_sesiones");
   const { id } = await params;
 
-  const session = await getCollabSession(id);
+  let session = await getCollabSession(id);
   if (!session) notFound();
 
   // El enlace se arma en el servidor: leer window durante el render rompía la
@@ -22,13 +22,21 @@ export default async function SesionPage({ params }: { params: Promise<{ id: str
   const protocolo = cabeceras.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
   const portalUrl = host ? `${protocolo}://${host}/portal/${id}` : `/portal/${id}`;
 
-  const [campaign, creator, campanas, creadores] = await Promise.all([
+  const [campaign, creator] = await Promise.all([
     session.campaignId ? getCampaign(session.campaignId) : null,
     session.creatorId ? getCreator(session.creatorId) : null,
-    // Para poder recolocar una sesión que se quedó sin campaña.
-    getCampaigns(),
-    getCreators(),
   ]);
+
+  // El acuerdo se mantiene solo: las piezas pactadas que aún no tienen su
+  // petición la reciben al abrir la sesión. Sustituye al botón «Traer del
+  // acuerdo», que había que acordarse de pulsar. No duplica nada.
+  if (session.campaignId && session.creatorId && campaign) {
+    const nuevas = await seedRequirementsFromCampaign(id, session.campaignId, session.creatorId);
+    if (nuevas > 0) {
+      const fresca = await getCollabSession(id);
+      if (fresca) session = fresca;
+    }
+  }
 
   /**
    * La sesión hereda el acceso de su campaña. Una sesión suelta —sin campaña,
@@ -45,8 +53,6 @@ export default async function SesionPage({ params }: { params: Promise<{ id: str
       session={session}
       portalUrl={portalUrl}
       campaignName={campaign?.name ?? null}
-      campanas={campanas.map((c) => ({ id: c.id, name: c.name }))}
-      creadores={creadores.map((c) => ({ id: c.id, name: c.name }))}
       creator={
         creator
           ? {

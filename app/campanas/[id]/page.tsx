@@ -2,7 +2,8 @@ import { campaignTotals } from "@/lib/pricing";
 import { requirePermission } from "@/lib/session";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Layers } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { PageTitle } from "@/components/ui/section";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { DefList, DefRow } from "@/components/ui/def-list";
@@ -124,6 +125,14 @@ export default async function CampanaPage({ params }: { params: Promise<{ id: st
           description={CAMPAIGN_OBJECTIVE[campaign.objective]}
           actions={
             <span className="flex gap-2">
+              {/* La campaña ya es la sesión: desde aquí se entra a todas a la
+                  vez, sin abrirlas una a una. */}
+              <Link href={`/campanas/${campaign.id}/sesion`}>
+                <Button variant="secondary" size="lg">
+                  <Layers size={15} />
+                  Sesión maestra
+                </Button>
+              </Link>
               <DuplicateCampaignButton campaignId={campaign.id} nombre={campaign.name} />
               <DeleteCampaignButton
                 campaignId={campaign.id}
@@ -288,16 +297,20 @@ export default async function CampanaPage({ params }: { params: Promise<{ id: st
             </DefList>
           </Card>
 
-          {/* Cada creador tiene su propia sesión de entregas: desde aquí se
-              llega a su checklist y a su código, sin pasar por Sesiones. */}
+          {/* Un resumen: el trabajo con las sesiones se hace en la maestra,
+              que las enseña todas juntas. */}
           <Card>
             <CardHeader>
               <CardTitle>Sesiones de entrega</CardTitle>
+              <Link href={`/campanas/${campaign.id}/sesion`}>
+                <Button variant="secondary" size="sm">
+                  Abrir maestra
+                </Button>
+              </Link>
             </CardHeader>
             {sessions.length === 0 ? (
               <p className="px-5 pb-5 text-[13px] leading-relaxed text-[var(--text-muted)]">
-                Esta campaña no tiene sesiones. Las campañas creadas antes de esta versión no las
-                generaron automáticamente.
+                Todavía no hay sesiones. Cada creador que contrates tendrá la suya.
               </p>
             ) : (
               <ul className="px-2 pb-2">
@@ -314,7 +327,7 @@ export default async function CampanaPage({ params }: { params: Promise<{ id: st
                   return (
                     <li key={s.id}>
                       <Link
-                        href={`/sesiones/${s.id}`}
+                        href={`/campanas/${campaign.id}/sesion`}
                         className="flex items-center gap-3 rounded-[var(--r-control)] px-3 py-2.5 transition hover:bg-[var(--surface-2)]"
                       >
                         <Avatar src={suyo?.avatarUrl ?? null} name={suyo?.name ?? s.name} size={28} />

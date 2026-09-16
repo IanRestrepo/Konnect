@@ -382,6 +382,9 @@ model Campaign {
 
   deliverables   Deliverable[]
   sessions       CollabSession[]
+  /// Lo que se manda a todas sus sesiones a la vez, desde la sesión maestra.
+  masterRequirements CampaignRequirement[]
+  masterMaterials    CampaignMaterial[]
   members        CampaignMember[]
   endedContracts CampaignCreatorEnd[]
   creatorLeads   CampaignCreatorLead[]
@@ -731,9 +734,14 @@ model SessionItem {
   authorRole  PortalRole?
   authorLabel String
 
+  /// Material común del que es copia, si se mandó a todas las sesiones.
+  masterId String?
+  master   CampaignMaterial? @relation(fields: [masterId], references: [id], onDelete: Cascade)
+
   createdAt DateTime @default(now())
 
   @@index([sessionId, createdAt])
+  @@index([masterId])
 }
 
 /**
@@ -845,6 +853,14 @@ model SessionRequirement {
   /// viernes—, no el trabajo entero. La ve también el creador en su portal.
   dueDate      DateTime?
 
+  /// Petición común de la que es copia, si se mandó a todas las sesiones.
+  ///
+  /// Con relación y en cascada: editar la común cambia todas las copias, y
+  /// borrarla las borra. Lo que entrega cada creador y su revisión viven en la
+  /// copia, así que siguen siendo de cada uno.
+  masterId String?
+  master   CampaignRequirement? @relation(fields: [masterId], references: [id], onDelete: Cascade)
+
   /// Pieza de la campaña que esta petición completa.
   ///
   /// Sin esto, lo que el creador entregaba se quedaba en la sesión y alguien
@@ -867,6 +883,7 @@ model SessionRequirement {
   updatedAt DateTime @updatedAt
 
   @@index([sessionId, position])
+  @@index([masterId])
 }
 
 enum SessionEventKind {
@@ -1078,4 +1095,55 @@ model CampaignCreatorLead {
   @@unique([campaignId, creatorId, userId])
   @@index([campaignId, creatorId])
   @@index([userId])
+}
+
+/// Petición que la agencia manda a todas las sesiones de una campaña.
+///
+/// Es el original de la sesión maestra: se copia a cada sesión que ya existe y
+/// a las que se abran después al contratar a alguien más, que es lo que evita
+/// tener que ir sesión por sesión repitiendo lo mismo. Las copias son filas
+/// normales de `SessionRequirement`, porque cada creador entrega y se le revisa
+/// por separado; solo el enunciado es común.
+model CampaignRequirement {
+  id         String   @id
+  campaignId String
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  kind         SessionItemKind @default(entregable)
+  title        String
+  instructions String          @default("")
+  steps        String[]
+  required     Boolean         @default(true)
+  dueDate      DateTime?
+  position     Int             @default(0)
+
+  copies SessionRequirement[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([campaignId, position])
+}
+
+/// Material que la agencia comparte con todas las sesiones de una campaña: el
+/// brief, la guía de marca, el logo. Se copia igual que las peticiones comunes.
+model CampaignMaterial {
+  id         String   @id
+  campaignId String
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  kind        SessionItemKind @default(referencia)
+  title       String
+  url         String?
+  notes       String          @default("")
+  fileName    String?
+  fileSize    Int?
+  contentType String?
+  authorLabel String
+
+  copies SessionItem[]
+
+  createdAt DateTime @default(now())
+
+  @@index([campaignId, createdAt])
 }

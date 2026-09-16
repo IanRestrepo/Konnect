@@ -247,15 +247,21 @@ export function CampaignCreatorView({
             {session ? (
               <div className="px-5 pb-5">
                 <p className="text-[13px] leading-relaxed text-[var(--text-muted)]">
-                  Ahí se le reparten los códigos, se revisa lo que entrega y se sube el material
-                  que necesita.
+                  Su enlace personal, lo que entrega y el material que se le comparte.
                 </p>
-                <Link href={`/sesiones/${session.id}`} className="mt-3 inline-block">
-                  <Button variant="secondary" size="sm">
-                    Abrir la sesión
-                    <ExternalLink size={14} />
-                  </Button>
-                </Link>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Link href={`/sesiones/${session.id}`}>
+                    <Button variant="secondary" size="sm">
+                      Abrir su sesión
+                      <ExternalLink size={14} />
+                    </Button>
+                  </Link>
+                  <Link href={`/campanas/${campaign.id}/sesion`}>
+                    <Button variant="ghost" size="sm">
+                      Sesión maestra
+                    </Button>
+                  </Link>
+                </div>
               </div>
             ) : (
               <p className="px-5 pb-5 text-[13px] leading-relaxed text-[var(--text-muted)]">

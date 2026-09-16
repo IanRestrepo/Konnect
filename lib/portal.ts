@@ -58,6 +58,29 @@ export async function readPortalToken(token: string | undefined): Promise<Portal
   }
 }
 
+/**
+ * Entregar lo que la agencia pidió.
+ *
+ * El creador siempre puede: es para lo que tiene el acceso, y su sesión nace
+ * con `canUpload` apagado para que no suba material suelto. Los demás
+ * accesos dependen de su casilla.
+ */
+export function puedeEntregar(p: Pick<PortalPayload, "role" | "canUpload">): boolean {
+  return p.role === "creador" || p.canUpload;
+}
+
+/**
+ * Subir material suelto, fuera del checklist.
+ *
+ * Nunca el creador: lo que tiene que mandar va contra una petición, donde la
+ * agencia lo revisa y lo aprueba. Material suelto de su parte llegaba sin que
+ * nadie lo pidiera ni lo mirara. El cliente sí, que tiene brief y logos que
+ * compartir y ningún checklist.
+ */
+export function puedeSubirMaterial(p: Pick<PortalPayload, "role" | "canUpload">): boolean {
+  return p.role !== "creador" && p.canUpload;
+}
+
 export const PORTAL_COOKIE_OPTIONS = {
   httpOnly: true,
   sameSite: "lax" as const,
