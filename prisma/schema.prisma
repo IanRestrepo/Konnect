@@ -398,9 +398,14 @@ model Campaign {
   ///
   /// Una nota y no un campo de texto porque los apuntes crecen —acuerdos con
   /// el cliente, cambios de guion, capturas— y en Notas tienen editor, imágenes
-  /// y búsqueda. Si la nota se borra, la campaña vuelve a no tener apuntes.
-  notesDocId String? @unique
-  notesDoc   Doc?    @relation("CampaignNotesDoc", fields: [notesDocId], references: [id], onDelete: SetNull)
+  /// y búsqueda.
+  ///
+  /// Texto y no relación: una relación uno a uno exige índice único, y añadir
+  /// uno sobre una tabla con datos pide confirmar posible pérdida en
+  /// producción. Que no se creen dos notas lo garantiza la escritura
+  /// condicionada de `ensureCampaignNotesDoc`, y si la nota se borra, la
+  /// siguiente vez se crea otra.
+  notesDocId String?
 
   /// Quién lleva la campaña. Es una persona, no un equipo: cuando el cliente
   /// pregunta hay que saber a quién se le pregunta.
@@ -1019,9 +1024,6 @@ model Doc {
   pinned   Boolean @default(false)
 
   links DocLink[]
-
-  /// Campaña de la que es apuntes, si lo es.
-  notesOf Campaign? @relation("CampaignNotesDoc")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

@@ -3575,8 +3575,12 @@ export async function getDoc(id: string): Promise<Doc | null> {
  *
  * Nace enlazada a la campaña —así sale también en su tarjeta de notas y en la
  * búsqueda— y con lo que hubiera en el campo de texto de antes, para que no
- * se pierda nada al pasar a la nota. Si dos personas la abren a la vez, la
- * restricción única de `notesDocId` impide que acaben siendo dos notas.
+ * se pierda nada al pasar a la nota.
+ *
+ * Si dos personas la abren a la vez, la asignación solo prospera si el campo
+ * sigue como estaba al leerlo: la segunda pierde, borra la suya y usa la de la
+ * primera. Si la nota se borró desde Notas, el identificador viejo cuenta como
+ * «sin apuntes» y se sustituye.
  */
 export async function ensureCampaignNotesDoc(
   campaignId: string,
@@ -3611,7 +3615,7 @@ export async function ensureCampaignNotesDoc(
   await updateDoc(doc.id, { content, plainText: texto, updatedById: createdById });
 
   const { count } = await prisma.campaign.updateMany({
-    where: { id: campaignId, notesDocId: null },
+    where: { id: campaignId, notesDocId: campana.notesDocId },
     data: { notesDocId: doc.id },
   });
   if (count === 0) {
