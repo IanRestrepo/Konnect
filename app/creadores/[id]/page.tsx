@@ -1,7 +1,7 @@
 import { requirePermission } from "@/lib/session";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, ExternalLink, Megaphone, RefreshCw } from "lucide-react";
+import { ArrowLeft, ExternalLink, Film, Megaphone, RefreshCw } from "lucide-react";
 import { PageTitle, SectionLabel } from "@/components/ui/section";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { DefList, DefRow } from "@/components/ui/def-list";
@@ -20,12 +20,13 @@ import { ApiConnectionsPanel } from "@/components/creators/api-connections-panel
 import { PersonalDataPanel } from "@/components/creators/personal-data-panel";
 import { ContactsPanel } from "@/components/companies/contacts-panel";
 import { EditCreatorButton } from "@/components/creators/edit-creator-dialog";
+import { MediaKitButton } from "@/components/creators/media-kit-button";
 import { CreatorTabs } from "@/app/creadores/[id]/creator-tabs";
 import { creatorCampaigns, getCampaigns, getCompanies, getCreator } from "@/lib/data";
 import { listCreatorCategories } from "@/lib/store";
 import { creatorPayout } from "@/lib/pricing";
 import { CAMPAIGN_STATUS, CREATOR_STATUS, PAYMENT_METHOD } from "@/lib/labels";
-import { PLATFORM_METRICS } from "@/lib/socials";
+import { PLATFORM_LABEL, PLATFORM_METRICS, piezaLabel } from "@/lib/socials";
 import { creatorViewsSeries, trend } from "@/lib/series";
 import type { Campaign, Company, Creator } from "@/lib/types";
 import { formatCompact, formatDate, formatMoney } from "@/lib/utils";
@@ -63,6 +64,20 @@ export default async function CreadorPage({ params }: { params: Promise<{ id: st
   const activas = related.filter((c) => c.status === "activa");
   const otras = related.filter((c) => c.status !== "activa");
 
+  // El portafolio: lo que ya salió publicado para marcas, lo más reciente
+  // primero. Es lo mismo que enseña el media kit, pero para mirarlo aquí.
+  const portafolio = related
+    .flatMap((campaign) =>
+      campaign.deliverables
+        .filter((d) => d.creatorId === creator.id && d.status === "publicado")
+        .map((d) => ({
+          d,
+          campaign,
+          marca: companies.find((c) => c.id === campaign.companyId)?.name ?? "",
+        })),
+    )
+    .sort((a, b) => (b.d.publishedAt ?? "").localeCompare(a.d.publishedAt ?? ""));
+
   const pestanas = [
     {
       id: "campanas",
@@ -99,6 +114,57 @@ export default async function CreadorPage({ params }: { params: Promise<{ id: st
           )}
         </div>
       ),
+    },
+    {
+      id: "portafolio",
+      label: "Portafolio",
+      count: portafolio.length,
+      content:
+        portafolio.length === 0 ? (
+          <EmptyState
+            icon={Film}
+            title="Sin piezas publicadas"
+            description="Cuando publique contenido para una marca, aparecerá aquí con sus resultados."
+          />
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {portafolio.map(({ d, campaign, marca }) => (
+              <a
+                key={d.id}
+                href={d.videoUrl ?? `/campanas/${campaign.id}`}
+                target={d.videoUrl ? "_blank" : undefined}
+                rel="noreferrer"
+                className="group overflow-hidden rounded-[var(--r-card)] border border-[var(--line)] bg-[var(--surface)] transition hover:border-[var(--line-strong)]"
+              >
+                {d.thumbnail ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={d.thumbnail} alt="" className="aspect-video w-full object-cover" />
+                ) : (
+                  <span className="grid aspect-video w-full place-items-center bg-[var(--surface-3)] text-[var(--text-subtle)]">
+                    <Film size={22} strokeWidth={1.5} />
+                  </span>
+                )}
+                <span className="block p-3.5">
+                  <span className="line-clamp-2 block text-[13px] font-medium group-hover:text-[var(--accent)]">
+                    {d.title ?? piezaLabel(d.platform, d.type, d.customType)}
+                  </span>
+                  <span className="mt-1 block truncate text-[12px] text-[var(--text-muted)]">
+                    {[marca, PLATFORM_LABEL[d.platform], d.publishedAt ? formatDate(d.publishedAt) : null]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
+                  <span className="mt-2.5 flex items-baseline gap-3 text-[12px] text-[var(--text-muted)]">
+                    <span className="tabular text-[15px] font-semibold text-[var(--text)]">
+                      {d.views ? formatCompact(d.views) : "—"}
+                    </span>
+                    vistas
+                    {d.likes !== null && <span className="tabular">{formatCompact(d.likes)} likes</span>}
+                  </span>
+                </span>
+              </a>
+            ))}
+          </div>
+        ),
     },
     {
       id: "tarifas",
@@ -247,6 +313,7 @@ export default async function CreadorPage({ params }: { params: Promise<{ id: st
                 <Button variant="secondary" size="icon-lg" aria-label="Actualizar métricas">
                   <RefreshCw size={17} strokeWidth={1.75} />
                 </Button>
+                <MediaKitButton creatorId={creator.id} />
                 <EditCreatorButton creator={creator} categories={categories} />
               </>
             }
