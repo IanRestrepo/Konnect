@@ -144,8 +144,6 @@ export function NewCampaignForm({
   const [notes, setNotes] = useState("");
   const [managerId, setManagerId] = useState(responsablePorDefecto);
 
-  /** Tope de referencia, opcional. No reparte nada. */
-  const [budget, setBudget] = useState("");
 
   // Filtros del buscador de creadores.
   const [platform, setPlatform] = useState<SocialPlatform>("youtube");
@@ -322,7 +320,6 @@ export function NewCampaignForm({
           status,
           objective,
           currency,
-          budget: budget.trim() ? Number(budget) : null,
           agencyFee: MARGEN_AGENCIA,
           startDate: startDate ? new Date(startDate).toISOString() : new Date().toISOString(),
           endDate: endDate ? new Date(endDate).toISOString() : null,
@@ -522,16 +519,6 @@ export function NewCampaignForm({
                         { id: "EUR", label: "EUR" },
                       ]}
                     />
-                  </div>
-                  <div>
-                    <Label htmlFor="budget">Tope de referencia</Label>
-                    <Importe
-                      id="budget"
-                      value={budget}
-                      onChange={setBudget}
-                      placeholder="Opcional"
-                    />
-                    <FieldHint>Solo para comparar. No reparte nada.</FieldHint>
                   </div>
                 </div>
 
@@ -1019,13 +1006,6 @@ export function NewCampaignForm({
             {totales.cliente > 0 && (
               <p className="text-right text-[12px] text-[var(--text-subtle)]">
                 {((totales.agencia / totales.cliente) * 100).toFixed(0)}% del total
-              </p>
-            )}
-
-            {budget.trim() && Number(budget) > 0 && (
-              <p className="pt-1 text-[12px] text-[var(--text-muted)]">
-                {((totales.cliente / Number(budget)) * 100).toFixed(0)}% del tope de{" "}
-                {formatMoney(Number(budget), currency as "USD")}
               </p>
             )}
 

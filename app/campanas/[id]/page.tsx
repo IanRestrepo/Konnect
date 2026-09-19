@@ -1,4 +1,4 @@
-import { campaignTotals } from "@/lib/pricing";
+import { creatorPayout } from "@/lib/pricing";
 import { requirePermission } from "@/lib/session";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -71,7 +71,12 @@ export default async function CampanaPage({ params }: { params: Promise<{ id: st
   const sessions = todasSesiones.filter((s) => s.campaignId === campaign.id);
   const status = CAMPAIGN_STATUS[campaign.status];
   const metrics = campaignMetrics(campaign);
-  const pace = campaignTotals(campaign).budgetUsedPct ?? 0;
+  // Cuánto de lo pactado con los creadores ya se les pagó. Sustituye al tope
+  // de referencia, que se quitó: no lo rellenaba nadie y la barra salía vacía.
+  const pagado = campaign.deliverables
+    .filter((d) => d.paymentStatus === "pagado")
+    .reduce((s, d) => s + creatorPayout(d, campaign), 0);
+  const pace = metrics.spent > 0 ? (pagado / metrics.spent) * 100 : 0;
 
   const chart: ChartPoint[] = campaign.deliverables
     .filter((d) => d.status === "publicado" && d.views)
@@ -214,7 +219,7 @@ export default async function CampanaPage({ params }: { params: Promise<{ id: st
         <Stat
           label="Comprometido"
           value={formatMoney(metrics.spent, campaign.currency)}
-          hint={`de ${formatMoney(campaign.budget, campaign.currency)}`}
+          hint="pactado con los creadores"
         />
         {/* Lo comprometido solo dice cuánto sale. Lo que se queda la agencia
             es la otra mitad de la cuenta, y la que se quería ver. */}
@@ -266,7 +271,7 @@ export default async function CampanaPage({ params }: { params: Promise<{ id: st
         <div className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Presupuesto</CardTitle>
+              <CardTitle>Pagado a creadores</CardTitle>
               <span className="tabular text-[13px] font-medium">{pace.toFixed(0)}%</span>
             </CardHeader>
             <div className="px-5 pb-4">
@@ -277,8 +282,8 @@ export default async function CampanaPage({ params }: { params: Promise<{ id: st
                 />
               </div>
               <p className="mt-2 text-[12.5px] text-[var(--text-muted)]">
-                {formatMoney(metrics.spent, campaign.currency)} comprometido de{" "}
-                {formatMoney(campaign.budget, campaign.currency)}
+                {formatMoney(pagado, campaign.currency)} pagado de{" "}
+                {formatMoney(metrics.spent, campaign.currency)} comprometido
               </p>
             </div>
             <DefList className="border-t border-[var(--line)]">

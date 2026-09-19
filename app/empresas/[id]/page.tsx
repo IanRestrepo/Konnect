@@ -130,7 +130,7 @@ export default async function EmpresaPage({ params }: { params: Promise<{ id: st
                             {formatCompact(metrics.views)}
                           </span>
                           <span className="block text-[11.5px] text-[var(--text-subtle)]">
-                            {formatMoney(campaign.budget, campaign.currency)}
+                            {formatMoney(metrics.clientTotal, campaign.currency)}
                           </span>
                         </span>
                         <Badge tone={st.tone}>{st.label}</Badge>

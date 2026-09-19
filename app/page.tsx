@@ -180,7 +180,7 @@ export default async function DashboardPage() {
                         {metrics.cpm ? `$${metrics.cpm.toFixed(2)}` : "—"}
                       </Td>
                       <Td align="right" className="tabular">
-                        {formatMoney(campaign.budget, campaign.currency)}
+                        {formatMoney(metrics.clientTotal, campaign.currency)}
                       </Td>
                     </Tr>
                   );

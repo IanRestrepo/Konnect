@@ -27,7 +27,6 @@ type Campos = {
   objective: CampaignObjective;
   status: Campaign["status"];
   currency: string;
-  budget: string;
   startDate: string;
   endDate: string;
   notes: string;
@@ -40,7 +39,6 @@ function desde(campaign: Campaign): Campos {
     objective: campaign.objective,
     status: campaign.status,
     currency: campaign.currency,
-    budget: String(campaign.budget),
     startDate: aInput(campaign.startDate),
     endDate: aInput(campaign.endDate),
     notes: campaign.notes,
@@ -114,7 +112,6 @@ export function EditCampaignButton({
           objective: form.objective,
           status: form.status,
           currency: form.currency,
-          budget: Number(form.budget) || 0,
           ...fechas,
         }),
       });
@@ -240,18 +237,6 @@ export function EditCampaignButton({
                 </option>
               ))}
             </Select>
-          </div>
-
-          <div>
-            <Label htmlFor="ecp-budget">Presupuesto</Label>
-            <Input
-              id="ecp-budget"
-              type="number"
-              min={0}
-              value={form.budget}
-              onChange={(e) => set("budget", e.target.value)}
-            />
-            <FieldHint>Solo para comparar. No reparte nada.</FieldHint>
           </div>
 
           <div>
