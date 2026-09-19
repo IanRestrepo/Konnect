@@ -24,8 +24,8 @@ type Filtro = "revisar" | "todas";
  *
  * Ya no se crean desde aquí: una sesión es la de un creador en una campaña y
  * nace sola al contratarlo. Esta pantalla es el atajo para llegar a la sesión
- * maestra de cada campaña sin pasar por Campañas, y ordena primero lo que
- * tiene entregas esperando respuesta, que es por lo que se entra.
+ * maestra de cada campaña sin pasar por Campañas. Van por orden de creación;
+ * lo que tiene entregas esperando respuesta se ve con el filtro «Por revisar».
  */
 export function SessionsView({
   sessions,
@@ -58,6 +58,7 @@ export function SessionsView({
         return {
           campaign: c,
           sesiones: suyas.length,
+          creada: suyas.map((s) => s.createdAt).sort().at(-1) ?? "",
           porRevisar: reqs.filter((r) => r.status === "enviado").length,
           pendientes: abiertas.length,
           proxima: abiertas
@@ -66,7 +67,10 @@ export function SessionsView({
             .sort()[0],
         };
       })
-      .sort((a, b) => b.porRevisar - a.porRevisar || a.campaign.name.localeCompare(b.campaign.name));
+      // Por creación, lo más reciente arriba. Ordenar por lo que hay que revisar
+      // hacía saltar las campañas de sitio cada vez que llegaba una entrega;
+      // para eso está el filtro «Por revisar».
+      .sort((a, b) => b.creada.localeCompare(a.creada));
   }, [sessions, campaigns]);
 
   /** Sesiones de antes de que no pudiera haberlas sin campaña. */

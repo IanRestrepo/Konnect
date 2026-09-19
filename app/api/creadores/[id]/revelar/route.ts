@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { revealBanking } from "@/lib/store";
+import { getCreator } from "@/lib/data";
 import { clearFailures, isLocked, registerFailure, verifyAccessCode } from "@/lib/crypto";
 import { getSession } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
@@ -55,13 +56,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   clearFailures(actor);
+  // Con el nombre del creador: el titular de la cuenta casi nunca está puesto,
+  // y la bitácora decía «reveló datos bancarios» sin decir de quién.
+  const creador = await getCreator(id);
   await registrar({
     actorId: session.userId,
     actorName: session.name,
     action: "banca.revelada",
     entity: "creator",
     entityId: id,
-    entityLabel: revelado.banking.holder || "",
+    entityLabel: creador?.name ?? revelado.banking.holder ?? "",
+    detail: "Datos bancarios y personales",
   });
 
   return NextResponse.json({

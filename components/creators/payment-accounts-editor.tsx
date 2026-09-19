@@ -165,12 +165,15 @@ export function PaymentAccountsEditor({
               )}
 
               <div>
-                <Label htmlFor={`pa-alias-${i}`}>Alias</Label>
+                {/* Se llamaba «Alias» y se confundía con el alias bancario (el CBU
+                    de Argentina, por ejemplo). Es solo un nombre para distinguir
+                    esta cuenta de las otras del mismo creador. */}
+                <Label htmlFor={`pa-alias-${i}`}>Nombre de la cuenta</Label>
                 <Input
                   id={`pa-alias-${i}`}
                   value={cuenta.label}
                   onChange={(e) => cambiar(i, { label: e.target.value })}
-                  placeholder="Cómo la llama el equipo"
+                  placeholder="Opcional. Ej.: Cuenta principal, la de su mánager"
                 />
               </div>
 

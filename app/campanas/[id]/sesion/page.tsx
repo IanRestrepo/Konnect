@@ -66,9 +66,9 @@ export default async function SesionMaestraPage({ params }: { params: Promise<{ 
       }),
   );
 
-  // Por nombre: con diez creadores, encontrar a uno por orden de alta es
-  // adivinar.
-  filas.sort((a, b) => (a.creator?.name ?? a.session.name).localeCompare(b.creator?.name ?? b.session.name));
+  // Por orden de creación: la primera contratada arriba. Por nombre, cada alta
+  // nueva movía a los demás de sitio y no se sabía dónde había quedado nadie.
+  filas.sort((a, b) => a.session.createdAt.localeCompare(b.session.createdAt));
 
   return (
     <MasterSessionView
