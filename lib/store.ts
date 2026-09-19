@@ -2334,6 +2334,70 @@ export async function setCreatorBankAccounts(
   });
 }
 
+/* ---------------- Duplicados ---------------- */
+
+export type PosibleDuplicado = { id: string; name: string; handle: string; motivo: string };
+
+/**
+ * Creadores que ya existen y se parecen al que se va a dar de alta.
+ *
+ * Se miran las señales fuertes —el mismo canal de YouTube, el mismo @ en la
+ * ficha o en una de sus redes, el mismo correo— y el nombre exacto como señal
+ * débil. Sin esto se daba de alta dos veces al mismo creador, cada uno con su
+ * mitad de campañas y de tarifas, y nadie sabía cuál era el bueno.
+ */
+export async function findCreatorDuplicates(input: {
+  channelId?: string;
+  handle?: string;
+  email?: string;
+  name?: string;
+  socials?: { platform: SocialPlatform; handle: string }[];
+}): Promise<PosibleDuplicado[]> {
+  const limpiar = (h: string) => h.trim().replace(/^@/, "").toLowerCase();
+  const variantes = (h: string) => {
+    const base = limpiar(h);
+    return base ? [base, `@${base}`] : [];
+  };
+
+  const handles = [input.handle ?? "", ...(input.socials ?? []).map((s) => s.handle)]
+    .flatMap(variantes);
+  const condiciones: Prisma.CreatorWhereInput[] = [];
+  if (input.channelId?.trim()) condiciones.push({ channelId: input.channelId.trim() });
+  for (const h of new Set(handles)) {
+    condiciones.push({ handle: { equals: h, mode: "insensitive" } });
+    condiciones.push({ socials: { some: { handle: { equals: h, mode: "insensitive" } } } });
+  }
+  if (input.email?.trim()) condiciones.push({ email: { equals: input.email.trim(), mode: "insensitive" } });
+  if (input.name?.trim()) condiciones.push({ name: { equals: input.name.trim(), mode: "insensitive" } });
+  if (condiciones.length === 0) return [];
+
+  const filas = await prisma.creator.findMany({
+    where: { OR: condiciones },
+    select: {
+      id: true,
+      name: true,
+      handle: true,
+      channelId: true,
+      email: true,
+      socials: { select: { handle: true } },
+    },
+    take: 5,
+  });
+
+  const buscados = new Set(handles.map(limpiar));
+  return filas.map((f) => {
+    const motivo =
+      input.channelId?.trim() && f.channelId === input.channelId.trim()
+        ? "el mismo canal de YouTube"
+        : buscados.has(limpiar(f.handle)) || f.socials.some((s) => buscados.has(limpiar(s.handle)))
+          ? "el mismo usuario"
+          : input.email?.trim() && f.email.toLowerCase() === input.email.trim().toLowerCase()
+            ? "el mismo correo"
+            : "el mismo nombre";
+    return { id: f.id, name: f.name, handle: f.handle, motivo };
+  });
+}
+
 /* ---------------- Agencia del creador ---------------- */
 
 /**

@@ -93,6 +93,10 @@ export function NewCreatorDialog({
   const [methods, setMethods] = useState<PaymentMethod[]>(["transferencia"]);
   const [accounts, setAccounts] = useState<BankingAccount[]>(CUENTA_INICIAL);
   const [contactFields, setContactFields] = useState<ContactField[]>([]);
+  /** Creadores que ya existen y se parecen a este; ver `findCreatorDuplicates`. */
+  const [duplicados, setDuplicados] = useState<
+    { id: string; name: string; handle: string; motivo: string }[] | null
+  >(null);
   const [form, setForm] = useState({ ...EMPTY });
   /** Varias categorías; la primera es la principal. */
   const [categorias, setCategorias] = useState<string[]>(categories[0] ? [categories[0]] : []);
@@ -118,6 +122,7 @@ export function NewCreatorDialog({
     setMethods(["transferencia"]);
     setAccounts(CUENTA_INICIAL);
     setContactFields([]);
+    setDuplicados(null);
     setForm({ ...EMPTY });
     setCategorias(categories[0] ? [categories[0]] : []);
     onClose();
@@ -128,6 +133,7 @@ export function NewCreatorDialog({
     setChannel(null);
     setPerfil({ ...PERFIL_VACIO });
     setError(null);
+    setDuplicados(null);
   }
 
   async function lookup() {
@@ -139,6 +145,7 @@ export function NewCreatorDialog({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "No pudimos leer el canal.");
       setChannel(data.channel as ChannelPreview);
+      setDuplicados(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error inesperado");
     } finally {
@@ -146,10 +153,11 @@ export function NewCreatorDialog({
     }
   }
 
-  async function save() {
+  async function save(force = false) {
     if (!listo) return;
     setSaving(true);
     setError(null);
+    setDuplicados(null);
 
     const handle = esYoutube ? channel!.handle : perfil.handle.trim() || perfil.name.trim();
     const enlace = esYoutube
@@ -206,9 +214,16 @@ export function NewCreatorDialog({
             .filter((f) => f.label.trim())
             .map((f) => ({ label: f.label.trim(), value: f.value.trim() })),
           notes: form.notes.trim(),
+          force,
         }),
       });
       const data = await res.json();
+      // Se parece a uno que ya está: se enseña a quién, y quien lo da de alta
+      // decide si es el mismo o si de verdad es otro.
+      if (res.status === 409 && Array.isArray(data.duplicados)) {
+        setDuplicados(data.duplicados);
+        return;
+      }
       if (!res.ok) throw new Error(data.error ?? "No se pudo guardar.");
       router.refresh();
       close();
@@ -229,15 +244,41 @@ export function NewCreatorDialog({
       icon={UserPlus}
       title="Añadir creador"
       description="Elige dónde publica. De YouTube traemos los datos solos; el resto se escribe a mano."
-      footerNote={listo ? undefined : "Completa la plataforma para seguir"}
+      footerNote={
+        duplicados ? (
+          <span className="flex min-w-0 items-start gap-2 text-[12.5px] text-[var(--warn)]">
+            <TriangleAlert size={14} className="mt-px shrink-0" />
+            <span className="min-w-0">
+              Ya existe{duplicados.length > 1 ? "n" : ""}{" "}
+              {duplicados.map((d, i) => (
+                <span key={d.id}>
+                  {i > 0 && ", "}
+                  <a
+                    href={`/creadores/${d.id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-medium underline underline-offset-2 hover:text-[var(--accent)]"
+                  >
+                    {d.name}
+                  </a>{" "}
+                  ({d.motivo})
+                </span>
+              ))}
+              . ¿Es otro creador?
+            </span>
+          </span>
+        ) : listo ? undefined : (
+          "Completa la plataforma para seguir"
+        )
+      }
       footer={
         <>
           <Button variant="ghost" onClick={close}>
             Cancelar
           </Button>
-          <Button variant="primary" onClick={save} disabled={!listo || saving}>
+          <Button variant="primary" onClick={() => save(Boolean(duplicados))} disabled={!listo || saving}>
             {saving && <LoaderCircle size={14} className="animate-spin" />}
-            Guardar creador
+            {duplicados ? "Sí, crearlo igual" : "Guardar creador"}
           </Button>
         </>
       }

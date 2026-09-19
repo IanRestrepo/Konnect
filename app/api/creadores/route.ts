@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { createCreator, newId } from "@/lib/store";
+import { createCreator, findCreatorDuplicates, newId } from "@/lib/store";
 import { PLATFORM_URL } from "@/lib/socials";
 import { IMPORTE_MAXIMO } from "@/lib/pricing";
 import { getSession } from "@/lib/session";
@@ -110,6 +110,8 @@ const schema = z.object({
       }),
     )
     .default([]),
+  /** Crear aunque se parezca a otro: ya se vio el aviso y se decidió seguir. */
+  force: z.boolean().default(false),
 });
 
 export async function POST(request: Request) {
@@ -130,7 +132,23 @@ export async function POST(request: Request) {
     );
   }
 
-  const { socials, rates, bankAccounts, contactFields, ...datos } = parsed.data;
+  const { socials, rates, bankAccounts, contactFields, force, ...datos } = parsed.data;
+
+  if (!force) {
+    const duplicados = await findCreatorDuplicates({
+      channelId: datos.channelId,
+      handle: datos.handle,
+      email: datos.email,
+      name: datos.name,
+      socials,
+    });
+    if (duplicados.length > 0) {
+      return NextResponse.json(
+        { error: "Ya hay un creador que se parece a este.", duplicados },
+        { status: 409 },
+      );
+    }
+  }
 
   const categorias = datos.categories.map((c) => c.trim()).filter(Boolean);
   if (categorias.length === 0 && !datos.category.trim()) {
