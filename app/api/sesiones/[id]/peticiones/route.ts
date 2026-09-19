@@ -5,6 +5,7 @@ import { requirePermission } from "@/lib/session";
 import {
   addRequirement,
   removeRequirement,
+  reorderRequirements,
   reviewRequirement,
   updateRequirement,
 } from "@/lib/store";
@@ -23,6 +24,32 @@ const crear = z.object({
   /** Para cuándo se espera. Null = sin fecha pactada. */
   dueDate: z.string().nullable().default(null),
 });
+
+const ordenar = z.object({
+  orden: z.array(z.string()).min(1, "Falta el orden.").max(500),
+});
+
+/** Cambia el orden del checklist: el que se arrastró en la sesión. */
+export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  await requirePermission("editar_sesiones");
+  const { id } = await params;
+
+  const parsed = ordenar.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: parsed.error.issues[0]?.message ?? "Datos inválidos." },
+      { status: 400 },
+    );
+  }
+
+  if (!(await reorderRequirements(id, parsed.data.orden))) {
+    return NextResponse.json({ error: "Sesión no encontrada." }, { status: 404 });
+  }
+
+  revalidatePath(`/sesiones/${id}`);
+  revalidatePath(`/portal/${id}`);
+  return NextResponse.json({ ok: true });
+}
 
 /** Crea una petición del checklist. */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {

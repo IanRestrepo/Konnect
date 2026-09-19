@@ -3077,6 +3077,34 @@ export async function updateRequirement(
   return getCollabSession(sessionId);
 }
 
+/**
+ * Pone las peticiones de una sesión en el orden dado, que es el que ve el
+ * creador en su portal.
+ *
+ * Los ids que no son de la sesión se ignoran, y los de la sesión que no
+ * vienen se quedan al final en su orden de antes: si alguien añadió una
+ * petición mientras otro arrastraba, no se pierde ni se cuela en otra sesión.
+ */
+export async function reorderRequirements(sessionId: string, ids: string[]): Promise<boolean> {
+  const actuales = await prisma.sessionRequirement.findMany({
+    where: { sessionId },
+    orderBy: { position: "asc" },
+    select: { id: true },
+  });
+  if (actuales.length === 0) return false;
+
+  const suyos = new Set(actuales.map((r) => r.id));
+  const pedidos = ids.filter((id, i) => suyos.has(id) && ids.indexOf(id) === i);
+  const resto = actuales.map((r) => r.id).filter((id) => !pedidos.includes(id));
+
+  await prisma.$transaction(
+    [...pedidos, ...resto].map((id, position) =>
+      prisma.sessionRequirement.update({ where: { id }, data: { position } }),
+    ),
+  );
+  return true;
+}
+
 export async function removeRequirement(
   sessionId: string,
   requirementId: string,

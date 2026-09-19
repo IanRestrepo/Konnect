@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  CalendarDays,
   Check,
   ChevronDown,
   Copy,
@@ -19,7 +20,7 @@ import {
   TriangleAlert,
   Users,
 } from "lucide-react";
-import { PageTitle, SectionLabel } from "@/components/ui/section";
+import { PageTitle } from "@/components/ui/section";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -46,6 +47,8 @@ import type {
 } from "@/lib/types";
 import { cn, formatDate } from "@/lib/utils";
 import { BackLink } from "@/components/ui/back-link";
+import { Segmented } from "@/components/shell/toolbar";
+import { useRecordado } from "@/lib/recordar";
 
 export type SesionFila = {
   session: CollabSession;
@@ -112,6 +115,24 @@ export function MasterSessionView({
   const abiertas = filas.filter((f) => f.session.status === "abierta").length;
 
   const pagina = usePagina(filas, campaignId, undefined, `maestra.${campaignId}`);
+
+  /** Por sesión (cada creador con lo suyo) o todas las peticiones juntas. */
+  const [vista, setVista] = useRecordado<"sesiones" | "peticiones">(
+    `maestra.vista.${campaignId}`,
+    "sesiones",
+  );
+
+  function revisar(sessionId: string, req: SessionRequirement, accion: "aprobar" | "cambios", nota: string) {
+    return llamar(
+      `/api/sesiones/${sessionId}/peticiones`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requirementId: req.id, accion, reviewNotes: nota }),
+      },
+      "No se pudo revisar.",
+    );
+  }
 
   const destinos = [
     { id: TODAS, label: "Todas las sesiones", hint: `${filas.length}` },
@@ -188,12 +209,32 @@ export function MasterSessionView({
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
         <section>
-          <SectionLabel>Sesiones</SectionLabel>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <p className="eyebrow">{vista === "sesiones" ? "Sesiones" : "Peticiones"}</p>
+            {filas.length > 0 && (
+              <Segmented
+                options={[
+                  { id: "sesiones", label: "Por creador" },
+                  { id: "peticiones", label: "Por fecha", count: todasPeticiones.length },
+                ]}
+                value={vista}
+                onChange={setVista}
+              />
+            )}
+          </div>
           {filas.length === 0 ? (
             <EmptyState
               icon={Users}
               title="Sin sesiones"
               description="Cada creador que contrates en la campaña tendrá aquí su sesión."
+            />
+          ) : vista === "peticiones" ? (
+            <ListaPeticiones
+              filas={filas}
+              ahora={ahora}
+              puedeEditar={puedeEditar}
+              ocupado={ocupado}
+              onRevisar={revisar}
             />
           ) : (
             <div className="space-y-3">
@@ -205,17 +246,7 @@ export function MasterSessionView({
                   ahora={ahora}
                   puedeEditar={puedeEditar}
                   ocupado={ocupado}
-                  onRevisar={(req, accion, nota) =>
-                    llamar(
-                      `/api/sesiones/${fila.session.id}/peticiones`,
-                      {
-                        method: "PATCH",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ requirementId: req.id, accion, reviewNotes: nota }),
-                      },
-                      "No se pudo revisar.",
-                    )
-                  }
+                  onRevisar={(req, accion, nota) => revisar(fila.session.id, req, accion, nota)}
                   onNuevaPeticion={() => setPeticion({ destino: fila.session.id, editando: null })}
                   onNuevoMaterial={() => setMaterial({ destino: fila.session.id })}
                 />
@@ -495,7 +526,7 @@ function TarjetaSesion({
                         {req.masterId && <Badge plain>Común</Badge>}
                       </span>
                       <span className="block truncate text-[12px] text-[var(--text-muted)]">
-                        {req.dueDate ? `Para el ${formatDate(req.dueDate)}` : "Sin fecha"}
+                        <Fecha iso={req.dueDate} tarde={esTarde} />
                         {req.url && (
                           <>
                             {" · "}
@@ -581,6 +612,134 @@ function TarjetaSesion({
             </div>
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------------- Todas las peticiones, por fecha ---------------- */
+
+/** La fecha de una petición, con su icono; en rojo si ya pasó. */
+function Fecha({ iso, tarde }: { iso: string | null; tarde: boolean }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 tabular-nums",
+        tarde ? "text-[var(--danger)]" : iso ? "text-[var(--text-muted)]" : "text-[var(--text-subtle)]",
+      )}
+    >
+      <CalendarDays size={12} className="shrink-0" />
+      {iso ? `Para el ${formatDate(iso)}` : "Sin fecha"}
+    </span>
+  );
+}
+
+/**
+ * Todas las peticiones de la campaña en una sola lista, de la fecha más
+ * próxima a la más lejana, y las que no tienen fecha al final.
+ *
+ * Por creador hay que abrir sesión por sesión para saber qué vence esta
+ * semana; aquí se ve de un vistazo y se aprueba sin salir de la maestra.
+ */
+function ListaPeticiones({
+  filas,
+  ahora,
+  puedeEditar,
+  ocupado,
+  onRevisar,
+}: {
+  filas: SesionFila[];
+  ahora: number;
+  puedeEditar: boolean;
+  ocupado: boolean;
+  onRevisar: (sessionId: string, req: SessionRequirement, accion: "aprobar" | "cambios", nota: string) => void;
+}) {
+  const [soloPendientes, setSoloPendientes] = useState(true);
+
+  const todas = filas
+    .flatMap((fila) => fila.session.requirements.map((req) => ({ req, fila })))
+    .filter(({ req }) => !soloPendientes || req.status !== "aprobado")
+    .sort((a, b) => {
+      if (!a.req.dueDate) return b.req.dueDate ? 1 : 0;
+      if (!b.req.dueDate) return -1;
+      return a.req.dueDate.localeCompare(b.req.dueDate);
+    });
+
+  return (
+    <div className="space-y-3">
+      <label className="flex w-fit cursor-pointer items-center gap-2 text-[12.5px] text-[var(--text-muted)]">
+        <input
+          type="checkbox"
+          checked={soloPendientes}
+          onChange={(e) => setSoloPendientes(e.target.checked)}
+          className="accent-[var(--accent)]"
+        />
+        Ocultar las aprobadas
+      </label>
+
+      {todas.length === 0 ? (
+        <p className="rounded-[var(--r-card)] border border-[var(--line)] px-4 py-6 text-center text-[12.5px] text-[var(--text-muted)]">
+          {soloPendientes ? "Todo aprobado. No queda nada pendiente." : "Todavía no hay peticiones."}
+        </p>
+      ) : (
+        <ul className="divide-y divide-[var(--line)] overflow-hidden rounded-[var(--r-card)] border border-[var(--line)] bg-[var(--surface)]">
+          {todas.map(({ req, fila }) => {
+            const estado = REQUIREMENT_STATUS[req.status];
+            const esTarde = atrasada(req, ahora);
+            const nombre = fila.creator?.name ?? fila.session.name;
+            return (
+              <li key={req.id} className="flex items-center gap-3 px-4 py-2.5">
+                <Avatar src={fila.creator?.avatarUrl ?? null} name={nombre} size={28} />
+                <span className="min-w-0 flex-1">
+                  <Link
+                    href={`/sesiones/${fila.session.id}`}
+                    className="flex items-center gap-1.5 hover:text-[var(--accent)]"
+                  >
+                    <span className="truncate text-[13px] font-medium">{req.title}</span>
+                    {req.masterId && <Badge plain>Común</Badge>}
+                  </Link>
+                  <span className="flex min-w-0 items-center gap-2 text-[12px] text-[var(--text-muted)]">
+                    <span className="truncate">{nombre}</span>
+                    <span aria-hidden>·</span>
+                    <Fecha iso={req.dueDate} tarde={esTarde} />
+                    {req.url && (
+                      <>
+                        <span aria-hidden>·</span>
+                        <a href={req.url} target="_blank" rel="noreferrer" className="shrink-0 hover:text-[var(--accent)]">
+                          ver entrega
+                        </a>
+                      </>
+                    )}
+                  </span>
+                </span>
+
+                <Badge tone={esTarde ? "danger" : estado.tone}>{esTarde ? "Atrasado" : estado.label}</Badge>
+
+                {puedeEditar && req.status === "enviado" && (
+                  <span className="flex shrink-0 gap-0.5">
+                    <IconoBoton
+                      etiqueta={`Aprobar ${req.title}`}
+                      disabled={ocupado}
+                      onClick={() => onRevisar(fila.session.id, req, "aprobar", "")}
+                    >
+                      <Check size={14} />
+                    </IconoBoton>
+                    <IconoBoton
+                      etiqueta={`Pedir cambios en ${req.title}`}
+                      disabled={ocupado}
+                      onClick={() => {
+                        const nota = window.prompt(`¿Qué tiene que cambiar ${nombre}?`);
+                        if (nota) onRevisar(fila.session.id, req, "cambios", nota);
+                      }}
+                    >
+                      <RotateCcw size={13} />
+                    </IconoBoton>
+                  </span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
       )}
     </div>
   );

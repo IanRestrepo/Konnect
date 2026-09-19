@@ -4,10 +4,12 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  CalendarDays,
   Check,
   Copy,
   ExternalLink,
   FileText,
+  GripVertical,
   Link2,
   ListChecks,
   LoaderCircle,
@@ -40,8 +42,8 @@ import {
   SESSION_ITEM_KIND,
   SESSION_STATUS,
 } from "@/lib/labels";
-import type { CollabSession, PortalRole, SessionItemKind } from "@/lib/types";
-import { formatCompact, formatDate } from "@/lib/utils";
+import type { CollabSession, PortalRole, SessionItemKind, SessionRequirement } from "@/lib/types";
+import { cn, formatCompact, formatDate } from "@/lib/utils";
 import { BackLink } from "@/components/ui/back-link";
 
 const PETICION_VACIA = {
@@ -106,6 +108,39 @@ export function SessionDetail({
   const [peticion, setPeticion] = useState({ ...PETICION_VACIA });
 
   const abierta = session.status === "abierta";
+
+  /*
+   * Orden de las peticiones mientras se arrastra y hasta que el servidor
+   * contesta. Va atado a la lista que llegó del servidor (`para`): cuando
+   * llega la nueva tras guardar, deja de aplicarse solo, sin efectos.
+   */
+  const idsServidor = session.requirements.map((r) => r.id).join(",");
+  const [ordenLocal, setOrdenLocal] = useState<{ para: string; ids: string[] } | null>(null);
+  const [arrastrando, setArrastrando] = useState<string | null>(null);
+  const [sobre, setSobre] = useState<string | null>(null);
+  const peticiones =
+    ordenLocal && ordenLocal.para === idsServidor
+      ? ordenLocal.ids
+          .map((id) => session.requirements.find((r) => r.id === id))
+          .filter((r): r is SessionRequirement => Boolean(r))
+      : session.requirements;
+
+  function soltarEn(destino: string) {
+    const origen = arrastrando;
+    setArrastrando(null);
+    setSobre(null);
+    if (!origen || origen === destino) return;
+    const ids = peticiones.map((r) => r.id).filter((id) => id !== origen);
+    ids.splice(ids.indexOf(destino), 0, origen);
+    setOrdenLocal({ para: idsServidor, ids });
+    void llamar(
+      `/api/sesiones/${session.id}/peticiones`,
+      json({ orden: ids }, "PUT"),
+      "No se pudo guardar el orden.",
+    ).then((ok) => {
+      if (!ok) setOrdenLocal(null);
+    });
+  }
 
   /** El enlace personal de un acceso: el del portal con su llave dentro. */
   const enlaceDe = (code: string) => `${portalUrl}?acceso=${encodeURIComponent(code)}`;
@@ -309,17 +344,54 @@ export function SessionDetail({
             />
           ) : (
             <ListBox>
-              {session.requirements.map((req) => {
+              {peticiones.map((req) => {
                 const kind = SESSION_ITEM_KIND[req.kind];
                 const estado = ESTADO_PETICION[req.status];
+                const tarde = atrasada(req.dueDate, req.status);
                 return (
-                  <ListRow
+                  // Se arrastra la fila entera; el asa es solo la pista visual.
+                  // El orden es el que ve el creador en su portal.
+                  <div
                     key={req.id}
+                    draggable={puedeEditar}
+                    onDragStart={(e) => {
+                      e.dataTransfer.effectAllowed = "move";
+                      setArrastrando(req.id);
+                    }}
+                    onDragOver={(e) => {
+                      if (!arrastrando) return;
+                      e.preventDefault();
+                      if (sobre !== req.id) setSobre(req.id);
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      soltarEn(req.id);
+                    }}
+                    onDragEnd={() => {
+                      setArrastrando(null);
+                      setSobre(null);
+                    }}
+                    className={cn(
+                      "transition",
+                      arrastrando === req.id && "opacity-40",
+                      sobre === req.id && arrastrando !== req.id && "shadow-[inset_0_2px_0_var(--accent)]",
+                    )}
+                  >
+                  <ListRow
                     chevron={false}
                     leading={
-                      <RowIcon>
-                        <ListChecks size={17} strokeWidth={1.75} />
-                      </RowIcon>
+                      <span className="flex items-center gap-1.5">
+                        {puedeEditar && peticiones.length > 1 && (
+                          <GripVertical
+                            size={15}
+                            className="shrink-0 cursor-grab text-[var(--text-subtle)]"
+                            aria-label="Arrastra para cambiar el orden"
+                          />
+                        )}
+                        <RowIcon>
+                          <ListChecks size={17} strokeWidth={1.75} />
+                        </RowIcon>
+                      </span>
                     }
                     title={req.title}
                     subtitle={
@@ -329,7 +401,6 @@ export function SessionDetail({
                         req.masterId ? "Común a la campaña" : null,
                         kind.label,
                         req.steps.length ? `${req.steps.length} pasos` : null,
-                        req.dueDate ? `para el ${formatDate(req.dueDate)}` : null,
                         req.submittedAt ? `entregado ${formatDate(req.submittedAt)}` : null,
                       ]
                         .filter(Boolean)
@@ -337,6 +408,17 @@ export function SessionDetail({
                     }
                     trailing={
                       <span className="flex items-center gap-2">
+                        {/* La fecha a la vista y no escondida en el subtítulo,
+                            que se corta en cuanto la fila se estrecha. */}
+                        <span
+                          className={cn(
+                            "hidden items-center gap-1 text-[12px] tabular-nums sm:inline-flex",
+                            tarde ? "text-[var(--danger)]" : req.dueDate ? "text-[var(--text-muted)]" : "text-[var(--text-subtle)]",
+                          )}
+                        >
+                          <CalendarDays size={13} />
+                          {req.dueDate ? formatDate(req.dueDate) : "Sin fecha"}
+                        </span>
                         {req.url && (
                           <a
                             href={req.url}
@@ -348,7 +430,7 @@ export function SessionDetail({
                             <ExternalLink size={14} />
                           </a>
                         )}
-                        {atrasada(req.dueDate, req.status) ? (
+                        {tarde ? (
                           <Badge tone="danger">Atrasado</Badge>
                         ) : (
                           <Badge tone={estado.tone}>{estado.label}</Badge>
@@ -396,6 +478,7 @@ export function SessionDetail({
                       </span>
                     }
                   />
+                  </div>
                 );
               })}
             </ListBox>
