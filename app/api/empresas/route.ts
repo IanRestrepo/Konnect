@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { createCompany, newId } from "@/lib/store";
+import { createCompany, newId, setCompanyContactFields } from "@/lib/store";
 import { getSession } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
 
@@ -27,6 +27,11 @@ const schema = z.object({
     .default({}),
   status: z.enum(["activo", "prospecto", "inactivo"]).default("prospecto"),
   notes: z.string().default(""),
+  /** Discord, WeChat… Los vacíos se descartan. */
+  contactFields: z
+    .array(z.object({ label: z.string().max(40), value: z.string().max(300) }))
+    .max(30)
+    .default([]),
 });
 
 export async function POST(request: Request) {
@@ -48,8 +53,9 @@ export async function POST(request: Request) {
   }
 
   // El contacto del alta se guarda además como contacto principal.
+  const { contactFields, ...datos } = parsed.data;
   const company = await createCompany({
-    ...parsed.data,
+    ...datos,
     contactFields: [],
     contacts: parsed.data.contactName.trim()
       ? [
@@ -65,6 +71,9 @@ export async function POST(request: Request) {
         ]
       : [],
   });
+
+  const campos = contactFields.filter((f) => f.label.trim());
+  if (campos.length > 0) await setCompanyContactFields(company.id, campos);
 
   revalidatePath("/empresas");
   revalidatePath("/");

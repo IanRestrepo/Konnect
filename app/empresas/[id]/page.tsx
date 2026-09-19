@@ -14,7 +14,12 @@ import { ContactCard } from "@/components/creators/contact-card";
 import { LinkedNotes } from "@/components/notes/linked-notes";
 import { EditCompanyButton } from "@/components/companies/edit-company-dialog";
 import { campaignMetrics, companyCampaigns, getCampaigns, getCompany } from "@/lib/data";
-import { CAMPAIGN_OBJECTIVE, CAMPAIGN_STATUS, COMPANY_STATUS } from "@/lib/labels";
+import {
+  CAMPAIGN_OBJECTIVE,
+  CAMPAIGN_STATUS,
+  COMPANY_CONTACT_SUGGESTIONS,
+  COMPANY_STATUS,
+} from "@/lib/labels";
 import { companyInvestmentSeries, trend, viewsSeries } from "@/lib/series";
 import { formatCompact, formatDate, formatMoney } from "@/lib/utils";
 import { BackLink } from "@/components/ui/back-link";
@@ -25,6 +30,44 @@ const SOCIAL_LABEL: Record<string, string> = {
   youtube: "YouTube",
   linkedin: "LinkedIn",
 };
+
+/**
+ * Enlace y texto corto de una red de la empresa.
+ *
+ * Se guarda lo que se pegó —a veces el @, a veces la dirección entera con
+ * parámetros—, y enseñarlo tal cual llenaba la cabecera de URLs que además
+ * había que copiar a mano. Aquí se abre con un clic y se lee solo el nombre.
+ */
+function enlaceRed(red: string, valor: string): { href: string; texto: string } {
+  const v = valor.trim();
+  let href = v;
+  if (!/^https?:\/\//i.test(v)) {
+    const limpio = v.replace(/^@/, "").replace(/^\/+/, "");
+    href =
+      red === "linkedin"
+        ? `https://www.linkedin.com/${limpio.includes("/") ? limpio : `company/${limpio}`}`
+        : red === "youtube"
+          ? `https://youtube.com/@${limpio}`
+          : red === "tiktok"
+            ? `https://tiktok.com/@${limpio}`
+            : `https://instagram.com/${limpio}`;
+  }
+
+  let texto = v;
+  try {
+    const partes = new URL(href).pathname.split("/").filter(Boolean);
+    // En LinkedIn el nombre va después de «company» o «in»; el resto de la
+    // ruta son pestañas de la página.
+    const i = partes.findIndex((p) => ["company", "in", "c", "user"].includes(p));
+    const nombre = i >= 0 ? partes[i + 1] : (partes.find((p) => p.startsWith("@")) ?? partes[0]);
+    // Un canal de YouTube por id (UC…) no tiene nombre legible.
+    if (partes[0] === "channel") texto = "Ver canal";
+    else if (nombre) texto = nombre.startsWith("@") || red === "linkedin" ? nombre : `@${nombre}`;
+  } catch {
+    // Dirección rara: se enseña lo que se guardó.
+  }
+  return { href, texto };
+}
 
 export default async function EmpresaPage({ params }: { params: Promise<{ id: string }> }) {
   await requirePermission("ver_empresas");
@@ -72,11 +115,23 @@ export default async function EmpresaPage({ params }: { params: Promise<{ id: st
           />
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <Badge tone={status.tone}>{status.label}</Badge>
-            {socials.map(([key, value]) => (
-              <Badge key={key} plain>
-                {SOCIAL_LABEL[key] ?? key} {value}
-              </Badge>
-            ))}
+            {socials.map(([key, value]) => {
+              const { href, texto } = enlaceRed(key, String(value));
+              return (
+                <a
+                  key={key}
+                  href={href}
+                  target="_blank"
+                  rel="noreferrer"
+                  title={href}
+                  className="inline-flex h-6 max-w-64 items-center gap-1.5 rounded-[var(--r-pill)] border border-[var(--line)] px-2.5 text-[12px] text-[var(--text-muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                >
+                  <span className="font-medium text-[var(--text)]">{SOCIAL_LABEL[key] ?? key}</span>
+                  <span className="truncate">{texto}</span>
+                  <ExternalLink size={11} className="shrink-0" />
+                </a>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -152,6 +207,7 @@ export default async function EmpresaPage({ params }: { params: Promise<{ id: st
             phone={company.phone}
             createdAt={company.createdAt}
             fields={company.contactFields}
+            sugerencias={COMPANY_CONTACT_SUGGESTIONS}
           />
 
           <LinkedNotes companyId={company.id} />

@@ -39,6 +39,7 @@ export function ContactCard({
   phone,
   createdAt,
   fields,
+  sugerencias,
 }: {
   /** Creador al que pertenece. Se ignora si llega `endpoint`. */
   creatorId?: string;
@@ -50,6 +51,8 @@ export function ContactCard({
   phone: string;
   createdAt: string;
   fields: ContactField[];
+  /** Atajos del editor; ver `ContactFieldsEditor`. */
+  sugerencias?: readonly string[];
 }) {
   const router = useRouter();
   const can = useCan();
@@ -166,7 +169,7 @@ export function ContactCard({
 
       {editando && (
         <div className="border-t border-[var(--line)] p-4">
-          <ContactFieldsEditor fields={borrador} onChange={setBorrador} />
+          <ContactFieldsEditor fields={borrador} onChange={setBorrador} sugerencias={sugerencias} />
         </div>
       )}
     </Card>

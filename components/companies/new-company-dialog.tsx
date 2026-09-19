@@ -3,7 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { CompanyKindField } from "@/components/companies/company-kind-field";
-import type { CompanyKind } from "@/lib/types";
+import type { CompanyKind, ContactField } from "@/lib/types";
+import { ContactFieldsEditor } from "@/components/creators/contact-fields-editor";
+import { COMPANY_CONTACT_SUGGESTIONS } from "@/lib/labels";
 import { LoaderCircle, TriangleAlert } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
@@ -42,6 +44,7 @@ const EMPTY = {
 export function NewCompanyDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const router = useRouter();
   const [form, setForm] = useState({ ...EMPTY });
+  const [contactFields, setContactFields] = useState<ContactField[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,6 +54,7 @@ export function NewCompanyDialog({ open, onClose }: { open: boolean; onClose: ()
 
   function close() {
     setForm({ ...EMPTY });
+    setContactFields([]);
     setError(null);
     setSaving(false);
     onClose();
@@ -84,6 +88,9 @@ export function NewCompanyDialog({ open, onClose }: { open: boolean; onClose: ()
             linkedin: form.linkedin.trim() || undefined,
           },
           notes: form.notes.trim(),
+          contactFields: contactFields
+            .filter((f) => f.label.trim())
+            .map((f) => ({ label: f.label.trim(), value: f.value.trim() })),
         }),
       });
       const data = await res.json();
@@ -201,6 +208,12 @@ export function NewCompanyDialog({ open, onClose }: { open: boolean; onClose: ()
             />
           </div>
         </div>
+
+        <ContactFieldsEditor
+          fields={contactFields}
+          onChange={setContactFields}
+          sugerencias={COMPANY_CONTACT_SUGGESTIONS}
+        />
 
         <div>
           <Label>Redes sociales</Label>

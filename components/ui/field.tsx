@@ -8,11 +8,23 @@ import { cn } from "@/lib/utils";
  * apenas, que es lo que hace que un formulario parezca sin terminar.
  */
 const base =
-  "w-full rounded-[var(--r-control)] border border-[var(--line)] bg-[var(--surface-2)] px-3.5 text-[13.5px] text-[var(--text)] " +
+  "rounded-[var(--r-control)] border border-[var(--line)] bg-[var(--surface-2)] px-3.5 text-[13.5px] text-[var(--text)] " +
   "placeholder:text-[var(--text-subtle)] outline-none transition-[border-color,box-shadow,background-color] " +
   "hover:border-[var(--line-strong)] " +
   "focus:border-[var(--accent)] focus:bg-[var(--surface)] focus:shadow-[0_0_0_3px_var(--accent-soft)] " +
   "disabled:cursor-not-allowed disabled:opacity-50";
+
+/**
+ * `w-full` salvo que quien lo usa ponga su propio ancho.
+ *
+ * `cn` solo junta clases, no resuelve choques: con `w-full` en la base y
+ * `w-36` desde fuera, ganaba la que Tailwind escribe más tarde en la hoja
+ * —`w-full`— y el campo de «Otros contactos» se comía la fila entera,
+ * empujando el valor fuera del diálogo.
+ */
+function ancho(className: string | undefined) {
+  return /(^|\s)(w-|flex-1\b)/.test(className ?? "") ? "" : "w-full";
+}
 
 export function Label({ className, ...props }: React.LabelHTMLAttributes<HTMLLabelElement>) {
   return (
@@ -27,7 +39,7 @@ export function Label({ className, ...props }: React.LabelHTMLAttributes<HTMLLab
 }
 
 export function Input({ className, ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
-  return <input className={cn(base, "h-10", className)} {...props} />;
+  return <input className={cn(base, ancho(className), "h-10", className)} {...props} />;
 }
 
 export function Textarea({
@@ -35,13 +47,18 @@ export function Textarea({
   ...props
 }: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
   // Sin agarradera de redimensionado: crecía en diagonal y se veía descuidado.
-  return <textarea className={cn(base, "min-h-18 resize-none py-2.5 leading-relaxed", className)} {...props} />;
+  return (
+    <textarea
+      className={cn(base, ancho(className), "min-h-18 resize-none py-2.5 leading-relaxed", className)}
+      {...props}
+    />
+  );
 }
 
 export function Select({ className, ...props }: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <select
-      className={cn(base, "h-10 cursor-pointer appearance-none pr-9", className)}
+      className={cn(base, ancho(className), "h-10 cursor-pointer appearance-none pr-9", className)}
       style={{
         backgroundImage:
           "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23948a86' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")",
@@ -75,7 +92,7 @@ export function InputWithIcon({
       <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-[var(--text-subtle)]">
         {icon}
       </span>
-      <input className={cn(base, "h-10 pl-9.5", className)} {...props} />
+      <input className={cn(base, ancho(className), "h-10 pl-9.5", className)} {...props} />
     </div>
   );
 }

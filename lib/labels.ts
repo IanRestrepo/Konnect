@@ -150,6 +150,11 @@ export const CONTACT_FIELD_SUGGESTIONS = [
   "Skype",
 ] as const;
 
+/** Las mismas, sin el correo del mánager: una empresa no tiene mánager. */
+export const COMPANY_CONTACT_SUGGESTIONS = CONTACT_FIELD_SUGGESTIONS.filter(
+  (s) => s !== "Correo del mánager",
+);
+
 export const COMPANY_STATUS: Record<string, { label: string; tone: Tone }> = {
   activo: { label: "Activo", tone: "ok" },
   prospecto: { label: "Prospecto", tone: "info" },

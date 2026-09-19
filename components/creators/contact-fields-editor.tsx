@@ -24,17 +24,20 @@ export function ContactFieldsEditor({
   fields,
   onChange,
   className,
+  sugerencias: catalogo = CONTACT_FIELD_SUGGESTIONS,
 }: {
   fields: ContactField[];
   onChange: (fields: ContactField[]) => void;
   className?: string;
+  /** Atajos que se ofrecen. Por defecto, los de un creador. */
+  sugerencias?: readonly string[];
 }) {
   function cambiar(i: number, patch: Partial<ContactField>) {
     onChange(fields.map((f, j) => (j === i ? { ...f, ...patch } : f)));
   }
 
   // Sólo se ofrecen las que aún no están puestas.
-  const sugerencias = CONTACT_FIELD_SUGGESTIONS.filter(
+  const sugerencias = catalogo.filter(
     (s) => !fields.some((f) => f.label.trim().toLowerCase() === s.toLowerCase()),
   );
 
