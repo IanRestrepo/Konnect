@@ -29,6 +29,7 @@ export function Picker<T extends string>({
   placeholder = "Selecciona…",
   disabled,
   className,
+  size = "md",
 }: {
   value: T;
   onChange: (value: T) => void;
@@ -37,6 +38,8 @@ export function Picker<T extends string>({
   placeholder?: string;
   disabled?: boolean;
   className?: string;
+  /** `sm` para ponerlo dentro de una fila de tabla, junto a texto pequeño. */
+  size?: "md" | "sm";
 }) {
   const [open, setOpen] = useState(false);
   const [marcado, setMarcado] = useState(0);
@@ -151,7 +154,8 @@ export function Picker<T extends string>({
         aria-controls={listaId}
         aria-haspopup="listbox"
         className={cn(
-          "flex h-10 w-full items-center justify-between gap-2 rounded-[var(--r-control)] border border-[var(--line)] bg-[var(--surface-2)] px-3 text-left text-[13.5px] transition",
+          "flex w-full items-center justify-between gap-2 rounded-[var(--r-control)] border border-[var(--line)] bg-[var(--surface-2)] text-left transition",
+          size === "sm" ? "h-7 px-2.5 text-[12px]" : "h-10 px-3 text-[13.5px]",
           "focus:border-[var(--line-strong)] focus:outline-none",
           disabled
             ? "cursor-not-allowed opacity-50"

@@ -1,6 +1,7 @@
 import type {
   Campaign,
   Creator,
+  CreatorPackage,
   CreatorRate,
   Deliverable,
   DeliverableType,
@@ -183,6 +184,48 @@ export function tarifaCanal(
 ): string {
   const tarifa = rateFor(creator, platform, type, channelId);
   return tarifa > 0 ? formatMoney(tarifa, creator.currency) : "sin tarifa";
+}
+
+/**
+ * Convierte un paquete del creador en sus piezas, con el precio repartido.
+ *
+ * El precio se reparte en proporción a lo que valdría cada pieza suelta a su
+ * tarifa —un video dedicado se lleva más que una historia—, y a partes iguales
+ * si no tiene tarifas. El último céntimo va a la última pieza para que la suma
+ * dé justo el precio del paquete. El cobro al cliente de cada pieza lleva la
+ * comisión de la agencia encima, como cualquier otra.
+ */
+export function repartirPaquete(
+  creator: Pick<Creator, "rates" | "rateVideo" | "rateShort" | "rateIntegration">,
+  pkg: Pick<CreatorPackage, "price" | "items">,
+  margen: number,
+): {
+  platform: SocialPlatform;
+  type: DeliverableType;
+  customType: string;
+  creatorCost: number;
+  clientPrice: number;
+}[] {
+  const piezas = pkg.items.flatMap((it) => Array.from({ length: it.qty }, () => it));
+  if (piezas.length === 0) return [];
+  const pesos = piezas.map((it) => rateFor(creator, it.platform, it.type) || 1);
+  const suma = pesos.reduce((a, b) => a + b, 0);
+  let restante = pkg.price;
+
+  return piezas.map((it, k) => {
+    const costo =
+      k === piezas.length - 1
+        ? Math.round(restante * 100) / 100
+        : Math.round(((pkg.price * pesos[k]!) / suma) * 100) / 100;
+    restante -= costo;
+    return {
+      platform: it.platform,
+      type: it.type,
+      customType: it.customType ?? "",
+      creatorCost: costo,
+      clientPrice: costo > 0 ? Math.round(clientPriceForRate(costo, margen)) : 0,
+    };
+  });
 }
 
 /** Plataformas para las que el creador tiene al menos una tarifa cargada. */

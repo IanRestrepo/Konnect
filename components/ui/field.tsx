@@ -39,7 +39,9 @@ export function Label({ className, ...props }: React.LabelHTMLAttributes<HTMLLab
 }
 
 export function Input({ className, ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
-  return <input className={cn(base, ancho(className), "h-10", className)} {...props} />;
+  // El alto, igual que el ancho: solo si no viene uno de fuera.
+  const alto = /(^|\s)h-/.test(className ?? "") ? "" : "h-10";
+  return <input className={cn(base, ancho(className), alto, className)} {...props} />;
 }
 
 export function Textarea({

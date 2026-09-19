@@ -7,6 +7,7 @@ import {
   Eye,
   LoaderCircle,
   MousePointerClick,
+  Package,
   Plus,
   Rocket,
   Target,
@@ -39,18 +40,21 @@ import {
   clientPriceForRate,
   hasRateFor,
   rateFor,
+  repartirPaquete,
   tarifaCanal,
 } from "@/lib/pricing";
 import type {
   CampaignObjective,
   Company,
   Creator,
+  CreatorPackage,
   DeliverableKind,
   DeliverableType,
   SocialPlatform,
 } from "@/lib/types";
 import { cn, formatMoney } from "@/lib/utils";
 import { BackLink } from "@/components/ui/back-link";
+import { resumenPaquete } from "@/components/creators/packages-panel";
 
 const OBJECTIVES: {
   id: CampaignObjective;
@@ -105,6 +109,8 @@ type Linea = {
   clientPrice: string;
   /** Lo que cuesta el influencer. La resta es la ganancia bruta. */
   creatorCost: string;
+  /** Paquete del que salió la pieza, solo para enseñarlo. */
+  paquete?: string;
 };
 
 export function NewCampaignForm({
@@ -281,6 +287,30 @@ export function NewCampaignForm({
         };
       }),
     );
+  }
+
+  /**
+   * Contrata un paquete del creador: lo convierte en sus piezas, con el precio
+   * repartido (`repartirPaquete`). Pulsarlo otra vez lo quita.
+   */
+  function alternarPaquete(creator: Creator, pkg: CreatorPackage) {
+    const delPaquete = (l: Linea) => l.creatorId === creator.id && l.paquete === pkg.name;
+    if (lineas.some(delPaquete)) {
+      setLineas((prev) => prev.filter((l) => !delPaquete(l)));
+      return;
+    }
+
+    const nuevas: Linea[] = repartirPaquete(creator, pkg, comisionBase).map((p) => ({
+      creatorId: creator.id,
+      platform: p.platform,
+      type: p.type,
+      customType: p.customType,
+      channelId: "",
+      clientPrice: p.clientPrice > 0 ? String(p.clientPrice) : "",
+      creatorCost: p.creatorCost > 0 ? String(p.creatorCost) : "",
+      paquete: pkg.name,
+    }));
+    setLineas((prev) => [...prev, ...nuevas]);
   }
 
   function editarLinea(indice: number, patch: Partial<Linea>) {
@@ -760,8 +790,8 @@ export function NewCampaignForm({
                         const propia = hasRateFor(creator, platform, tipo);
 
                         return (
+                          <div key={creator.id} className="space-y-1">
                           <button
-                            key={creator.id}
                             onClick={() => alternar(creator)}
                             className={cn(
                               "flex w-full items-center gap-3 rounded-[var(--r-control)] border p-3 text-left transition",
@@ -802,6 +832,34 @@ export function NewCampaignForm({
                               {active && <Check size={13} />}
                             </span>
                           </button>
+                          {/* Sus paquetes, para contratarlos de una vez. */}
+                          {creator.packages.length > 0 && (
+                            <div className="flex flex-wrap items-center gap-1.5 pl-[60px]">
+                              {creator.packages.map((pkg) => {
+                                const puesto = lineas.some(
+                                  (l) => l.creatorId === creator.id && l.paquete === pkg.name,
+                                );
+                                return (
+                                  <button
+                                    key={pkg.id}
+                                    type="button"
+                                    onClick={() => alternarPaquete(creator, pkg)}
+                                    title={resumenPaquete(pkg.items)}
+                                    className={cn(
+                                      "inline-flex h-7 items-center gap-1.5 rounded-[var(--r-pill)] border px-2.5 text-[12px] transition",
+                                      puesto
+                                        ? "border-transparent bg-[var(--accent-soft)] text-[var(--accent)]"
+                                        : "border-dashed border-[var(--line-strong)] text-[var(--text-muted)] hover:border-[var(--accent)] hover:text-[var(--accent)]",
+                                    )}
+                                  >
+                                    {puesto ? <Check size={12} /> : <Package size={12} />}
+                                    Paquete «{pkg.name}» · {formatMoney(pkg.price, creator.currency)}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                          </div>
                         );
                       })}
                       <Paginador {...pagina} className="pt-2" />
@@ -813,137 +871,155 @@ export function NewCampaignForm({
           )}
 
           {/* ---------------- Paso 3: precios y cierre ---------------- */}
+          {/* Compacto: una fila por pieza, agrupadas por creador. Antes cada
+              pieza era un bloque de cuatro alturas —nombre, canal, dos campos
+              y la cuenta— y con doce piezas había que bajar tres pantallas
+              para ver el total. */}
           {step === 2 && (
-            <>
-              <Card>
-                <CardHeader>
-                  <CardTitle>Lo pactado con cada creador</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {lineas.length === 0 ? (
-                    <p className="py-6 text-center text-[13px] text-[var(--text-muted)]">
-                      Todavía no elegiste a nadie. Vuelve al paso anterior.
-                    </p>
-                  ) : (
-                    <ul className="divide-y divide-[var(--line)]">
-                      {lineas.map((linea, i) => {
-                        const creator = creators.find((c) => c.id === linea.creatorId);
-                        if (!creator) return null;
-                        const { cobro, creador, ganancia } = cuentas(linea);
-
-                        return (
-                          <li key={`${linea.creatorId}-${linea.platform}-${i}`} className="py-3">
-                            <div className="flex items-center gap-3">
-                              <Avatar src={creator.avatarUrl} name={creator.name} size={30} />
-                              <div className="min-w-0 flex-1">
-                                <p className="truncate text-[13.5px]">{creator.name}</p>
-                                <p className="text-[12px] text-[var(--text-muted)]">
-                                  {PLATFORM_LABEL[linea.platform]} ·{" "}
-                                  {piezaLabel(linea.platform, linea.type, linea.customType)}
-                                </p>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => setLineas((p) => p.filter((_, j) => j !== i))}
-                                className="text-[var(--text-subtle)] hover:text-[var(--danger)]"
-                                title="Quitar"
+            <Card>
+              <CardHeader>
+                <CardTitle>Lo pactado con cada creador</CardTitle>
+                <span className="text-[12px] text-[var(--text-muted)]">
+                  {lineas.length} pieza{lineas.length === 1 ? "" : "s"}
+                </span>
+              </CardHeader>
+              {lineas.length === 0 ? (
+                <p className="px-5 pb-6 text-center text-[13px] text-[var(--text-muted)]">
+                  Todavía no elegiste a nadie. Vuelve al paso anterior.
+                </p>
+              ) : (
+                <div className="overflow-x-auto border-t border-[var(--line)]">
+                  <div className="min-w-[640px]">
+                    <div className="grid grid-cols-[minmax(0,1fr)_8.5rem_8.5rem_7rem_2rem] items-center gap-2 px-4 py-2 text-[11.5px] font-medium tracking-[0.01em] text-[var(--text-subtle)]">
+                      <span>Pieza</span>
+                      <span>Pago del cliente</span>
+                      <span>Costo del influencer</span>
+                      <span className="text-right">Ganancia</span>
+                      <span />
+                    </div>
+                    {[...new Set(lineas.map((l) => l.creatorId))].map((creatorId) => {
+                      const creator = creators.find((c) => c.id === creatorId);
+                      if (!creator) return null;
+                      const suyas = lineas
+                        .map((linea, i) => ({ linea, i }))
+                        .filter(({ linea }) => linea.creatorId === creatorId);
+                      const subtotal = suyas.reduce((s, { linea }) => s + cuentas(linea).ganancia, 0);
+                      return (
+                        <section key={creatorId} className="border-t border-[var(--line)]">
+                          <header className="flex items-center gap-2.5 bg-[var(--surface-2)] px-4 py-2">
+                            <Avatar src={creator.avatarUrl} name={creator.name} size={24} />
+                            <span className="min-w-0 flex-1 truncate text-[13px] font-medium">
+                              {creator.name}
+                              {creator.agency && (
+                                <span className="ml-2 text-[11.5px] font-normal text-[var(--text-muted)]">
+                                  vía {creator.agency.name}
+                                </span>
+                              )}
+                            </span>
+                            <span
+                              className={cn(
+                                "tabular text-[12px]",
+                                subtotal < 0 ? "text-[var(--danger)]" : "text-[var(--text-muted)]",
+                              )}
+                            >
+                              {formatMoney(subtotal, currency as "USD")} de ganancia
+                            </span>
+                          </header>
+                          {suyas.map(({ linea, i }) => {
+                            const { cobro, creador, ganancia } = cuentas(linea);
+                            const tarifa = rateFor(creator, linea.platform, linea.type, linea.channelId);
+                            const conCanales = linea.platform === "youtube" && creator.channels.length > 0;
+                            return (
+                              <div
+                                key={`${linea.creatorId}-${i}`}
+                                className="grid grid-cols-[minmax(0,1fr)_8.5rem_8.5rem_7rem_2rem] items-center gap-2 px-4 py-1.5"
                               >
-                                <X size={15} />
-                              </button>
-                            </div>
-
-                            {/* Solo si tiene canales adicionales en YouTube:
-                                en el resto de redes no hay dónde elegir. */}
-                            {linea.platform === "youtube" && creator.channels.length > 0 && (
-                              <div className="mt-2.5 pl-[42px]">
-                                <Label htmlFor={`canal-${i}`}>Canal</Label>
-                                <Picker
-                                  id={`canal-${i}`}
-                                  value={linea.channelId}
-                                  onChange={(v) => cambiarCanal(i, v)}
-                                  options={[
-                                    {
-                                      id: "",
-                                      label: creator.handle || "Canal principal",
-                                      hint: `Principal · ${tarifaCanal(creator, linea.platform, linea.type, "")}`,
-                                    },
-                                    ...creator.channels.map((c) => ({
-                                      id: c.id,
-                                      label: nombreCanal(c),
-                                      hint: tarifaCanal(creator, linea.platform, linea.type, c.id),
-                                    })),
-                                  ]}
-                                />
-                              </div>
-                            )}
-
-                            <div className="mt-2.5 grid gap-2 pl-[42px] sm:grid-cols-[1fr_1fr]">
-                              <div>
-                                <Label htmlFor={`cobro-${i}`}>Pago del cliente</Label>
+                                <span className="min-w-0">
+                                  <span className="block truncate text-[13px]">
+                                    {piezaLabel(linea.platform, linea.type, linea.customType)}
+                                    <span className="text-[var(--text-muted)]"> · {PLATFORM_LABEL[linea.platform]}</span>
+                                  </span>
+                                  {(linea.paquete || conCanales || (creador > 0 && tarifa > creador)) && (
+                                    <span className="flex min-w-0 items-center gap-2 text-[11.5px] text-[var(--text-subtle)]">
+                                      {linea.paquete && <span className="truncate">Paquete «{linea.paquete}»</span>}
+                                      {conCanales && (
+                                        <Picker
+                                          value={linea.channelId}
+                                          onChange={(v) => cambiarCanal(i, v)}
+                                          size="sm"
+                                          className="max-w-44"
+                                          options={[
+                                            {
+                                              id: "",
+                                              label: creator.handle || "Canal principal",
+                                              hint: `Principal · ${tarifaCanal(creator, linea.platform, linea.type, "")}`,
+                                            },
+                                            ...creator.channels.map((c) => ({
+                                              id: c.id,
+                                              label: nombreCanal(c),
+                                              hint: tarifaCanal(creator, linea.platform, linea.type, c.id),
+                                            })),
+                                          ]}
+                                        />
+                                      )}
+                                      {creador > 0 && tarifa > creador && !linea.paquete && (
+                                        <span className="truncate text-[var(--warn)]">
+                                          bajo su tarifa ({formatMoney(tarifa, creator.currency)})
+                                        </span>
+                                      )}
+                                    </span>
+                                  )}
+                                </span>
                                 <Importe
                                   id={`cobro-${i}`}
                                   value={linea.clientPrice}
                                   onChange={(v) => editarLinea(i, { clientPrice: v })}
                                   placeholder="0"
+                                  compacto
                                 />
-                              </div>
-
-                              <div>
-                                <Label htmlFor={`costo-${i}`}>Costo del influencer</Label>
                                 <Importe
                                   id={`costo-${i}`}
                                   value={linea.creatorCost}
                                   onChange={(v) => editarLinea(i, { creatorCost: v })}
                                   placeholder="0"
+                                  compacto
                                 />
-                              </div>
-                            </div>
-
-                            {/* Las tres cifras a la vista: no debe quedar duda
-                                de a dónde va cada peso. */}
-                            <div className="mt-2.5 ml-[42px] flex flex-wrap items-center gap-x-2 gap-y-1 rounded-[var(--r-control)] bg-[var(--surface-2)] px-3 py-2 text-[12.5px]">
-                              <span className="tabular font-medium">
-                                {formatMoney(cobro, currency as "USD")}
-                              </span>
-                              <span className="text-[var(--text-subtle)]">&minus;</span>
-                              <span className="tabular font-medium">
-                                {formatMoney(creador, currency as "USD")}
-                              </span>
-                              <span className="text-[var(--text-subtle)]">=</span>
-                              <span className="text-[var(--text-muted)]">ganancia bruta</span>
-                              <span
-                                className={cn(
-                                  "tabular font-medium",
-                                  ganancia < 0 ? "text-[var(--danger)]" : "text-[var(--ok)]",
-                                )}
-                              >
-                                {formatMoney(ganancia, currency as "USD")}
-                              </span>
-                              {cobro > 0 && (
-                                <span className="text-[var(--text-subtle)]">
-                                  ({((ganancia / cobro) * 100).toFixed(0)}%)
-                                </span>
-                              )}
-                              {creador > 0 && rateFor(creator, linea.platform, linea.type, linea.channelId) > creador && (
-                                <span className="ml-auto text-[var(--warn)]">
-                                  por debajo de su tarifa (
-                                  {formatMoney(
-                                    rateFor(creator, linea.platform, linea.type, linea.channelId),
-                                    creator.currency,
+                                <span
+                                  className={cn(
+                                    "tabular text-right text-[13px] font-medium",
+                                    ganancia < 0 ? "text-[var(--danger)]" : "text-[var(--ok)]",
                                   )}
-                                  )
+                                  title={cobro > 0 ? `${((ganancia / cobro) * 100).toFixed(0)}% del cobro` : undefined}
+                                >
+                                  {formatMoney(ganancia, currency as "USD")}
                                 </span>
-                              )}
-                            </div>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  )}
-                </CardContent>
-              </Card>
-
-            </>
+                                <button
+                                  type="button"
+                                  onClick={() => setLineas((p) => p.filter((_, j) => j !== i))}
+                                  className="grid h-7 w-7 place-items-center rounded-[var(--r-chip)] text-[var(--text-subtle)] transition hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"
+                                  aria-label={`Quitar ${piezaLabel(linea.platform, linea.type, linea.customType)} de ${creator.name}`}
+                                >
+                                  <X size={14} />
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </section>
+                      );
+                    })}
+                    <div className="grid grid-cols-[minmax(0,1fr)_8.5rem_8.5rem_7rem_2rem] items-center gap-2 border-t border-[var(--line)] px-4 py-2.5 text-[13px] font-semibold">
+                      <span>Total</span>
+                      <span className="tabular">{formatMoney(totales.cliente, currency as "USD")}</span>
+                      <span className="tabular">{formatMoney(totales.creadores, currency as "USD")}</span>
+                      <span className="tabular text-right text-[var(--ok)]">
+                        {formatMoney(totales.agencia, currency as "USD")}
+                      </span>
+                      <span />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </Card>
           )}
 
           <div className="flex items-center justify-between">
@@ -1042,18 +1118,21 @@ function Importe({
   onChange,
   placeholder,
   className,
+  compacto,
 }: {
   id: string;
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   className?: string;
+  /** Más bajo, para las filas de la tabla de precios. */
+  compacto?: boolean;
 }) {
   return (
     <Input
       id={id}
       inputMode="decimal"
-      className={cn("tabular", className)}
+      className={cn("tabular", compacto && "h-8 text-[13px]", className)}
       value={value}
       placeholder={placeholder}
       onChange={(e) => {

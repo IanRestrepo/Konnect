@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, LoaderCircle, TriangleAlert, UserPlus } from "lucide-react";
+import { Check, LoaderCircle, Package, TriangleAlert, UserPlus } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
@@ -12,9 +12,18 @@ import { SearchInput } from "@/components/shell/toolbar";
 import { Paginador, usePagina } from "@/components/ui/pager";
 import { DeliverableTypeField } from "@/components/campaigns/deliverable-type-field";
 import { PLATFORM_LABEL, PLATFORMS, TAREAS, nombreCanal, piezaLabel } from "@/lib/socials";
-import { IMPORTE_MAXIMO, MARGEN_AGENCIA, clientPriceForRate, rateFor, tarifaCanal } from "@/lib/pricing";
+import {
+  IMPORTE_MAXIMO,
+  MARGEN_AGENCIA,
+  clientPriceForRate,
+  rateFor,
+  repartirPaquete,
+  tarifaCanal,
+} from "@/lib/pricing";
+import { resumenPaquete } from "@/components/creators/packages-panel";
 import type {
   Creator,
+  CreatorPackage,
   Currency,
   DeliverableKind,
   DeliverableType,
@@ -117,6 +126,39 @@ export function HireCreatorDialog({
   }
 
   const ganancia = (Number(cobro) || 0) - (Number(costo) || 0);
+
+  /**
+   * Contrata un paquete entero: una pieza por cada una de las suyas, con el
+   * precio repartido. Van de una en una porque cada alta abre o completa su
+   * sesión, y en paralelo dos altas podían crear dos sesiones al mismo creador.
+   */
+  async function contratarPaquete(pkg: CreatorPackage) {
+    if (!elegido) return;
+    const piezas = repartirPaquete(elegido, pkg, MARGEN_AGENCIA);
+    if (!window.confirm(`¿Contratar el paquete «${pkg.name}»? Son ${piezas.length} piezas.`)) return;
+
+    setGuardando(true);
+    setError(null);
+    try {
+      for (const p of piezas) {
+        const res = await fetch(`/api/campanas/${campaignId}/creadores`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ creatorId: elegido.id, channelId: "", ...p }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error ?? "No se pudo contratar el paquete completo.");
+      }
+      router.refresh();
+      cerrar();
+    } catch (e) {
+      // Lo que ya entró se queda: se refresca para que se vea qué falta.
+      router.refresh();
+      setError(e instanceof Error ? e.message : "Error inesperado");
+    } finally {
+      setGuardando(false);
+    }
+  }
 
   async function guardar() {
     if (!elegido) return;
@@ -227,6 +269,35 @@ export function HireCreatorDialog({
             <Paginador {...pagina} className="pt-1" />
           </div>
         </div>
+
+        {elegido && elegido.packages.length > 0 && (
+          <div>
+            <Label>Sus paquetes</Label>
+            <div className="space-y-1.5">
+              {elegido.packages.map((pkg) => (
+                <button
+                  key={pkg.id}
+                  type="button"
+                  disabled={guardando}
+                  onClick={() => contratarPaquete(pkg)}
+                  className="flex w-full items-center gap-3 rounded-[var(--r-control)] border border-dashed border-[var(--line-strong)] px-3 py-2 text-left transition hover:border-[var(--accent)] disabled:opacity-50"
+                >
+                  <Package size={15} className="shrink-0 text-[var(--text-subtle)]" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13px] font-medium">{pkg.name}</span>
+                    <span className="block truncate text-[12px] text-[var(--text-muted)]">
+                      {resumenPaquete(pkg.items)}
+                    </span>
+                  </span>
+                  <span className="tabular shrink-0 text-[13px] font-semibold">
+                    {formatMoney(pkg.price, elegido.currency)}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <FieldHint>Contrata todas sus piezas de una vez. O pacta una pieza suelta abajo.</FieldHint>
+          </div>
+        )}
 
         {elegido && (
           <>
