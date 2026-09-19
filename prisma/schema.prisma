@@ -165,6 +165,9 @@ model Creator {
   sessions       CollabSession[]
   apiConnections CreatorApiConnection[]
   campaignLeads  CampaignCreatorLead[]
+  agency         CreatorAgency?
+  statShots      CreatorStatShot[]
+  packages       CreatorPackage[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -207,10 +210,10 @@ model CreatorContactField {
   creator   Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
 
   /// Cómo lo llama la agencia: "Discord", "Telegram", "Correo del mánager".
-  label String
-  value String @default("")
+  label    String
+  value    String @default("")
   /// Orden en la ficha, tal y como lo dejó quien editó.
-  position Int @default(0)
+  position Int    @default(0)
 
   createdAt DateTime @default(now())
 
@@ -227,20 +230,24 @@ model CreatorBankAccount {
   creatorId String
   creator   Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
 
-  method PaymentMethod
+  method   PaymentMethod
   /// Cómo la llama la agencia: "Bancolombia principal", "PayPal personal".
-  label  String @default("")
-  holder String @default("")
+  label    String        @default("")
+  holder   String        @default("")
   /// Solo tiene sentido en transferencia.
-  bankName String @default("")
+  bankName String        @default("")
 
   /// Lo que hace falta para pagar: número de cuenta, correo o billetera.
   referenceEnc   String?
   referenceLast4 String?
   /// SWIFT, routing o red de la billetera.
-  routingEnc   String?
-  routingLast4 String?
-  notesEnc     String?
+  routingEnc     String?
+  routingLast4   String?
+  notesEnc       String?
+
+  /// La cuenta es de la agencia que representa al creador, no suya: cuando
+  /// hay agencia de por medio, el pago va a ella.
+  forAgency Boolean @default(false)
 
   position Int @default(0)
 
@@ -303,6 +310,77 @@ model SocialLink {
 /// se devuelve al cliente: la ficha sólo muestra los últimos 4 caracteres.
 /// Por ahora la única plataforma funcional es `youtube`; el modelo ya admite el
 /// resto para no volver a migrar cuando se activen.
+/// Agencia externa que representa al creador.
+///
+/// Tabla aparte y uno a uno: la mayoría de creadores no tiene agencia, y los
+/// que la tienen necesitan todo un contacto —con quién se negocia y a quién se
+/// paga—, no un nombre suelto en las notas. Las cuentas de cobro de la agencia
+/// viven con las del creador, marcadas con `forAgency`, para que sigan cifradas
+/// y detrás del mismo código.
+model CreatorAgency {
+  creatorId String  @id
+  creator   Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  name        String
+  /// Si el creador solo trabaja a través de ella.
+  exclusive   Boolean @default(true)
+  contactName String  @default("")
+  email       String  @default("")
+  phone       String  @default("")
+  website     String  @default("")
+  notes       String  @default("")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// Captura de las estadísticas del creador, subida a mano.
+///
+/// Es la alternativa cuando el creador no cede acceso a su API: se le piden
+/// pantallazos de su panel —alcance, audiencia por país, edades— y se guardan
+/// aquí, fechados, para poder enseñarlos y compararlos con los de meses atrás.
+model CreatorStatShot {
+  id        String  @id
+  creatorId String
+  creator   Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  url        String
+  fileName   String          @default("")
+  platform   SocialPlatform?
+  caption    String          @default("")
+  /// De cuándo son los datos de la captura, que no es cuándo se subió.
+  takenAt    DateTime?
+  uploadedBy String          @default("")
+
+  createdAt DateTime @default(now())
+
+  @@index([creatorId, createdAt])
+}
+
+/// Paquete predeterminado del creador: varias piezas por un precio cerrado.
+///
+/// `items` es JSON y no una tabla: el paquete se lee y se escribe siempre
+/// entero, y al contratarlo se copia en piezas normales de la campaña, así que
+/// nada consulta su contenido por separado.
+model CreatorPackage {
+  id        String  @id
+  creatorId String
+  creator   Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  name     String
+  /// Lo que recibe el creador por el paquete entero, en su moneda.
+  price    Decimal @default(0) @db.Decimal(12, 2)
+  /// [{ platform, type, customType, qty }]
+  items    Json
+  notes    String  @default("")
+  position Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([creatorId])
+}
+
 model CreatorApiConnection {
   id        String  @id
   creatorId String
@@ -418,16 +496,16 @@ model Campaign {
   createdById String?
   createdBy   User?   @relation("CampaignCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
-  deliverables   Deliverable[]
-  sessions       CollabSession[]
+  deliverables       Deliverable[]
+  sessions           CollabSession[]
   /// Lo que se manda a todas sus sesiones a la vez, desde la sesión maestra.
   masterRequirements CampaignRequirement[]
   masterMaterials    CampaignMaterial[]
   /// Lo que el cliente ha pagado de la campaña, cobro a cobro.
   clientPayments     CampaignPayment[]
-  members        CampaignMember[]
-  endedContracts CampaignCreatorEnd[]
-  creatorLeads   CampaignCreatorLead[]
+  members            CampaignMember[]
+  endedContracts     CampaignCreatorEnd[]
+  creatorLeads       CampaignCreatorLead[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -529,8 +607,8 @@ model Deliverable {
 
   /// Comprobante del pago al creador: la transferencia, el recibo de PayPal…
   /// Vive en Vercel Blob; aquí solo el enlace y con qué nombre se subió.
-  receiptUrl      String?
-  receiptName     String?
+  receiptUrl        String?
+  receiptName       String?
   receiptUploadedAt DateTime?
 
   // Datos públicos del video
@@ -615,8 +693,8 @@ model User {
   lastLoginAt  DateTime?
 
   /// Campañas que lleva y campañas en las que participa.
-  managedCampaigns Campaign[]       @relation("CampaignManager")
-  createdCampaigns Campaign[]       @relation("CampaignCreatedBy")
+  managedCampaigns Campaign[]            @relation("CampaignManager")
+  createdCampaigns Campaign[]            @relation("CampaignCreatedBy")
   campaignMembers  CampaignMember[]
   creatorLeads     CampaignCreatorLead[]
 
@@ -642,14 +720,14 @@ model AuditLog {
   actorName String
 
   /// Qué pasó, en llave estable: "campana.borrada", "pago.marcado"…
-  action String
+  action      String
   /// Sobre qué: "campaign", "creator", "session", "deliverable".
-  entity   String
-  entityId String
+  entity      String
+  entityId    String
   /// Cómo se llamaba en ese momento, por lo mismo que `actorName`.
   entityLabel String @default("")
   /// Detalle legible, ya redactado. Sale tal cual en la pantalla.
-  detail String @default("")
+  detail      String @default("")
 
   createdAt DateTime @default(now())
 
@@ -827,10 +905,10 @@ model Announcement {
 /// usaban ni obliga a reasignarlas de golpe. El catálogo manda en lo que se
 /// ofrece al elegir, no en lo que ya está escrito.
 model CreatorCategory {
-  id   String @id
-  name String @unique
+  id       String @id
+  name     String @unique
   /// Orden en el que se ofrece. Lo decide quien edita el catálogo.
-  position Int @default(0)
+  position Int    @default(0)
 
   createdAt DateTime @default(now())
 }
@@ -891,7 +969,7 @@ model SessionRequirement {
   /// Vive en la petición y no en la campaña porque lo que tiene fecha es cada
   /// paso —el guion el martes, el borrador el jueves, la publicación el
   /// viernes—, no el trabajo entero. La ve también el creador en su portal.
-  dueDate      DateTime?
+  dueDate DateTime?
 
   /// Petición común de la que es copia, si se mandó a todas las sesiones.
   ///
