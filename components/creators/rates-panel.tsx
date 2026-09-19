@@ -2,12 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { LoaderCircle, Plus, Trash2, TriangleAlert } from "lucide-react";
+import { LoaderCircle, Plus, TriangleAlert, X } from "lucide-react";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FieldHint, Input, Label } from "@/components/ui/field";
+import { FieldHint, Input } from "@/components/ui/field";
 import { Picker } from "@/components/ui/picker";
-import { Badge } from "@/components/ui/badge";
 import { useCan } from "@/components/session-provider";
 import { PLATFORMS, PLATFORM_LABEL, TAREAS, nombreCanal, tareaLabel } from "@/lib/socials";
 import { IMPORTE_MAXIMO } from "@/lib/pricing";
@@ -20,21 +19,13 @@ import type {
 } from "@/lib/types";
 import { formatMoney } from "@/lib/utils";
 
-type Fila = {
-  platform: SocialPlatform;
-  type: DeliverableType;
-  amount: string;
-  /** Canal secundario al que aplica. Vacío = toda la red. */
-  channelId: string;
-};
-
 /** Opción de «toda la red», que es lo que vale si no se elige canal. */
 const TODA_LA_RED = "";
 
-/** Primera tarea que ofrece esa red: lo que se propone al añadir una fila. */
-function primeraTarea(platform: SocialPlatform): DeliverableType {
-  return TAREAS[platform][0]?.type ?? "video";
-}
+/** Un bloque del panel: una red, o un canal secundario de YouTube. */
+type Grupo = { platform: SocialPlatform; channelId: string };
+
+const clave = (g: Grupo) => `${g.platform}|${g.channelId}`;
 
 /**
  * Precio base del creador por red y tipo de pieza.
@@ -43,9 +34,10 @@ function primeraTarea(platform: SocialPlatform): DeliverableType {
  * armar una campaña sale como precio de partida y de ahí se calcula el cobro
  * con la comisión de la agencia.
  *
- * Las redes que el creador tiene registradas van primero, porque son las que
- * de verdad se le van a encargar; el resto siguen disponibles por si se pacta
- * algo suelto.
+ * Va agrupado por red. Antes era una lista de filas con tres selectores cada
+ * una —red, pieza, canal— y un creador con cinco redes acababa con veinte
+ * filas iguales que había que leer una a una. Ahora cada red es un bloque con
+ * sus piezas ya escritas, y editar es rellenar la casilla de al lado.
  */
 export function RatesPanel({
   creatorId,
@@ -68,64 +60,104 @@ export function RatesPanel({
   const puedeEditar = can("editar_creadores");
 
   const [editando, setEditando] = useState(false);
-  const [borrador, setBorrador] = useState<Fila[]>([]);
+  /** Grupos abiertos en la edición, en orden. */
+  const [grupos, setGrupos] = useState<Grupo[]>([]);
+  /** Precio escrito por grupo y pieza: `borrador[clave][type]`. */
+  const [borrador, setBorrador] = useState<Record<string, Partial<Record<DeliverableType, string>>>>({});
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Las suyas primero, sin repetir, y detrás todas las demás.
+  // Las suyas primero, sin repetir.
   const suyas = [...new Set([mainPlatform, ...socials])];
-  const opcionesRed = [
-    ...suyas.map((p) => ({ id: p, label: PLATFORM_LABEL[p], hint: "Su red" })),
-    ...PLATFORMS.filter((p) => !suyas.includes(p.id)).map((p) => ({ id: p.id, label: p.label })),
-  ];
+
+  /**
+   * Las piezas de un grupo: las de su red y, detrás, las que tengan precio
+   * guardado sin estar en la lista —tarifas antiguas—, para no perderlas al
+   * guardar ni esconderlas.
+   */
+  function tareasDe(g: Grupo): { type: DeliverableType; label: string }[] {
+    const propias = TAREAS[g.platform];
+    const sueltas = rates
+      .filter((r) => r.platform === g.platform && r.channelId === g.channelId)
+      .filter((r) => !propias.some((t) => t.type === r.type))
+      .map((r) => ({ type: r.type, label: tareaLabel(r.platform, r.type) }));
+    return [...propias, ...sueltas];
+  }
+
+  /** Los grupos con algún precio, en el orden de sus redes. */
+  function gruposConPrecio(): Grupo[] {
+    const vistos = new Map<string, Grupo>();
+    for (const r of rates) {
+      const g = { platform: r.platform, channelId: r.channelId };
+      vistos.set(clave(g), g);
+    }
+    return ordenar([...vistos.values()]);
+  }
+
+  function ordenar(lista: Grupo[]): Grupo[] {
+    const peso = (p: SocialPlatform) => {
+      const i = suyas.indexOf(p);
+      return i >= 0 ? i : suyas.length + PLATFORMS.findIndex((x) => x.id === p);
+    };
+    return [...lista].sort(
+      (a, b) =>
+        peso(a.platform) - peso(b.platform) ||
+        // La red entera antes que sus canales secundarios.
+        (a.channelId ? 1 : 0) - (b.channelId ? 1 : 0),
+    );
+  }
 
   function empezar() {
-    setBorrador(
-      rates.length
-        ? rates.map((r) => ({
-            platform: r.platform,
-            type: r.type,
-            amount: String(r.amount),
-            channelId: r.channelId,
-          }))
-        : [filaNueva()],
-    );
+    // Sus redes siempre, aunque no tengan precio: son las que se le encargan.
+    const base = new Map<string, Grupo>();
+    for (const p of suyas) base.set(clave({ platform: p, channelId: TODA_LA_RED }), { platform: p, channelId: TODA_LA_RED });
+    for (const g of gruposConPrecio()) base.set(clave(g), g);
+
+    const inicial: Record<string, Partial<Record<DeliverableType, string>>> = {};
+    for (const r of rates) {
+      const k = clave(r);
+      inicial[k] = { ...inicial[k], [r.type]: String(r.amount) };
+    }
+    setGrupos(ordenar([...base.values()]));
+    setBorrador(inicial);
     setError(null);
     setEditando(true);
   }
 
-  function filaNueva(): Fila {
-    return {
-      platform: mainPlatform,
-      type: primeraTarea(mainPlatform),
-      amount: "",
-      channelId: TODA_LA_RED,
-    };
+  function escribir(g: Grupo, type: DeliverableType, valor: string) {
+    const k = clave(g);
+    setBorrador((prev) => ({ ...prev, [k]: { ...prev[k], [type]: valor } }));
   }
 
-  function cambiar(i: number, patch: Partial<Fila>) {
-    setBorrador((prev) => prev.map((f, j) => (j === i ? { ...f, ...patch } : f)));
+  function quitarGrupo(g: Grupo) {
+    const k = clave(g);
+    setGrupos((prev) => prev.filter((x) => clave(x) !== k));
+    setBorrador((prev) => {
+      const { [k]: _fuera, ...resto } = prev;
+      void _fuera;
+      return resto;
+    });
+  }
+
+  function anadirGrupo(g: Grupo) {
+    if (grupos.some((x) => clave(x) === clave(g))) return;
+    setGrupos((prev) => ordenar([...prev, g]));
   }
 
   async function guardar() {
-    const limpio = borrador
-      .map((f) => ({
-        platform: f.platform,
-        type: f.type,
-        amount: Number(f.amount) || 0,
-        channelId: f.channelId,
-      }))
-      .filter((f) => f.amount > 0);
+    const limpio = grupos.flatMap((g) =>
+      tareasDe(g)
+        .map((t) => ({
+          platform: g.platform,
+          type: t.type,
+          amount: Number(borrador[clave(g)]?.[t.type]) || 0,
+          channelId: g.channelId,
+        }))
+        .filter((f) => f.amount > 0),
+    );
 
     if (limpio.some((f) => f.amount > IMPORTE_MAXIMO)) {
       setError("Alguna tarifa es demasiado grande para guardarla.");
-      return;
-    }
-    // La base tiene una tarifa por red, tipo y canal: dos filas iguales se
-    // pisarían, y el error de Postgres no le diría nada a quien la escribió.
-    const llaves = limpio.map((f) => `${f.platform}-${f.type}-${f.channelId}`);
-    if (new Set(llaves).size !== llaves.length) {
-      setError("Hay dos tarifas para la misma red, pieza y canal.");
       return;
     }
 
@@ -147,6 +179,26 @@ export function RatesPanel({
       setGuardando(false);
     }
   }
+
+  const titulo = (g: Grupo) => {
+    if (!g.channelId) return PLATFORM_LABEL[g.platform];
+    const canal = channels.find((c) => c.id === g.channelId);
+    return canal ? nombreCanal(canal) : "Canal borrado";
+  };
+
+  // Lo que aún se puede añadir en la edición: otras redes y canales de YouTube.
+  const faltan = [
+    ...PLATFORMS.filter((p) => !grupos.some((g) => g.platform === p.id && !g.channelId)).map((p) => ({
+      id: `${p.id}|`,
+      label: p.label,
+      hint: suyas.includes(p.id) ? "Su red" : undefined,
+    })),
+    ...channels
+      .filter((c) => !grupos.some((g) => g.channelId === c.id))
+      .map((c) => ({ id: `youtube|${c.id}`, label: nombreCanal(c), hint: "Canal de YouTube" })),
+  ];
+
+  const vista = gruposConPrecio();
 
   return (
     <Card>
@@ -181,123 +233,110 @@ export function RatesPanel({
       )}
 
       {editando ? (
-        <div className="space-y-2 border-t border-[var(--line)] p-4">
-          <div className="hidden gap-2 sm:grid sm:grid-cols-[1fr_1fr_1fr_6rem_2.5rem]">
-            <Label className="mb-0">Red</Label>
-            <Label className="mb-0">Pieza</Label>
-            <Label className="mb-0">Canal</Label>
-            <Label className="mb-0">Precio</Label>
-            <span />
+        <div className="space-y-3 border-t border-[var(--line)] p-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            {grupos.map((g) => (
+              <section
+                key={clave(g)}
+                className="rounded-[var(--r-control)] border border-[var(--line)] bg-[var(--surface-2)] p-3"
+              >
+                <header className="mb-2 flex items-center justify-between gap-2">
+                  <span className="min-w-0">
+                    <span className="block truncate text-[13px] font-semibold">{titulo(g)}</span>
+                    {g.channelId && (
+                      <span className="block text-[11.5px] text-[var(--text-subtle)]">Canal de YouTube</span>
+                    )}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => quitarGrupo(g)}
+                    aria-label={`Quitar ${titulo(g)}`}
+                    title="Quitar sus precios"
+                    className="grid h-7 w-7 shrink-0 place-items-center rounded-[var(--r-chip)] text-[var(--text-subtle)] transition hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"
+                  >
+                    <X size={13} />
+                  </button>
+                </header>
+                <div className="space-y-1.5">
+                  {tareasDe(g).map((t) => (
+                    <label key={t.type} className="flex items-center gap-2">
+                      <span className="min-w-0 flex-1 truncate text-[12.5px] text-[var(--text-muted)]">
+                        {t.label}
+                      </span>
+                      <Input
+                        type="number"
+                        min={0}
+                        value={borrador[clave(g)]?.[t.type] ?? ""}
+                        onChange={(e) => escribir(g, t.type, e.target.value)}
+                        placeholder="—"
+                        aria-label={`${titulo(g)}: ${t.label}`}
+                        className="tabular h-8 w-28 text-right"
+                      />
+                    </label>
+                  ))}
+                </div>
+              </section>
+            ))}
           </div>
 
-          {borrador.map((fila, i) => (
-            <div
-              key={`${fila.platform}-${fila.type}-${fila.channelId}-${i}`}
-              className="grid gap-2 sm:grid-cols-[1fr_1fr_1fr_6rem_2.5rem]"
-            >
+          {faltan.length > 0 && (
+            <div className="flex items-center gap-2">
+              <Plus size={14} className="shrink-0 text-[var(--text-subtle)]" />
               <Picker
-                value={fila.platform}
-                onChange={(platform) =>
-                  cambiar(i, {
-                    platform,
-                    // Cambiar de red puede dejar la pieza sin sentido: un
-                    // «Short» no existe en Twitch. Se cae en la primera suya.
-                    type: TAREAS[platform].some((t) => t.type === fila.type)
-                      ? fila.type
-                      : primeraTarea(platform),
-                    // Un canal es de YouTube: fuera de ahí no significa nada.
-                    channelId: platform === "youtube" ? fila.channelId : TODA_LA_RED,
-                  })
-                }
-                options={opcionesRed}
+                value=""
+                onChange={(id) => {
+                  const [platform, channelId] = id.split("|") as [SocialPlatform, string];
+                  anadirGrupo({ platform, channelId: channelId ?? TODA_LA_RED });
+                }}
+                options={faltan}
+                placeholder="Añadir otra red o canal…"
+                className="max-w-72"
               />
-
-              <Picker
-                value={fila.type}
-                onChange={(type) => cambiar(i, { type })}
-                options={TAREAS[fila.platform].map((t) => ({ id: t.type, label: t.label }))}
-              />
-
-              <Picker
-                value={fila.channelId}
-                onChange={(channelId) => cambiar(i, { channelId })}
-                // Los canales adicionales son de YouTube; en otras redes solo
-                // cabe la tarifa de toda la red.
-                disabled={fila.platform !== "youtube" || channels.length === 0}
-                options={[
-                  { id: TODA_LA_RED, label: "Toda la red" },
-                  ...channels.map((c) => ({
-                    id: c.id,
-                    label: nombreCanal(c),
-                    hint: c.label && c.label !== c.handle ? c.label : undefined,
-                  })),
-                ]}
-              />
-
-              <Input
-                type="number"
-                min={0}
-                value={fila.amount}
-                onChange={(e) => cambiar(i, { amount: e.target.value })}
-                placeholder="0"
-                aria-label="Precio"
-                className="tabular"
-              />
-
-              <button
-                type="button"
-                onClick={() => setBorrador((prev) => prev.filter((_, j) => j !== i))}
-                aria-label="Quitar tarifa"
-                className="grid h-10 w-10 shrink-0 place-items-center rounded-[var(--r-control)] text-[var(--text-subtle)] transition hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"
-              >
-                <Trash2 size={14} />
-              </button>
             </div>
-          ))}
-
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() =>
-              setBorrador((prev) => [...prev, filaNueva()])
-            }
-          >
-            <Plus size={14} />
-            Añadir tarifa
-          </Button>
+          )}
 
           <FieldHint>
-            En cero se borra. Sin tarifa propia, la campaña usa las tarifas mínimas de la ficha.
+            Vacío o en cero, no hay precio para esa pieza. Sin tarifa propia, la campaña usa las
+            tarifas mínimas de la ficha.
           </FieldHint>
         </div>
-      ) : rates.length === 0 ? (
+      ) : vista.length === 0 ? (
         <p className="border-t border-[var(--line)] px-4 py-3 text-[12.5px] text-[var(--text-muted)]">
           Sin precios por red. La campaña usará las tarifas mínimas de la ficha.
         </p>
       ) : (
-        <div className="divide-y divide-[var(--line)] border-t border-[var(--line)]">
-          {rates.map((rate) => {
-            const canal = rate.channelId
-              ? channels.find((c) => c.id === rate.channelId)
-              : null;
+        <div className="grid gap-3 border-t border-[var(--line)] p-4 sm:grid-cols-2">
+          {vista.map((g) => {
+            const suyasDelGrupo = rates.filter(
+              (r) => r.platform === g.platform && r.channelId === g.channelId,
+            );
             return (
-              <div key={rate.id} className="flex items-center gap-3 px-4 py-2.5">
-                <Badge plain>{PLATFORM_LABEL[rate.platform]}</Badge>
-                <span className="min-w-0 flex-1 truncate text-[13px] text-[var(--text-muted)]">
-                  {tareaLabel(rate.platform, rate.type)}
-                  {/* Una tarifa de canal secundario no se distingue de la
-                      general si no se dice de cuál es. */}
-                  {rate.channelId && (
-                    <span className="text-[var(--text-subtle)]">
-                      {" · "}
-                      {canal ? nombreCanal(canal) : "Canal borrado"}
-                    </span>
+              <section
+                key={clave(g)}
+                className="rounded-[var(--r-control)] border border-[var(--line)] p-3"
+              >
+                <header className="mb-1.5">
+                  <span className="block truncate text-[13px] font-semibold">{titulo(g)}</span>
+                  {g.channelId && (
+                    <span className="block text-[11.5px] text-[var(--text-subtle)]">Canal de YouTube</span>
                   )}
-                </span>
-                <span className="tabular shrink-0 text-[13px] font-semibold">
-                  {formatMoney(rate.amount, currency)}
-                </span>
-              </div>
+                </header>
+                <dl className="space-y-1">
+                  {tareasDe(g)
+                    .filter((t) => suyasDelGrupo.some((r) => r.type === t.type))
+                    .map((t) => {
+                      const r = suyasDelGrupo.find((x) => x.type === t.type)!;
+                      return (
+                        <div key={t.type} className="flex items-baseline justify-between gap-3">
+                          <dt className="truncate text-[12.5px] text-[var(--text-muted)]">{t.label}</dt>
+                          <dd className="tabular shrink-0 text-[13px] font-semibold">
+                            {formatMoney(r.amount, currency)}
+                          </dd>
+                        </div>
+                      );
+                    })}
+                </dl>
+              </section>
             );
           })}
         </div>
