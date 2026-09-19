@@ -96,12 +96,15 @@ export function BankingPanel({
   banking,
   accounts,
   methods,
+  agencia = null,
 }: {
   creatorId: string;
   /** Versión censurada que llega del servidor. */
   banking: BankingInfo;
   accounts: BankingAccount[];
   methods: PaymentMethod[];
+  /** Nombre de la agencia que lo representa, si la hay. */
+  agencia?: string | null;
 }) {
   const router = useRouter();
   const can = useCan();
@@ -300,6 +303,7 @@ export function BankingPanel({
             <PaymentAccountsEditor
               methods={borrador.methods}
               accounts={borrador.accounts}
+              agencia={agencia}
               onChange={(m, c) => setBorrador({ ...borrador, methods: m, accounts: c })}
             />
 
@@ -348,11 +352,15 @@ export function BankingPanel({
                   return (
                     <div key={cuenta.id || i} className="px-5 py-3">
                       <div className="flex items-center justify-between gap-3">
-                        <Badge tone="accent" plain>
-                          {PAYMENT_METHOD[cuenta.method]}
-                        </Badge>
+                        <span className="flex items-center gap-1.5">
+                          <Badge tone="accent" plain>
+                            {PAYMENT_METHOD[cuenta.method]}
+                          </Badge>
+                          {/* A quién va el dinero se ve antes de copiar nada. */}
+                          {cuenta.forAgency && <Badge tone="info">De {agencia || "la agencia"}</Badge>}
+                        </span>
                         <span className="truncate text-[12px] text-[var(--text-subtle)]">
-                          {cuenta.label || cuenta.bankName || cuenta.holder || "Sin alias"}
+                          {cuenta.label || cuenta.bankName || cuenta.holder || "Sin nombre"}
                         </span>
                       </div>
                       <dl className="mt-1">

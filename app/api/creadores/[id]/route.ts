@@ -66,6 +66,7 @@ const schema = z.object({
         reference: z.string().default(""),
         routing: z.string().default(""),
         notes: z.string().default(""),
+        forAgency: z.boolean().default(false),
       }),
     )
     .optional(),

@@ -44,6 +44,12 @@ export const MAXIMO_MATERIAL = 100 * 1024 * 1024;
 /** 8 MB de sobra para una captura o un PDF de banco. */
 export const MAXIMO_COMPROBANTE = 8 * 1024 * 1024;
 
+/** Capturas de estadísticas: solo imágenes, que es lo que se enseña en la ficha. */
+export const TIPOS_IMAGEN = ["image/png", "image/jpeg", "image/webp"];
+
+/** Un pantallazo de móvil o de escritorio cabe de sobra. */
+export const MAXIMO_CAPTURA = 10 * 1024 * 1024;
+
 export type ArchivoSubido = {
   url: string;
   fileName: string;

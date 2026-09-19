@@ -21,6 +21,9 @@ import { PersonalDataPanel } from "@/components/creators/personal-data-panel";
 import { ContactsPanel } from "@/components/companies/contacts-panel";
 import { EditCreatorButton } from "@/components/creators/edit-creator-dialog";
 import { MediaKitButton } from "@/components/creators/media-kit-button";
+import { AgencyCard } from "@/components/creators/agency-card";
+import { StatsPanel } from "@/components/creators/stats-panel";
+import { PackagesPanel } from "@/components/creators/packages-panel";
 import { CreatorTabs } from "@/app/creadores/[id]/creator-tabs";
 import { creatorCampaigns, getCampaigns, getCompanies, getCreator } from "@/lib/data";
 import { listCreatorCategories } from "@/lib/store";
@@ -168,6 +171,18 @@ export default async function CreadorPage({ params }: { params: Promise<{ id: st
         ),
     },
     {
+      id: "stats",
+      label: "Stats",
+      count: creator.statShots.length,
+      content: (
+        <StatsPanel
+          creatorId={creator.id}
+          shots={creator.statShots}
+          mainPlatform={creator.mainPlatform}
+        />
+      ),
+    },
+    {
       id: "tarifas",
       label: "Tarifas",
       content: (
@@ -180,6 +195,13 @@ export default async function CreadorPage({ params }: { params: Promise<{ id: st
             socials={creator.socials.map((s) => s.platform)}
             mainPlatform={creator.mainPlatform}
             channels={creator.channels}
+          />
+          <div className="space-y-6">
+          <PackagesPanel
+            creatorId={creator.id}
+            creator={creator}
+            packages={creator.packages}
+            suyas={[...new Set([creator.mainPlatform, ...creator.socials.map((s) => s.platform)])]}
           />
           <Card className="h-fit">
             <CardHeader>
@@ -203,6 +225,7 @@ export default async function CreadorPage({ params }: { params: Promise<{ id: st
               </DefRow>
             </DefList>
           </Card>
+          </div>
         </div>
       ),
     },
@@ -243,6 +266,7 @@ export default async function CreadorPage({ params }: { params: Promise<{ id: st
               createdAt={creator.createdAt}
               fields={creator.contactFields}
             />
+            <AgencyCard creatorId={creator.id} agency={creator.agency} />
             <Card>
               <CardHeader>
                 <CardTitle>Notas internas</CardTitle>
@@ -274,6 +298,7 @@ export default async function CreadorPage({ params }: { params: Promise<{ id: st
             banking={creator.banking}
             accounts={creator.bankAccounts}
             methods={creator.paymentMethods}
+            agencia={creator.agency?.name ?? null}
           />
           <PersonalDataPanel
             creatorId={creator.id}
@@ -315,6 +340,12 @@ export default async function CreadorPage({ params }: { params: Promise<{ id: st
           />
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <Badge tone={status.tone}>{status.label}</Badge>
+            {/* Se ve antes que nada: con agencia se negocia y se paga a ella. */}
+            {creator.agency && (
+              <Badge tone="info">
+                {creator.agency.exclusive ? "Exclusivo de" : "Agencia:"} {creator.agency.name}
+              </Badge>
+            )}
             {creator.categories.map((c, i) => (
               <Badge key={c} tone={i === 0 ? "accent" : "neutral"} plain>
                 {c}

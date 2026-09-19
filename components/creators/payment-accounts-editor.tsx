@@ -38,11 +38,17 @@ export function PaymentAccountsEditor({
   accounts,
   onChange,
   className,
+  agencia,
 }: {
   methods: PaymentMethod[];
   accounts: BankingAccount[];
   onChange: (methods: PaymentMethod[], accounts: BankingAccount[]) => void;
   className?: string;
+  /**
+   * Nombre de la agencia que lo representa. Si la hay, cada cuenta se puede
+   * marcar como suya: con agencia de por medio el pago suele ir a ella.
+   */
+  agencia?: string | null;
 }) {
   function alternar(method: PaymentMethod) {
     if (methods.includes(method)) {
@@ -106,8 +112,21 @@ export function PaymentAccountsEditor({
             className="rounded-[var(--r-card)] border border-[var(--line)] bg-[var(--surface-2)] p-3"
           >
             <div className="mb-2.5 flex items-center justify-between gap-2">
-              <span className="inline-flex h-6 items-center rounded-[var(--r-pill)] bg-[var(--accent-soft)] px-2.5 text-[11.5px] font-medium text-[var(--accent)]">
-                {PAYMENT_METHOD[cuenta.method]}
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="inline-flex h-6 items-center rounded-[var(--r-pill)] bg-[var(--accent-soft)] px-2.5 text-[11.5px] font-medium text-[var(--accent)]">
+                  {PAYMENT_METHOD[cuenta.method]}
+                </span>
+                {(agencia || cuenta.forAgency) && (
+                  <label className="flex cursor-pointer items-center gap-1.5 truncate text-[12px] text-[var(--text-muted)]">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(cuenta.forAgency)}
+                      onChange={(e) => cambiar(i, { forAgency: e.target.checked })}
+                      className="accent-[var(--accent)]"
+                    />
+                    Es de {agencia || "la agencia"}
+                  </label>
+                )}
               </span>
               <button
                 type="button"

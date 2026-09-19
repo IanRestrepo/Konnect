@@ -50,6 +50,52 @@ export type BankingAccount = {
   /** SWIFT, routing o red de la billetera. */
   routing: string;
   notes: string;
+  /** Es de la agencia que lo representa: el pago va a ella, no al creador. */
+  forAgency?: boolean;
+};
+
+/** Agencia externa que representa al creador. */
+export type CreatorAgency = {
+  name: string;
+  /** Solo trabaja a través de ella. */
+  exclusive: boolean;
+  contactName: string;
+  email: string;
+  phone: string;
+  website: string;
+  notes: string;
+};
+
+/** Pantallazo de sus estadísticas, para cuando no cede acceso a la API. */
+export type CreatorStatShot = {
+  id: string;
+  url: string;
+  fileName: string;
+  platform: SocialPlatform | null;
+  caption: string;
+  /** De cuándo son los datos, si se sabe. */
+  takenAt: string | null;
+  uploadedBy: string;
+  createdAt: string;
+};
+
+/** Una línea de un paquete: cuántas piezas de un tipo, en qué red. */
+export type PackageItem = {
+  platform: SocialPlatform;
+  type: DeliverableType;
+  /** Nombre propio de la pieza, si lo tiene. */
+  customType: string | null;
+  qty: number;
+};
+
+/** Paquete cerrado del creador: varias piezas por un solo precio. */
+export type CreatorPackage = {
+  id: string;
+  name: string;
+  /** Lo que recibe el creador por el paquete entero, en su moneda. */
+  price: number;
+  items: PackageItem[];
+  notes: string;
 };
 
 /**
@@ -118,6 +164,12 @@ export type Creator = {
   socials: SocialLink[];
   /** Claves de API para leer su analítica propia. Por ahora solo YouTube. */
   apiConnections: CreatorApiConnection[];
+  /** Agencia que lo representa, si la hay. */
+  agency: CreatorAgency | null;
+  /** Capturas de sus estadísticas, de la más reciente a la más antigua. */
+  statShots: CreatorStatShot[];
+  /** Paquetes cerrados que ofrece. */
+  packages: CreatorPackage[];
   createdAt: string;
 };
 

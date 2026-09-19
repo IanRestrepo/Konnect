@@ -19,8 +19,11 @@ import type {
   ContactField,
   Creator,
   CreatorApiConnection,
+  CreatorAgency,
   CreatorChannel,
+  CreatorPackage,
   CreatorRate,
+  CreatorStatShot,
   Deliverable,
   DeliverableKind,
   DeliverableType,
@@ -28,6 +31,7 @@ import type {
   DocLink,
   DocSummary,
   Folder,
+  PackageItem,
   PersonalData,
   PortalRole,
   PublicUser,
@@ -183,6 +187,7 @@ type BankAccountColumns = {
   routingEnc: string | null;
   routingLast4: string | null;
   notesEnc: string | null;
+  forAgency: boolean;
 };
 
 /** Cuenta de cobro censurada: lo justo para reconocerla en la lista. */
@@ -196,6 +201,7 @@ function maskedAccount(row: BankAccountColumns): BankingAccount {
     reference: row.referenceLast4 ?? "",
     routing: row.routingLast4 ?? "",
     notes: "",
+    forAgency: row.forAgency,
   };
 }
 
@@ -209,6 +215,7 @@ function fullAccount(row: BankAccountColumns): BankingAccount {
     reference: unseal(row.referenceEnc),
     routing: unseal(row.routingEnc),
     notes: unseal(row.notesEnc),
+    forAgency: row.forAgency,
   };
 }
 
@@ -226,6 +233,7 @@ function accountToColumns(account: BankingAccount, creatorId: string, position: 
     routingEnc: seal(account.routing),
     routingLast4: last4(account.routing ?? "") || null,
     notesEnc: seal(account.notes),
+    forAgency: account.forAgency ?? false,
     position,
   };
 }
@@ -239,6 +247,9 @@ const creatorInclude = {
   contacts: { orderBy: [{ primary: "desc" }, { createdAt: "asc" }] },
   contactFields: { orderBy: [{ position: "asc" }, { createdAt: "asc" }] },
   bankAccounts: { orderBy: [{ position: "asc" }, { createdAt: "asc" }] },
+  agency: true,
+  statShots: { orderBy: [{ takenAt: { sort: "desc", nulls: "last" } }, { createdAt: "desc" }] },
+  packages: { orderBy: [{ position: "asc" }, { createdAt: "asc" }] },
 } satisfies Prisma.CreatorInclude;
 
 type CreatorRow = Prisma.CreatorGetPayload<{ include: typeof creatorInclude }>;
@@ -321,8 +332,52 @@ function toCreator(row: CreatorRow, apiConnections: CreatorApiConnection[] = [])
       metricsUpdatedAt: isoOrNull(s.metricsUpdatedAt),
     })),
     apiConnections,
+    agency: row.agency
+      ? {
+          name: row.agency.name,
+          exclusive: row.agency.exclusive,
+          contactName: row.agency.contactName,
+          email: row.agency.email,
+          phone: row.agency.phone,
+          website: row.agency.website,
+          notes: row.agency.notes,
+        }
+      : null,
+    statShots: row.statShots.map((s) => ({
+      id: s.id,
+      url: s.url,
+      fileName: s.fileName,
+      platform: (s.platform as SocialPlatform | null) ?? null,
+      caption: s.caption,
+      takenAt: isoOrNull(s.takenAt),
+      uploadedBy: s.uploadedBy,
+      createdAt: iso(s.createdAt),
+    })),
+    packages: row.packages.map(toPackage),
     createdAt: iso(row.createdAt),
   };
+}
+
+/**
+ * Lee las líneas de un paquete desde el JSON guardado, descartando lo que no
+ * tenga forma de línea: el JSON no lo valida la base, y una línea rota no debe
+ * tumbar la ficha entera.
+ */
+function toPackage(row: CreatorRow["packages"][number]): CreatorPackage {
+  const crudas = Array.isArray(row.items) ? row.items : [];
+  const items: PackageItem[] = [];
+  for (const c of crudas) {
+    if (!c || typeof c !== "object" || Array.isArray(c)) continue;
+    const o = c as Record<string, unknown>;
+    if (typeof o.platform !== "string" || typeof o.type !== "string") continue;
+    items.push({
+      platform: o.platform as SocialPlatform,
+      type: o.type as DeliverableType,
+      customType: typeof o.customType === "string" && o.customType.trim() ? o.customType : null,
+      qty: Math.max(1, Math.floor(Number(o.qty) || 1)),
+    });
+  }
+  return { id: row.id, name: row.name, price: num(row.price), items, notes: row.notes };
 }
 
 /** `P2021`: la tabla aún no existe (falta `prisma db push`). No es fatal. */
@@ -589,7 +644,7 @@ export async function read(): Promise<Database> {
 /* ---------------- Creadores ---------------- */
 
 export async function createCreator(
-  input: Omit<Creator, "id" | "createdAt" | "apiConnections">,
+  input: Omit<Creator, "id" | "createdAt" | "apiConnections" | "agency" | "statShots" | "packages">,
 ): Promise<Creator> {
   const row = await prisma.creator.create({
     data: {
@@ -2277,6 +2332,124 @@ export async function setCreatorBankAccounts(
   return replaceCreatorLists(creatorId, {
     bankAccounts: accounts.map((a) => ({ ...a, id: "" })),
   });
+}
+
+/* ---------------- Agencia del creador ---------------- */
+
+/**
+ * Pone, cambia o quita (con `null`) la agencia que representa al creador.
+ *
+ * Al quitarla, sus cuentas marcadas como de la agencia se quedan pero dejan de
+ * estarlo: borrar datos de pago por desmarcar una casilla sería demasiado
+ * fácil de hacer sin querer.
+ */
+export async function setCreatorAgency(
+  creatorId: string,
+  agency: CreatorAgency | null,
+): Promise<boolean> {
+  const existe = await prisma.creator.findUnique({ where: { id: creatorId }, select: { id: true } });
+  if (!existe) return false;
+
+  if (!agency) {
+    await prisma.$transaction([
+      prisma.creatorAgency.deleteMany({ where: { creatorId } }),
+      prisma.creatorBankAccount.updateMany({
+        where: { creatorId, forAgency: true },
+        data: { forAgency: false },
+      }),
+    ]);
+    return true;
+  }
+
+  await prisma.creatorAgency.upsert({
+    where: { creatorId },
+    create: { creatorId, ...agency },
+    update: agency,
+  });
+  return true;
+}
+
+/* ---------------- Capturas de estadísticas ---------------- */
+
+export async function addCreatorStatShot(
+  creatorId: string,
+  input: Omit<CreatorStatShot, "id" | "createdAt">,
+): Promise<CreatorStatShot | null> {
+  const existe = await prisma.creator.findUnique({ where: { id: creatorId }, select: { id: true } });
+  if (!existe) return null;
+
+  const row = await prisma.creatorStatShot.create({
+    data: {
+      id: newId("st"),
+      creatorId,
+      url: input.url,
+      fileName: input.fileName,
+      platform: input.platform,
+      caption: input.caption,
+      takenAt: input.takenAt ? new Date(input.takenAt) : null,
+      uploadedBy: input.uploadedBy,
+    },
+  });
+  return {
+    id: row.id,
+    url: row.url,
+    fileName: row.fileName,
+    platform: (row.platform as SocialPlatform | null) ?? null,
+    caption: row.caption,
+    takenAt: isoOrNull(row.takenAt),
+    uploadedBy: row.uploadedBy,
+    createdAt: iso(row.createdAt),
+  };
+}
+
+/** Quita una captura. Devuelve su dirección para borrar el archivo, o null. */
+export async function removeCreatorStatShot(creatorId: string, shotId: string): Promise<string | null> {
+  const row = await prisma.creatorStatShot.findFirst({
+    where: { id: shotId, creatorId },
+    select: { url: true },
+  });
+  if (!row) return null;
+  await prisma.creatorStatShot.delete({ where: { id: shotId } });
+  return row.url;
+}
+
+/* ---------------- Paquetes ---------------- */
+
+/** Crea el paquete si no trae id, o lo reemplaza entero si lo trae. */
+export async function saveCreatorPackage(
+  creatorId: string,
+  pkg: Omit<CreatorPackage, "id"> & { id?: string },
+): Promise<CreatorPackage | null> {
+  const existe = await prisma.creator.findUnique({ where: { id: creatorId }, select: { id: true } });
+  if (!existe) return null;
+
+  const datos = {
+    name: pkg.name,
+    price: pkg.price,
+    items: pkg.items as unknown as Prisma.InputJsonValue,
+    notes: pkg.notes,
+  };
+
+  if (pkg.id) {
+    const { count } = await prisma.creatorPackage.updateMany({
+      where: { id: pkg.id, creatorId },
+      data: datos,
+    });
+    if (count === 0) return null;
+    const row = await prisma.creatorPackage.findUnique({ where: { id: pkg.id } });
+    return row ? toPackage(row) : null;
+  }
+
+  const ultimo = await prisma.creatorPackage.count({ where: { creatorId } });
+  const row = await prisma.creatorPackage.create({
+    data: { id: newId("pq"), creatorId, position: ultimo, ...datos },
+  });
+  return toPackage(row);
+}
+
+export async function removeCreatorPackage(creatorId: string, packageId: string): Promise<boolean> {
+  const { count } = await prisma.creatorPackage.deleteMany({ where: { id: packageId, creatorId } });
+  return count > 0;
 }
 
 /* ---------------- Estado de pago ---------------- */
