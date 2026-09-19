@@ -1,58 +1,16 @@
-import { createHash, randomBytes, scrypt as scryptCb, timingSafeEqual } from "node:crypto";
-import { promisify } from "node:util";
+import { createHash } from "node:crypto";
 import { SignJWT, jwtVerify } from "jose";
 import { prisma } from "@/lib/prisma";
 
 /**
  * Defensa de la puerta del portal.
  *
- * El portal es público: cualquiera con el enlace llega al formulario. Un PIN de
- * cuatro dígitos son diez mil combinaciones, así que lo que lo protege de
- * verdad no es el PIN sino este freno, y por eso vive en la base y no en
- * memoria: en serverless cada instancia tiene su propio proceso y un contador
- * en RAM se reinicia solo, que es como no tener ninguno.
+ * El portal es público: cualquiera puede probar llaves contra una sesión. La
+ * llave es larga y aleatoria, pero el freno de intentos por IP la respalda, y
+ * vive en la base y no en memoria: en serverless cada instancia tiene su
+ * propio proceso y un contador en RAM se reinicia solo, que es como no tener
+ * ninguno.
  */
-
-const scrypt = promisify(scryptCb) as (
-  password: string,
-  salt: Buffer,
-  keylen: number,
-) => Promise<Buffer>;
-
-/* ---------------- PIN ---------------- */
-
-export const PIN_LENGTH = 4;
-
-export function isValidPin(pin: string): boolean {
-  return new RegExp(`^\\d{${PIN_LENGTH}}$`).test(pin);
-}
-
-/**
- * PIN demasiado obvio. No es seguridad de verdad —el freno lo es— pero evita
- * que la mitad de los accesos acaben siendo 1234 o 0000.
- */
-export function isWeakPin(pin: string): boolean {
-  if (/^(\d)\1{3}$/.test(pin)) return true;
-  const ascendente = "0123456789";
-  const descendente = "9876543210";
-  return ascendente.includes(pin) || descendente.includes(pin);
-}
-
-export async function hashPin(pin: string): Promise<string> {
-  const salt = randomBytes(16);
-  const derived = await scrypt(pin, salt, 64);
-  return `scrypt:${salt.toString("base64")}:${derived.toString("base64")}`;
-}
-
-export async function verifyPin(pin: string, stored: string | null): Promise<boolean> {
-  if (!stored) return false;
-  const [scheme, saltB64, hashB64] = stored.split(":");
-  if (scheme !== "scrypt" || !saltB64 || !hashB64) return false;
-
-  const expected = Buffer.from(hashB64, "base64");
-  const derived = await scrypt(pin, Buffer.from(saltB64, "base64"), expected.length);
-  return derived.length === expected.length && timingSafeEqual(derived, expected);
-}
 
 /* ---------------- Freno por IP ---------------- */
 
@@ -119,11 +77,11 @@ export async function purgeOldAttempts(): Promise<void> {
 /* ---------------- Cookie de dispositivo ---------------- */
 
 /**
- * Recuerda *quién* entró, no que pueda entrar.
+ * Recuerda en qué acceso se entró con el enlace, para que desde un marcador se
+ * pueda volver sin él.
  *
- * Con varios accesos por sesión, un PIN de cuatro dígitos por sí solo es
- * ambiguo. Esta cookie identifica el acceso para poder pedir solo el PIN; no
- * autoriza nada por sí misma, y sin PIN correcto no abre la sesión.
+ * Lleva la huella de la llave con la que se entró: al reiniciar el acceso la
+ * llave cambia y la cookie deja de servir, igual que el enlace viejo.
  */
 export const DEVICE_COOKIE = "konnect_portal_dev";
 const DEVICE_DAYS = 90;
@@ -136,8 +94,12 @@ function deviceSecret(): Uint8Array {
   return new TextEncoder().encode(`${value}:portal-device`);
 }
 
-export async function createDeviceToken(sessionId: string, accessId: string): Promise<string> {
-  return new SignJWT({ sessionId, accessId })
+export async function createDeviceToken(
+  sessionId: string,
+  accessId: string,
+  llave: string,
+): Promise<string> {
+  return new SignJWT({ sessionId, accessId, llave })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(accessId)
     .setIssuedAt()
@@ -147,14 +109,14 @@ export async function createDeviceToken(sessionId: string, accessId: string): Pr
 
 export async function readDeviceToken(
   token: string | undefined,
-): Promise<{ sessionId: string; accessId: string } | null> {
+): Promise<{ sessionId: string; accessId: string; llave: string } | null> {
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, deviceSecret());
     const sessionId = String(payload.sessionId ?? "");
     const accessId = String(payload.accessId ?? payload.sub ?? "");
     if (!sessionId || !accessId) return null;
-    return { sessionId, accessId };
+    return { sessionId, accessId, llave: String(payload.llave ?? "") };
   } catch {
     return null;
   }

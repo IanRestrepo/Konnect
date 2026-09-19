@@ -52,7 +52,8 @@ export type SesionFila = {
   creator: { id: string; name: string; avatarUrl: string | null } | null;
   /** Enlace personal del creador, con su llave. Null si no tiene acceso activo. */
   enlace: string | null;
-  tienePin: boolean;
+  /** El creador ya entró alguna vez con su enlace. */
+  abierto: boolean;
 };
 
 /** Valor del destino cuando lo que se crea va a todas las sesiones. */
@@ -455,7 +456,7 @@ function TarjetaSesion({
           {session.status === "cerrada" && <Badge tone="neutral">Cerrada</Badge>}
           {porRevisar > 0 && <Badge tone="accent">{porRevisar} por revisar</Badge>}
           {tarde > 0 && <Badge tone="danger">{tarde} atrasada{tarde === 1 ? "" : "s"}</Badge>}
-          {fila.enlace && !fila.tienePin && <Badge plain>Sin abrir</Badge>}
+          {fila.enlace && !fila.abierto && <Badge plain>Sin abrir</Badge>}
         </span>
 
         {fila.enlace && (

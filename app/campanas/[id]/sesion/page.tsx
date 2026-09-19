@@ -61,7 +61,7 @@ export default async function SesionMaestraPage({ params }: { params: Promise<{ 
           // El enlace se arma aquí: la dirección del portal depende de las
           // cabeceras de la petición, que en el navegador no existen.
           enlace: acceso ? enlacePersonal(base, acceso.code) : null,
-          tienePin: acceso?.hasPin ?? false,
+          abierto: Boolean(acceso?.lastSeenAt),
         };
       }),
   );

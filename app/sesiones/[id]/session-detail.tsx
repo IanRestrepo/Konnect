@@ -110,10 +110,6 @@ export function SessionDetail({
   /** El enlace personal de un acceso: el del portal con su llave dentro. */
   const enlaceDe = (code: string) => `${portalUrl}?acceso=${encodeURIComponent(code)}`;
 
-  // Se fija al montar: solo sirve para saber si un bloqueo sigue vigente, y
-  // leer el reloj en cada render hace que el resultado cambie sin motivo.
-  const [ahora] = useState(() => Date.now());
-
   async function copiar(texto: string, marca: string) {
     try {
       await navigator.clipboard.writeText(texto);
@@ -481,7 +477,7 @@ export function SessionDetail({
 
           <SectionHead
             title="Accesos"
-            hint="Cada persona tiene su enlace. La primera vez que lo abre elige un PIN."
+            hint="Cada persona entra con su enlace personal, sin códigos. Quien tenga el enlace, entra: no lo reenvíes."
             className="mt-7"
             action={
               puedeEditar && (
@@ -499,7 +495,6 @@ export function SessionDetail({
                 <tr>
                   <Th>Quién</Th>
                   <Th>Enlace</Th>
-                  <Th>PIN</Th>
                   <Th>Última entrada</Th>
                   {puedeEditar && <Th align="right">Acciones</Th>}
                 </tr>
@@ -534,15 +529,6 @@ export function SessionDetail({
                         </button>
                       )}
                     </Td>
-                    <Td>
-                      {a.lockedUntil && new Date(a.lockedUntil).getTime() > ahora ? (
-                        <Badge tone="danger">Bloqueado</Badge>
-                      ) : a.hasPin ? (
-                        <Badge tone="ok">Elegido</Badge>
-                      ) : (
-                        <Badge plain>Sin abrir</Badge>
-                      )}
-                    </Td>
                     <Td className="text-[var(--text-muted)]">
                       {a.lastSeenAt ? formatDate(a.lastSeenAt) : "Nunca"}
                     </Td>
@@ -553,12 +539,12 @@ export function SessionDetail({
                             variant="ghost"
                             size="sm"
                             disabled={ocupado}
-                            title="Enlace nuevo y PIN borrado"
+                            title="Enlace nuevo; el actual deja de servir"
                             onClick={() => {
                               // Pide confirmación: el enlace que ya tiene deja
                               // de servir en el acto, y hay que mandarle otro.
                               const seguro = window.confirm(
-                                `¿Reiniciar el acceso de ${a.label}? Su enlace actual deja de servir y tendrá que elegir un PIN nuevo con el enlace que le mandes.`,
+                                `¿Reiniciar el acceso de ${a.label}? Su enlace actual deja de servir y tendrás que mandarle el nuevo.`,
                               );
                               if (!seguro) return;
                               void llamar(

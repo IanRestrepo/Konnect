@@ -21,8 +21,7 @@ export const metadata = {
 
 /**
  * Portal externo de una sesión. No hay cuenta: se entra con el enlace personal
- * que manda la agencia y un PIN de cuatro dígitos. Fuera de la sesión no se
- * expone absolutamente nada.
+ * que manda la agencia. Fuera de la sesión no se expone absolutamente nada.
  */
 export default async function PortalPage({
   params,
@@ -43,8 +42,9 @@ export default async function PortalPage({
 
   // Sin token válido para esta sesión, solo se ve la puerta.
   if (!portal || portal.sessionId !== id) {
-    // Sin el enlace, un dispositivo donde ya se entró puede seguir con el PIN:
-    // es quien abre el portal desde un marcador.
+    // Sin el enlace, un dispositivo donde ya se entró vuelve a entrar solo: es
+    // quien abre el portal desde un marcador. La API comprueba que la llave
+    // con la que entró siga vigente.
     const device = await readDeviceToken(store.get(DEVICE_COOKIE)?.value);
     const conocido =
       device?.sessionId === id
@@ -56,7 +56,7 @@ export default async function PortalPage({
         sessionId={id}
         llave={llave ?? null}
         arranque={
-          llave ? "abriendo" : conocido && conocido.hasPin && !conocido.revoked ? "pin" : "sin-enlace"
+          llave || (conocido && !conocido.revoked) ? "abriendo" : "sin-enlace"
         }
       />
     );

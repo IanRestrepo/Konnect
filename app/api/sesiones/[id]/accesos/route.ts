@@ -15,7 +15,7 @@ const nuevo = z.object({
 
 const cambio = z.object({
   accessId: z.string().min(1),
-  /** «reiniciar»: enlace nuevo y PIN borrado. */
+  /** «reiniciar»: enlace nuevo; el anterior deja de servir. */
   action: z.enum(["revocar", "reactivar", "reiniciar"]),
 });
 

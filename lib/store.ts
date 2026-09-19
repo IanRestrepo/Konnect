@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { decrypt, encrypt } from "@/lib/crypto";
@@ -1893,15 +1894,10 @@ export async function setAccessRevoked(
   return getCollabSession(sessionId);
 }
 
-/** Cambia el código y deja fuera a quien tuviera el anterior. */
 /**
- * Reinicia un acceso: enlace nuevo y PIN borrado.
- *
- * Es la salida para los dos problemas que trae entrar solo con enlace y PIN:
- * que el creador olvide el PIN, y que el enlace se reenviara y otro eligiera
- * el PIN antes que él. En los dos casos lo que hace falta es lo mismo —que el
- * enlace viejo deje de servir y el PIN vuelva a estar libre—, así que es una
- * sola acción y no dos.
+ * Reinicia un acceso: enlace nuevo, y el viejo —y los dispositivos que
+ * entraron con él— dejan de servir. Es la salida cuando un enlace se reenvió
+ * a quien no debía.
  *
  * Recibe la sesión y la exige en la escritura: sin eso, cualquiera con permiso
  * sobre una sesión podía reiniciar accesos de otra con solo su identificador.
@@ -2905,7 +2901,16 @@ async function avisarPago(
   });
 }
 
-/* ---------------- PIN del portal ---------------- */
+/* ---------------- Acceso al portal ---------------- */
+
+/**
+ * Huella de la llave vigente de un acceso. Cambia al reiniciarlo, y así la
+ * cookie de dispositivo —que se entrega con la huella de su momento— deja de
+ * abrir la sesión con el enlace viejo sin tener que guardar nada más.
+ */
+function huellaLlave(codeEnc: string): string {
+  return createHash("sha256").update(codeEnc).digest("hex").slice(0, 24);
+}
 
 export type PortalAccess = {
   id: string;
@@ -2913,6 +2918,8 @@ export type PortalAccess = {
   role: PortalRole;
   label: string;
   canUpload: boolean;
+  /** Huella de la llave vigente; ver `huellaLlave`. */
+  llave: string;
   hasPin: boolean;
   pinHash: string | null;
   lockedUntil: Date | null;
@@ -2932,6 +2939,7 @@ export async function getPortalAccess(accessId: string): Promise<PortalAccess | 
     role: row.role,
     label: row.label,
     canUpload: row.canUpload,
+    llave: huellaLlave(row.codeEnc),
     hasPin: Boolean(row.pinHash),
     pinHash: row.pinHash,
     lockedUntil: row.lockedUntil,
@@ -2939,48 +2947,9 @@ export async function getPortalAccess(accessId: string): Promise<PortalAccess | 
   };
 }
 
-/**
- * Pone el PIN, pero solo si el acceso todavía no tiene uno.
- *
- * La condición va dentro de la escritura y no en una lectura previa: con dos
- * personas abriendo el mismo enlace a la vez, leer primero dejaría a las dos
- * pasar la comprobación y la segunda pisaría el PIN de la primera. Devuelve si
- * lo consiguió.
- */
-export async function claimAccessPin(accessId: string, pinHash: string): Promise<boolean> {
-  const { count } = await prisma.sessionAccess.updateMany({
-    where: { id: accessId, pinHash: null, revoked: false },
-    data: { pinHash, pinSetAt: new Date(), failedAttempts: 0, lockedUntil: null },
-  });
-  return count > 0;
-}
-
-/** Suma un fallo de PIN y bloquea el acceso al quinto. Devuelve los restantes. */
-export async function registerPinFailure(accessId: string): Promise<number> {
-  const MAXIMO = 5;
-  const BLOQUEO_MINUTOS = 15;
-
-  const row = await prisma.sessionAccess.update({
-    where: { id: accessId },
-    data: { failedAttempts: { increment: 1 } },
-    select: { failedAttempts: true },
-  });
-
-  if (row.failedAttempts >= MAXIMO) {
-    await prisma.sessionAccess.update({
-      where: { id: accessId },
-      data: { lockedUntil: new Date(Date.now() + BLOQUEO_MINUTOS * 60_000) },
-    });
-    return 0;
-  }
-  return MAXIMO - row.failedAttempts;
-}
-
-export async function clearPinFailures(accessId: string): Promise<void> {
-  await prisma.sessionAccess.update({
-    where: { id: accessId },
-    data: { failedAttempts: 0, lockedUntil: null, lastSeenAt: new Date() },
-  });
+/** Anota la entrada al portal; la sesión enseña «Última entrada» con esto. */
+export async function markAccessSeen(accessId: string): Promise<void> {
+  await prisma.sessionAccess.update({ where: { id: accessId }, data: { lastSeenAt: new Date() } });
 }
 
 /* ---------------- Peticiones de la sesión ---------------- */
