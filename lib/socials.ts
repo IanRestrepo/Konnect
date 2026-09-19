@@ -22,7 +22,8 @@ export const PLATFORMS: { id: SocialPlatform; label: string; placeholder: string
   { id: "x", label: "X (Twitter)", placeholder: "usuario" },
   { id: "twitch", label: "Twitch", placeholder: "usuario" },
   { id: "kick", label: "Kick", placeholder: "usuario" },
-  { id: "discord", label: "Discord", placeholder: "invitación o usuario" },
+  // Lo que interesa a una marca es su comunidad, no su usuario personal.
+  { id: "discord", label: "Discord", placeholder: "invitación al servidor (discord.gg/…)" },
   { id: "roblox", label: "Roblox", placeholder: "usuario o id de grupo" },
   { id: "web", label: "Sitio web", placeholder: "https://…" },
 ];

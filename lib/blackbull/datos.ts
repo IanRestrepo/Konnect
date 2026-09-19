@@ -75,6 +75,18 @@ function tituloLimpio(titulo: string): string {
  * documento impreso «https://www.tiktok.com/@nabrielxd» no se lee, «@nabrielxd»
  * sí.
  */
+/**
+ * La invitación al servidor, legible: «discord.gg/comunidad». En Discord lo
+ * que se vende es la comunidad del creador, no su usuario personal, que a una
+ * marca no le dice nada.
+ */
+function servidorDiscord(handle: string): string {
+  const limpio = handle.trim().replace(/\/+$/, "");
+  const codigo = limpio.replace(/^https?:\/\/(www\.)?(discord\.gg|discord\.com\/invite)\//i, "");
+  if (/^https?:\/\//i.test(codigo)) return codigo.replace(/^https?:\/\/(www\.)?/i, "");
+  return `discord.gg/${codigo.replace(/^@/, "")}`;
+}
+
 function usuario(handle: string): string {
   const limpio = handle.trim().replace(/\/+$/, "");
   if (!/^https?:\/\//i.test(limpio)) return limpio;
@@ -210,11 +222,11 @@ export function construirMediaKit(
       engagement: vistasParaMarcas > 0 ? (interacciones / vistasParaMarcas) * 100 : null,
     },
     canales,
-    redes: redes.map((r) => ({
-      red: PLATFORM_LABEL[r.platform],
-      handle: usuario(r.handle),
-      seguidores: r.followers,
-    })),
+    redes: redes.map((r) =>
+      r.platform === "discord"
+        ? { red: "Servidor de Discord", handle: servidorDiscord(r.handle), seguidores: r.followers }
+        : { red: PLATFORM_LABEL[r.platform], handle: usuario(r.handle), seguidores: r.followers },
+    ),
     marcas,
     destacadas,
     tarifas,
