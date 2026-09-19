@@ -10,6 +10,7 @@ import { ListBox, ListRow, RowIcon } from "@/components/ui/list";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Paginador, usePagina } from "@/components/ui/pager";
+import { useRecordado } from "@/lib/recordar";
 import { useCan } from "@/components/session-provider";
 import { CAMPAIGN_STATUS } from "@/lib/labels";
 import type { CampaignStatus, CollabSession } from "@/lib/types";
@@ -37,8 +38,9 @@ export function SessionsView({
   const can = useCan();
   const puedeEditar = can("editar_sesiones");
 
-  const [query, setQuery] = useState("");
-  const [filtro, setFiltro] = useState<Filtro>("todas");
+  // Recordados: al volver de una sesión la lista sigue como la dejaste.
+  const [query, setQuery] = useRecordado("sesiones.busqueda", "");
+  const [filtro, setFiltro] = useRecordado<Filtro>("sesiones.filtro", "todas");
   const [error, setError] = useState<string | null>(null);
 
   const grupos = useMemo(() => {
@@ -78,7 +80,7 @@ export function SessionsView({
     });
   }, [grupos, query, filtro]);
 
-  const pagina = usePagina(visibles, `${filtro}|${query}`);
+  const pagina = usePagina(visibles, `${filtro}|${query}`, undefined, "sesiones");
 
   async function borrarSuelta(s: CollabSession) {
     if (!window.confirm(`¿Eliminar la sesión «${s.name}»? Se borra con su material y sus accesos.`)) {

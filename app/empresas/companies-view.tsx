@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRecordado } from "@/lib/recordar";
+import { Paginador, usePagina } from "@/components/ui/pager";
 import { Building2, Plus } from "lucide-react";
 import { PageTitle, SectionLabel } from "@/components/ui/section";
 import { Segmented, SearchInput, Toolbar } from "@/components/shell/toolbar";
@@ -18,8 +20,9 @@ type Stats = Record<string, { campaigns: number; invested: number; views: number
 type Filter = "todas" | "activo" | "prospecto" | "inactivo";
 
 export function CompaniesView({ companies, stats }: { companies: Company[]; stats: Stats }) {
-  const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<Filter>("todas");
+  // Recordados: al volver de una ficha la lista sigue como la dejaste.
+  const [query, setQuery] = useRecordado("empresas.busqueda", "");
+  const [filter, setFilter] = useRecordado<Filter>("empresas.filtro", "todas");
   const [open, setOpen] = useState(false);
 
   const filters = useMemo<{ id: Filter; label: string; count: number }[]>(
@@ -53,15 +56,23 @@ export function CompaniesView({ companies, stats }: { companies: Company[]; stat
     });
   }, [companies, query, filter]);
 
+  // Se ordenan por sector antes de partir en páginas, para que cada página
+  // agrupe lo suyo y un sector no salga repartido a saltos.
+  const ordenadas = useMemo(
+    () => [...filtered].sort((a, b) => a.industry.localeCompare(b.industry) || a.name.localeCompare(b.name)),
+    [filtered],
+  );
+  const pagina = usePagina(ordenadas, `${filter}|${query}`, undefined, "empresas");
+
   const bySector = useMemo(() => {
     const groups = new Map<string, Company[]>();
-    filtered.forEach((company) => {
+    pagina.visibles.forEach((company) => {
       const list = groups.get(company.industry) ?? [];
       list.push(company);
       groups.set(company.industry, list);
     });
-    return [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  }, [filtered]);
+    return [...groups.entries()];
+  }, [pagina.visibles]);
 
   return (
     <div className="space-y-7">
@@ -133,6 +144,8 @@ export function CompaniesView({ companies, stats }: { companies: Company[]; stat
           </section>
         ))
       )}
+
+      <Paginador {...pagina} />
 
       <NewCompanyDialog open={open} onClose={() => setOpen(false)} />
     </div>

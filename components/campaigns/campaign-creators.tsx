@@ -149,7 +149,7 @@ export function CampaignCreators({
     })
     .filter((p): p is Participante => p !== null);
 
-  const pagina = usePagina(participantes, campaign.id);
+  const pagina = usePagina(participantes, campaign.id, undefined, `campana.${campaign.id}`);
 
   async function contrato(creatorId: string, accion: "finalizar" | "reabrir", reason = "") {
     setOcupado(true);

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useRecordado } from "@/lib/recordar";
 
 /** Cuántos influencers se enseñan de una vez en cualquier lista. */
 export const POR_PAGINA = 10;
@@ -15,8 +16,19 @@ export const POR_PAGINA = 10;
  * resetear con un efecto, porque con el efecto se pinta un fotograma con la
  * página vieja sobre la lista nueva, que puede estar vacía.
  */
-export function usePagina<T>(items: T[], clave: string, porPagina = POR_PAGINA) {
-  const [estado, setEstado] = useState({ clave, pagina: 0 });
+export function usePagina<T>(
+  items: T[],
+  clave: string,
+  porPagina = POR_PAGINA,
+  /**
+   * Nombre con el que se recuerda la página al salir y volver. Solo para las
+   * listas desde las que se entra a una ficha; en un diálogo no hace falta.
+   */
+  recordarComo?: string,
+) {
+  const [local, setLocal] = useState({ clave, pagina: 0 });
+  const [recordado, setRecordado] = useRecordado(`pagina.${recordarComo ?? ""}`, { clave, pagina: 0 });
+  const [estado, setEstado] = recordarComo ? [recordado, setRecordado] : [local, setLocal];
 
   const paginas = Math.max(1, Math.ceil(items.length / porPagina));
   const pedida = estado.clave === clave ? estado.pagina : 0;

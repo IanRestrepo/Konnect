@@ -1,6 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
+import { useRecordado } from "@/lib/recordar";
+import { Paginador, usePagina } from "@/components/ui/pager";
 import Link from "next/link";
 import { Download, Megaphone, Plus, SlidersHorizontal } from "lucide-react";
 import { PageTitle } from "@/components/ui/section";
@@ -40,8 +42,9 @@ const ESTADOS: Record<Exclude<Filter, "todas">, CampaignStatus[]> = {
 };
 
 export function CampaignsView({ rows }: { rows: CampaignRow[] }) {
-  const [tab, setTab] = useState<Filter>("activas");
-  const [query, setQuery] = useState("");
+  // Recordados: al volver de una campaña la lista sigue como la dejaste.
+  const [tab, setTab] = useRecordado<Filter>("campanas.filtro", "activas");
+  const [query, setQuery] = useRecordado("campanas.busqueda", "");
 
   const tabs = useMemo<{ id: Filter; label: string; count: number }[]>(() => {
     const count = (filtro: Exclude<Filter, "todas">) =>
@@ -66,7 +69,7 @@ export function CampaignsView({ rows }: { rows: CampaignRow[] }) {
   const totals = useMemo(
     () =>
       filtered.reduce(
-        (acc, { campaign, metrics }) => ({
+        (acc, { metrics }) => ({
           budget: acc.budget + metrics.clientTotal,
           spent: acc.spent + metrics.spent,
           views: acc.views + metrics.views,
@@ -75,6 +78,8 @@ export function CampaignsView({ rows }: { rows: CampaignRow[] }) {
       ),
     [filtered],
   );
+
+  const pagina = usePagina(filtered, `${tab}|${query}`, undefined, "campanas");
 
   function exportCsv() {
     downloadCsv(`konnect-campanas-${new Date().toISOString().slice(0, 10)}.csv`, [
@@ -170,7 +175,7 @@ export function CampaignsView({ rows }: { rows: CampaignRow[] }) {
         <>
           {/* Teléfono y tablet: filas apiladas. La tabla pide 880px y no cabe. */}
           <ListBox className="lg:hidden">
-            {filtered.map(({ campaign, metrics, company, creators }) => {
+            {pagina.visibles.map(({ campaign, metrics, company, creators }) => {
               const status = CAMPAIGN_STATUS[campaign.status];
               return (
                 <ListRow
@@ -213,7 +218,7 @@ export function CampaignsView({ rows }: { rows: CampaignRow[] }) {
               </tr>
             </thead>
             <tbody>
-              {filtered.map(({ campaign, metrics, company, creators }) => {
+              {pagina.visibles.map(({ campaign, metrics, company, creators }) => {
                 const status = CAMPAIGN_STATUS[campaign.status];
                 return (
                   <Tr key={campaign.id}>
@@ -296,6 +301,7 @@ export function CampaignsView({ rows }: { rows: CampaignRow[] }) {
             </tfoot>
             </Table>
           </TableWrap>
+          <Paginador {...pagina} />
         </>
       )}
     </div>

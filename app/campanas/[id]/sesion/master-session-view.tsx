@@ -110,7 +110,7 @@ export function MasterSessionView({
   const atrasadas = todasPeticiones.filter((r) => atrasada(r, ahora)).length;
   const abiertas = filas.filter((f) => f.session.status === "abierta").length;
 
-  const pagina = usePagina(filas, campaignId);
+  const pagina = usePagina(filas, campaignId, undefined, `maestra.${campaignId}`);
 
   const destinos = [
     { id: TODAS, label: "Todas las sesiones", hint: `${filas.length}` },

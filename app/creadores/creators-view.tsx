@@ -5,6 +5,7 @@ import { Plus, Users } from "lucide-react";
 import { PageTitle, SectionLabel } from "@/components/ui/section";
 import { Segmented, SearchInput, Toolbar } from "@/components/shell/toolbar";
 import { Paginador, usePagina } from "@/components/ui/pager";
+import { useRecordado } from "@/lib/recordar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
@@ -28,8 +29,9 @@ export function CreatorsView({
   /** Catálogo vivo, para el alta. */
   categories: string[];
 }) {
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState<Filter>("todos");
+  // Recordados: al volver de una ficha la lista sigue como la dejaste.
+  const [query, setQuery] = useRecordado("creadores.busqueda", "");
+  const [status, setStatus] = useRecordado<Filter>("creadores.filtro", "todos");
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const filters = useMemo<{ id: Filter; label: string; count: number }[]>(
@@ -72,7 +74,7 @@ export function CreatorsView({
       ),
     [filtered],
   );
-  const pagina = usePagina(ordenados, `${status}|${query}`);
+  const pagina = usePagina(ordenados, `${status}|${query}`, undefined, "creadores");
 
   const byCategory = useMemo(() => {
     const groups = new Map<string, Creator[]>();

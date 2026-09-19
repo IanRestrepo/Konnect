@@ -40,6 +40,7 @@ export function AppShell({
       </div>
 
       <main
+        data-scroll-principal
         className={cn(
           "m-2 min-w-0 flex-1 rounded-[var(--r-panel)] border border-[var(--line)] bg-[var(--surface)] shadow-[var(--shadow-soft)] md:my-3 md:mr-3 md:ml-0",
           fullBleed ? "overflow-hidden" : "overflow-y-auto",
