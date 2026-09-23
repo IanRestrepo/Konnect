@@ -11,6 +11,16 @@ const PUBLIC = ["/entrar", "/api/auth/entrar"];
  */
 const PORTAL = ["/portal", "/api/portal"];
 
+/**
+ * Rutas que comprueban ellas mismas quién llama.
+ *
+ * El permiso para subir a Blob lo piden las dos puertas: el equipo con su
+ * sesión y el creador con su token del portal. Si el middleware exigiera
+ * sesión de equipo, el creador no podría subir su entrega; la ruta mira las
+ * dos cosas y niega lo que no toque.
+ */
+const PROPIAS = ["/api/blob/subir"];
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -19,6 +29,10 @@ export async function middleware(request: NextRequest) {
   }
 
   if (PORTAL.some((route) => pathname === route || pathname.startsWith(`${route}/`))) {
+    return NextResponse.next();
+  }
+
+  if (PROPIAS.includes(pathname)) {
     return NextResponse.next();
   }
 
