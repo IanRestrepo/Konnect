@@ -82,6 +82,13 @@ export async function POST(request: Request): Promise<NextResponse> {
       request,
       onBeforeGenerateToken: async (pathname) => {
         const { tipos, maximo } = await permiso(pathname);
+        // El fallo de la biblioteca cuando falta la clave es «No token found»,
+        // que no le dice nada a quien está intentando subir una captura.
+        if (!process.env.BLOB_READ_WRITE_TOKEN) {
+          throw new Error(
+            "Falta BLOB_READ_WRITE_TOKEN. Conecta el store de Vercel Blob al proyecto y vuelve a desplegar.",
+          );
+        }
         return {
           allowedContentTypes: tipos,
           maximumSizeInBytes: maximo,
