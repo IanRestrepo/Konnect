@@ -10,7 +10,8 @@ import type {
   SessionItem,
   SessionRequirement,
 } from "@/lib/types";
-import { formatBytes } from "@/lib/uploads";
+import { MAXIMO_MATERIAL, TIPOS_MATERIAL, formatBytes } from "@/lib/archivos";
+import { ponerArchivo, subirABlob } from "@/lib/subir-cliente";
 import { formatDate } from "@/lib/utils";
 
 /**
@@ -228,8 +229,15 @@ function Material({
     setSubiendo(true);
     setError(null);
     try {
+      // El archivo sube directo a Blob: por el servidor no pasaría nada que
+      // se acerque al tamaño de un video.
+      const listo = await subirABlob(archivo, {
+        carpeta: `sesiones/${sessionId}`,
+        tipos: TIPOS_MATERIAL,
+        maximo: MAXIMO_MATERIAL,
+      });
       const cuerpo = new FormData();
-      cuerpo.append("archivo", archivo);
+      ponerArchivo(cuerpo, listo);
       cuerpo.append("kind", role === "cliente" ? "referencia" : "entregable");
 
       const res = await fetch(`/api/portal/${sessionId}/archivos`, {

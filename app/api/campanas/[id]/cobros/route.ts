@@ -6,7 +6,13 @@ import { hasPermission } from "@/lib/permissions";
 import { getCampaign } from "@/lib/data";
 import { puedeEditarCampana } from "@/lib/campaign-access";
 import { addCampaignPayment, removeCampaignPayment } from "@/lib/store";
-import { MAXIMO_COMPROBANTE, TIPOS_COMPROBANTE, esFallo, subirArchivo } from "@/lib/uploads";
+import {
+  MAXIMO_COMPROBANTE,
+  TIPOS_COMPROBANTE,
+  archivoDeFormulario,
+  esFallo,
+  traeArchivo,
+} from "@/lib/uploads";
 import { IMPORTE_MAXIMO } from "@/lib/pricing";
 import { registrar } from "@/lib/audit";
 import { formatMoney } from "@/lib/utils";
@@ -63,9 +69,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   let receipt: { receiptUrl: string; receiptName: string } | null = null;
-  const archivo = form.get("archivo");
-  if (archivo instanceof File && archivo.size > 0) {
-    const subido = await subirArchivo(archivo, {
+  if (traeArchivo(form)) {
+    const subido = await archivoDeFormulario(form, {
       carpeta: `cobros/${id}`,
       tipos: TIPOS_COMPROBANTE,
       maximo: MAXIMO_COMPROBANTE,

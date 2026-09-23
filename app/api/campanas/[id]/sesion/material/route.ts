@@ -6,7 +6,7 @@ import { hasPermission } from "@/lib/permissions";
 import { getCampaign } from "@/lib/data";
 import { puedeEditarCampana } from "@/lib/campaign-access";
 import { addCampaignMaterial, removeCampaignMaterial } from "@/lib/store";
-import { MAXIMO_MATERIAL, TIPOS_MATERIAL, esFallo, subirArchivo } from "@/lib/uploads";
+import { MAXIMO_MATERIAL, TIPOS_MATERIAL, esFallo, archivoDeFormulario } from "@/lib/uploads";
 import type { SessionItemKind } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -65,7 +65,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       ? (kindCrudo as SessionItemKind)
       : "referencia";
 
-    const subido = await subirArchivo(form.get("archivo"), {
+    const subido = await archivoDeFormulario(form, {
       carpeta: `campanas/${id}`,
       tipos: TIPOS_MATERIAL,
       maximo: MAXIMO_MATERIAL,

@@ -7,7 +7,7 @@ import {
   MAXIMO_MATERIAL,
   TIPOS_MATERIAL,
   esFallo,
-  subirArchivo,
+  archivoDeFormulario,
 } from "@/lib/uploads";
 import type { SessionItemKind } from "@/lib/types";
 
@@ -49,7 +49,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     : "entregable";
   const notes = String(form.get("notes") ?? "").slice(0, 2000);
 
-  const subido = await subirArchivo(form.get("archivo"), {
+  const subido = await archivoDeFormulario(form, {
     carpeta: `sesiones/${id}`,
     tipos: TIPOS_MATERIAL,
     maximo: MAXIMO_MATERIAL,

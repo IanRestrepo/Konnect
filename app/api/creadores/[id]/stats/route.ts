@@ -4,7 +4,7 @@ import { del } from "@vercel/blob";
 import { getSession } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
 import { addCreatorStatShot, removeCreatorStatShot } from "@/lib/store";
-import { MAXIMO_CAPTURA, TIPOS_IMAGEN, esFallo, subirArchivo } from "@/lib/uploads";
+import { MAXIMO_CAPTURA, TIPOS_IMAGEN, esFallo, archivoDeFormulario } from "@/lib/uploads";
 import { PLATFORMS } from "@/lib/socials";
 import type { SocialPlatform } from "@/lib/types";
 
@@ -31,7 +31,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const fecha = String(form.get("takenAt") ?? "");
   const takenAt = /^\d{4}-\d{2}-\d{2}$/.test(fecha) ? new Date(`${fecha}T00:00:00`).toISOString() : null;
 
-  const subido = await subirArchivo(form.get("archivo"), {
+  const subido = await archivoDeFormulario(form, {
     carpeta: `stats/${id}`,
     tipos: TIPOS_IMAGEN,
     maximo: MAXIMO_CAPTURA,

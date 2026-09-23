@@ -49,6 +49,8 @@ import { cn, formatDate } from "@/lib/utils";
 import { BackLink } from "@/components/ui/back-link";
 import { Segmented } from "@/components/shell/toolbar";
 import { useRecordado } from "@/lib/recordar";
+import { ponerArchivo, subirABlob } from "@/lib/subir-cliente";
+import { MAXIMO_MATERIAL, TIPOS_MATERIAL } from "@/lib/archivos";
 
 export type SesionFila = {
   session: CollabSession;
@@ -960,8 +962,13 @@ function MaterialDialog({
     try {
       let res: Response;
       if (archivo) {
+        const listo = await subirABlob(archivo, {
+          carpeta: destino === TODAS ? `campanas/${campaignId}` : `sesiones/${destino}`,
+          tipos: TIPOS_MATERIAL,
+          maximo: MAXIMO_MATERIAL,
+        });
         const cuerpo = new FormData();
-        cuerpo.append("archivo", archivo);
+        ponerArchivo(cuerpo, listo);
         cuerpo.append("kind", draft.kind);
         cuerpo.append("title", draft.title.trim());
         cuerpo.append("notes", draft.notes);

@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
 import { addSessionItem, logSessionEvent } from "@/lib/store";
-import { MAXIMO_MATERIAL, TIPOS_MATERIAL, esFallo, subirArchivo } from "@/lib/uploads";
+import { MAXIMO_MATERIAL, TIPOS_MATERIAL, esFallo, archivoDeFormulario } from "@/lib/uploads";
 import type { SessionItemKind } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -26,7 +26,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     ? (kindCrudo as SessionItemKind)
     : "referencia";
 
-  const subido = await subirArchivo(form.get("archivo"), {
+  const subido = await archivoDeFormulario(form, {
     carpeta: `sesiones/${id}`,
     tipos: TIPOS_MATERIAL,
     maximo: MAXIMO_MATERIAL,

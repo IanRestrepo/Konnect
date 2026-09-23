@@ -4,7 +4,7 @@ import { requirePermission } from "@/lib/session";
 import { setDeliverableReceipt } from "@/lib/store";
 import { getCampaign } from "@/lib/data";
 import { puedeEditarCampana } from "@/lib/campaign-access";
-import { MAXIMO_COMPROBANTE, TIPOS_COMPROBANTE, esFallo, subirArchivo } from "@/lib/uploads";
+import { MAXIMO_COMPROBANTE, TIPOS_COMPROBANTE, esFallo, archivoDeFormulario } from "@/lib/uploads";
 import { registrar } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
@@ -26,7 +26,7 @@ export async function POST(
   const form = await request.formData().catch(() => null);
   if (!form) return NextResponse.json({ error: "Solicitud inválida." }, { status: 400 });
 
-  const subido = await subirArchivo(form.get("archivo"), {
+  const subido = await archivoDeFormulario(form, {
     carpeta: `comprobantes/${id}`,
     tipos: TIPOS_COMPROBANTE,
     maximo: MAXIMO_COMPROBANTE,

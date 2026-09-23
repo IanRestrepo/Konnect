@@ -1,5 +1,10 @@
 import { put } from "@vercel/blob";
 
+// Los límites y los tipos viven en `lib/archivos`, sin SDK, para que también
+// los puedan leer los formularios del navegador. Se reexportan porque las
+// rutas de API los piden junto con la subida.
+export * from "@/lib/archivos";
+
 /**
  * Subida de archivos a Vercel Blob.
  *
@@ -11,44 +16,6 @@ import { put } from "@vercel/blob";
  * portal— con permisos distintos, y los límites tienen que ser los mismos en
  * las dos: si una acepta lo que la otra rechaza, el material queda a medias.
  */
-
-/** Lo que tiene sentido entregar en una sesión. */
-export const TIPOS_MATERIAL = [
-  "image/png",
-  "image/jpeg",
-  "image/gif",
-  "image/webp",
-  "image/avif",
-  "video/mp4",
-  "video/quicktime",
-  "video/webm",
-  "application/pdf",
-  "application/zip",
-  "text/plain",
-];
-
-/** Un comprobante de pago es una captura o un PDF; nada más hace falta. */
-export const TIPOS_COMPROBANTE = [
-  "image/png",
-  "image/jpeg",
-  "image/webp",
-  "application/pdf",
-];
-
-/**
- * 100 MB. Un video vertical terminado cabe; un master sin comprimir no, y es
- * mejor así: eso se comparte por enlace, no se sube a la herramienta.
- */
-export const MAXIMO_MATERIAL = 100 * 1024 * 1024;
-
-/** 8 MB de sobra para una captura o un PDF de banco. */
-export const MAXIMO_COMPROBANTE = 8 * 1024 * 1024;
-
-/** Capturas de estadísticas: solo imágenes, que es lo que se enseña en la ficha. */
-export const TIPOS_IMAGEN = ["image/png", "image/jpeg", "image/webp"];
-
-/** Un pantallazo de móvil o de escritorio cabe de sobra. */
-export const MAXIMO_CAPTURA = 10 * 1024 * 1024;
 
 export type ArchivoSubido = {
   url: string;
@@ -62,6 +29,76 @@ export type FalloSubida = { error: string; status: number };
 
 export function esFallo(r: ArchivoSubido | FalloSubida): r is FalloSubida {
   return "error" in r;
+}
+
+/** ¿El formulario trae archivo, ya sea subido o por subir? */
+export function traeArchivo(form: FormData): boolean {
+  const archivo = form.get("archivo");
+  return Boolean(form.get("blobUrl")) || (archivo instanceof File && archivo.size > 0);
+}
+
+/**
+ * El archivo de un formulario, venga como venga.
+ *
+ * Lo normal es que el navegador lo haya subido ya a Blob y aquí solo lleguen
+ * su dirección y sus datos (`blobUrl`, `blobName`…): una petición a una
+ * función de Vercel se corta en 4,5 MB, así que mandar el archivo entero al
+ * servidor solo funciona con los pequeños. Se sigue aceptando ese camino
+ * —`archivo`— porque en local no hay tal límite y es más simple de probar.
+ */
+export async function archivoDeFormulario(
+  form: FormData,
+  opciones: { carpeta: string; tipos: string[]; maximo: number },
+): Promise<ArchivoSubido | FalloSubida> {
+  const url = String(form.get("blobUrl") ?? "").trim();
+  if (!url) return subirArchivo(form.get("archivo"), opciones);
+
+  if (!esDeNuestroBlob(url)) {
+    return { error: "Esa dirección no es de un archivo subido a Konnect.", status: 400 };
+  }
+
+  const contentType = String(form.get("blobType") ?? "");
+  if (!opciones.tipos.includes(contentType)) {
+    return { error: `Ese tipo de archivo no se admite (${contentType || "desconocido"}).`, status: 415 };
+  }
+
+  const fileSize = Number(form.get("blobSize")) || 0;
+  if (fileSize > opciones.maximo) {
+    const mb = Math.round(opciones.maximo / 1024 / 1024);
+    return { error: `El archivo pesa demasiado. El máximo son ${mb} MB.`, status: 413 };
+  }
+
+  return {
+    url,
+    fileName: String(form.get("blobName") ?? "").slice(0, 200) || "archivo",
+    fileSize,
+    contentType,
+  };
+}
+
+/**
+ * La dirección es de nuestro store de Blob.
+ *
+ * El navegador manda la dirección después de subir, así que alguien podría
+ * mandar otra cualquiera y dejar en la sesión un enlace a un sitio ajeno con
+ * pinta de archivo nuestro. El permiso de subida ya limita dónde y cuánto;
+ * esto cierra el resto.
+ */
+function esDeNuestroBlob(url: string): boolean {
+  let host: string;
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "https:") return false;
+    host = u.hostname;
+  } catch {
+    return false;
+  }
+  if (!host.endsWith(".public.blob.vercel-storage.com")) return false;
+
+  // El host es el id del store sin el prefijo «store_», en minúsculas. Si la
+  // variable no está puesta, basta con que sea un host de Blob.
+  const store = process.env.BLOB_STORE_ID?.replace(/^store_/, "").toLowerCase();
+  return !store || host.startsWith(`${store}.`);
 }
 
 /**
@@ -107,17 +144,4 @@ export async function subirArchivo(
     const detalle = e instanceof Error ? e.message : "";
     return { error: `No se pudo subir el archivo. ${detalle}`.trim(), status: 502 };
   }
-}
-
-/** Peso legible, para no enseñar «13631488» al lado del nombre. */
-export function formatBytes(bytes: number | null | undefined): string {
-  if (!bytes) return "—";
-  const unidades = ["B", "KB", "MB", "GB"];
-  let n = bytes;
-  let i = 0;
-  while (n >= 1024 && i < unidades.length - 1) {
-    n /= 1024;
-    i++;
-  }
-  return `${n.toFixed(n < 10 && i > 0 ? 1 : 0)} ${unidades[i]}`;
 }

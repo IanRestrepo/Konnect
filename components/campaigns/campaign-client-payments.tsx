@@ -10,6 +10,8 @@ import { FieldHint, Input, Label, Textarea } from "@/components/ui/field";
 import { useCan } from "@/components/session-provider";
 import type { CampaignPayment, Currency } from "@/lib/types";
 import { formatDate, formatMoney } from "@/lib/utils";
+import { ponerArchivo, subirABlob } from "@/lib/subir-cliente";
+import { MAXIMO_COMPROBANTE, TIPOS_COMPROBANTE } from "@/lib/archivos";
 
 /**
  * Lo que el cliente ha pagado de la campaña.
@@ -188,7 +190,16 @@ function CobroDialog({
       cuerpo.append("amount", String(Number(importe)));
       cuerpo.append("paidAt", new Date(`${fecha}T12:00:00`).toISOString());
       cuerpo.append("notes", nota.trim());
-      if (archivo) cuerpo.append("archivo", archivo);
+      if (archivo) {
+        ponerArchivo(
+          cuerpo,
+          await subirABlob(archivo, {
+            carpeta: `cobros/${campaignId}`,
+            tipos: TIPOS_COMPROBANTE,
+            maximo: MAXIMO_COMPROBANTE,
+          }),
+        );
+      }
       const res = await fetch(`/api/campanas/${campaignId}/cobros`, { method: "POST", body: cuerpo });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? "No se pudo registrar el cobro.");

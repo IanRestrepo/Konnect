@@ -6,7 +6,7 @@ import { hasPermission } from "@/lib/permissions";
 import { getCampaign, getCreator } from "@/lib/data";
 import { puedeEditarCampana } from "@/lib/campaign-access";
 import { setCreatorPayment } from "@/lib/store";
-import { MAXIMO_COMPROBANTE, TIPOS_COMPROBANTE, esFallo, subirArchivo } from "@/lib/uploads";
+import { MAXIMO_COMPROBANTE, TIPOS_COMPROBANTE, esFallo, archivoDeFormulario } from "@/lib/uploads";
 import { creatorPayout } from "@/lib/pricing";
 import { registrar } from "@/lib/audit";
 import { formatMoney } from "@/lib/utils";
@@ -70,7 +70,7 @@ export async function POST(
     return NextResponse.json({ error: "Elige las piezas que paga." }, { status: 400 });
   }
 
-  const subido = await subirArchivo(form.get("archivo"), {
+  const subido = await archivoDeFormulario(form, {
     carpeta: `comprobantes/${id}`,
     tipos: TIPOS_COMPROBANTE,
     maximo: MAXIMO_COMPROBANTE,

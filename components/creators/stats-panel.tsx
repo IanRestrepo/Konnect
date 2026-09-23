@@ -12,6 +12,8 @@ import { useCan } from "@/components/session-provider";
 import { PLATFORMS, PLATFORM_LABEL } from "@/lib/socials";
 import type { CreatorStatShot, SocialPlatform } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
+import { ponerArchivo, subirABlob } from "@/lib/subir-cliente";
+import { MAXIMO_CAPTURA, TIPOS_IMAGEN } from "@/lib/archivos";
 
 const SIN_RED = "";
 
@@ -191,8 +193,14 @@ function SubirCaptura({
     setGuardando(true);
     setError(null);
     try {
+      // La imagen va del navegador a Blob; al servidor solo su dirección.
+      const listo = await subirABlob(archivo, {
+        carpeta: `stats/${creatorId}`,
+        tipos: TIPOS_IMAGEN,
+        maximo: MAXIMO_CAPTURA,
+      });
       const form = new FormData();
-      form.set("archivo", archivo);
+      ponerArchivo(form, listo);
       form.set("platform", platform);
       form.set("caption", caption);
       form.set("takenAt", takenAt);

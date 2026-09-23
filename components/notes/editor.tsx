@@ -25,6 +25,8 @@ import {
   Strikethrough,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ponerArchivo, subirABlob } from "@/lib/subir-cliente";
+import { MAXIMO_NOTA, TIPOS_NOTA } from "@/lib/archivos";
 
 /**
  * Editor de notas.
@@ -60,7 +62,10 @@ export function NoteEditor({
     setFallo(null);
     try {
       const cuerpo = new FormData();
-      cuerpo.append("archivo", archivo);
+      ponerArchivo(
+        cuerpo,
+        await subirABlob(archivo, { carpeta: "notas", tipos: TIPOS_NOTA, maximo: MAXIMO_NOTA }),
+      );
 
       const res = await fetch("/api/notas/imagen", { method: "POST", body: cuerpo });
       const texto = await res.text();

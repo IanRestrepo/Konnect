@@ -10,6 +10,8 @@ import { creatorPayout } from "@/lib/pricing";
 import { piezaLabel } from "@/lib/socials";
 import type { Campaign, Creator, Deliverable } from "@/lib/types";
 import { cn, formatDate, formatMoney } from "@/lib/utils";
+import { ponerArchivo, subirABlob } from "@/lib/subir-cliente";
+import { MAXIMO_COMPROBANTE, TIPOS_COMPROBANTE } from "@/lib/archivos";
 
 const PAGO: Record<Deliverable["paymentStatus"], { label: string; tone: "neutral" | "accent" | "ok" }> = {
   pendiente: { label: "Sin pagar", tone: "neutral" },
@@ -66,8 +68,13 @@ export function CreatorPaymentDialog({
     setOcupado("comprobante");
     setError(null);
     try {
+      const listo = await subirABlob(archivo, {
+        carpeta: `comprobantes/${campaign.id}`,
+        tipos: TIPOS_COMPROBANTE,
+        maximo: MAXIMO_COMPROBANTE,
+      });
       const cuerpo = new FormData();
-      cuerpo.append("archivo", archivo);
+      ponerArchivo(cuerpo, listo);
       cuerpo.append("deliverableIds", JSON.stringify(elegidas));
       const res = await fetch(`/api/campanas/${campaign.id}/creadores/${creator.id}/pago`, {
         method: "POST",
