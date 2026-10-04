@@ -33,20 +33,60 @@ export const PLATFORM_LABEL: Record<SocialPlatform, string> = Object.fromEntries
 ) as Record<SocialPlatform, string>;
 
 /** Limpia el arroba y arma la URL pública de cada red. */
-export const PLATFORM_URL: Record<SocialPlatform, (handle: string) => string> = {
-  youtube: (h) =>
-    h.startsWith("http") ? h : `https://youtube.com/@${h.replace(/^@/, "")}`,
-  instagram: (h) => `https://instagram.com/${h.replace(/^@/, "")}`,
-  tiktok: (h) => `https://tiktok.com/@${h.replace(/^@/, "")}`,
-  x: (h) => `https://x.com/${h.replace(/^@/, "")}`,
-  twitch: (h) => `https://twitch.tv/${h.replace(/^@/, "")}`,
-  kick: (h) => `https://kick.com/${h.replace(/^@/, "")}`,
-  discord: (h) =>
-    h.startsWith("http") ? h : `https://discord.gg/${h.replace(/^https?:\/\/discord\.gg\//, "")}`,
-  roblox: (h) =>
-    h.startsWith("http") ? h : `https://www.roblox.com/search/users?keyword=${encodeURIComponent(h)}`,
-  web: (h) => (h.startsWith("http") ? h : `https://${h}`),
+const ARMAR_URL: Record<SocialPlatform, (usuario: string) => string> = {
+  youtube: (u) => `https://youtube.com/@${u}`,
+  instagram: (u) => `https://instagram.com/${u}`,
+  tiktok: (u) => `https://tiktok.com/@${u}`,
+  x: (u) => `https://x.com/${u}`,
+  twitch: (u) => `https://twitch.tv/${u}`,
+  kick: (u) => `https://kick.com/${u}`,
+  discord: (u) => `https://discord.gg/${u}`,
+  roblox: (u) => `https://www.roblox.com/search/users?keyword=${encodeURIComponent(u)}`,
+  web: (u) => `https://${u}`,
 };
+
+const esDireccion = (h: string) => /^https?:\/\//i.test(h.trim());
+
+/**
+ * La dirección pública de un perfil.
+ *
+ * Mucha gente pega la dirección entera en vez del usuario. Si ya es una
+ * dirección se deja tal cual: antes solo algunas redes lo comprobaban, y un
+ * TikTok pegado como enlace acababa en «tiktok.com/@https://www.tiktok.com/…».
+ */
+export const PLATFORM_URL: Record<SocialPlatform, (handle: string) => string> = Object.fromEntries(
+  PLATFORMS.map((p) => [
+    p.id,
+    (h: string) => (esDireccion(h) ? h.trim() : ARMAR_URL[p.id](h.trim().replace(/^@/, ""))),
+  ]),
+) as Record<SocialPlatform, (handle: string) => string>;
+
+/**
+ * Cómo se lee un perfil en pantalla: «@musashii_» y no la dirección entera.
+ *
+ * Si lo guardado es un usuario, se deja. Si es una dirección, se saca el
+ * usuario de la ruta; cuando la ruta no lo trae —una invitación de Discord, un
+ * perfil de Roblox por número— se dice qué es en vez de enseñar un código.
+ */
+export function usuarioRed(platform: SocialPlatform, handle: string): string {
+  const h = handle.trim();
+  if (!esDireccion(h)) return h;
+  let partes: string[] = [];
+  try {
+    partes = new URL(h).pathname.split("/").filter(Boolean);
+  } catch {
+    return h;
+  }
+  if (platform === "discord") return "Servidor de Discord";
+  if (platform === "web") return h.replace(/^https?:\/\/(www\.)?/i, "").replace(/\/$/, "");
+  const conArroba = partes.find((p) => p.startsWith("@"));
+  if (conArroba) return conArroba;
+  if (platform === "roblox") return "Perfil de Roblox";
+  // youtube.com/channel/UC…: un id, no un nombre.
+  if (partes[0] === "channel") return "Canal de YouTube";
+  const ultimo = partes[partes.length - 1];
+  return ultimo ? `@${ultimo}` : h;
+}
 
 /**
  * Cómo llama cada plataforma a sus métricas. Un TikToker no tiene

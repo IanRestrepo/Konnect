@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/field";
 import { Picker } from "@/components/ui/picker";
 import { useCan } from "@/components/session-provider";
-import { PLATFORMS, PLATFORM_LABEL, PLATFORM_METRICS } from "@/lib/socials";
+import { PLATFORMS, PLATFORM_LABEL, PLATFORM_METRICS, PLATFORM_URL, usuarioRed } from "@/lib/socials";
 import type { SocialLink, SocialPlatform } from "@/lib/types";
 import { formatCompact, formatDate, parseCantidad } from "@/lib/utils";
 
@@ -184,13 +184,16 @@ export function SocialsPanel({
               <span className="w-24 shrink-0 text-[12.5px] text-[var(--text-muted)]">
                 {PLATFORM_LABEL[red.platform]}
               </span>
+              {/* El enlace se arma aquí y no se lee de lo guardado: hay fichas con
+                  la dirección mal compuesta de cuando se pegó un enlace entero. */}
               <Link
-                href={red.url}
+                href={PLATFORM_URL[red.platform](red.handle)}
                 target="_blank"
                 rel="noreferrer"
+                title={red.handle}
                 className="min-w-0 flex-1 truncate text-[13px] font-medium hover:text-[var(--accent)]"
               >
-                {red.handle}
+                {usuarioRed(red.platform, red.handle)}
               </Link>
               {red.followers > 0 && (
                 <span

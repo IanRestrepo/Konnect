@@ -29,7 +29,7 @@ import { creatorCampaigns, getCampaigns, getCompanies, getCreator } from "@/lib/
 import { listCreatorCategories } from "@/lib/store";
 import { creatorPayout } from "@/lib/pricing";
 import { CAMPAIGN_STATUS, CREATOR_STATUS, PAYMENT_METHOD } from "@/lib/labels";
-import { PLATFORM_LABEL, PLATFORM_METRICS, nombreCanal, piezaLabel } from "@/lib/socials";
+import { PLATFORM_LABEL, PLATFORM_METRICS, nombreCanal, piezaLabel, usuarioRed } from "@/lib/socials";
 import { creatorViewsSeries, trend } from "@/lib/series";
 import type { Campaign, Company, Creator } from "@/lib/types";
 import { formatAudiencia, formatCompact, formatDate, formatMoney } from "@/lib/utils";
@@ -91,7 +91,7 @@ export default async function CreadorPage({ params }: { params: Promise<{ id: st
    * reescriben enteras al editarlas y con el id de fila las capturas se
    * quedarían sin dueño.
    */
-  const usuario = (h: string) => h.trim().replace(/^@/, "").toLowerCase();
+  const usuario = (h: string) => h.trim().replace(/^@/, "").replace(/\/+$/, "").toLowerCase();
   const cuentasStats: CuentaStats[] = [
     {
       key: "principal",
@@ -111,7 +111,7 @@ export default async function CreadorPage({ params }: { params: Promise<{ id: st
       .map((s) => ({
         key: `red:${s.platform}:${usuario(s.handle)}`,
         platform: s.platform,
-        nombre: s.handle,
+        nombre: usuarioRed(s.platform, s.handle),
         // Sin seguidores apuntados no se enseña ningún cero.
         detalle:
           s.followers > 0
