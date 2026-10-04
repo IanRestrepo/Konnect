@@ -141,7 +141,16 @@ export function CreatorsView({
                         {creator.exclusive && <Badge tone="accent">Exclusivo</Badge>}
                       </span>
                     }
-                    subtitle={`${creator.handle} · ${formatCompact(creator.subscribers)} ${PLATFORM_METRICS[creator.mainPlatform].audienceShort} · ${campaignCount[creator.id] ?? 0} campañas`}
+                    subtitle={[
+                      creator.handle,
+                      // Sin audiencia apuntada no se enseña un cero.
+                      creator.subscribers > 0
+                        ? `${formatCompact(creator.subscribers)} ${PLATFORM_METRICS[creator.mainPlatform].audienceShort}`
+                        : null,
+                      `${campaignCount[creator.id] ?? 0} campañas`,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                     trailing={
                       <span className="flex items-center gap-4">
                         <span className="hidden text-right sm:block">

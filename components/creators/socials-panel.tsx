@@ -9,12 +9,20 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/field";
 import { Picker } from "@/components/ui/picker";
 import { useCan } from "@/components/session-provider";
-import { PLATFORMS, PLATFORM_LABEL } from "@/lib/socials";
+import { PLATFORMS, PLATFORM_LABEL, PLATFORM_METRICS } from "@/lib/socials";
 import type { SocialLink, SocialPlatform } from "@/lib/types";
+import { formatCompact, formatDate, parseCantidad } from "@/lib/utils";
 
-type Borrador = { id?: string; platform: SocialPlatform; handle: string };
+type Borrador = { id?: string; platform: SocialPlatform; handle: string; followers: string };
 
-/** Perfiles del creador fuera de YouTube. Se guardan todos de una vez. */
+/**
+ * Perfiles del creador fuera de YouTube. Se guardan todos de una vez.
+ *
+ * Los seguidores se escriben a mano: TikTok, Instagram y el resto no dan una
+ * forma abierta de leerlos, y YouTube es la única red de la que llegan solos.
+ * Se pueden pegar como salen en el perfil («353.1K»). Si no se apuntan, no se
+ * enseña ningún número: un cero haría creer que no tiene a nadie.
+ */
 export function SocialsPanel({
   creatorId,
   socials,
@@ -36,8 +44,13 @@ export function SocialsPanel({
     // panel vacío obligaba a pulsar otra vez para escribir algo.
     setBorrador(
       socials.length
-        ? socials.map((s) => ({ id: s.id, platform: s.platform, handle: s.handle }))
-        : [{ platform: "instagram", handle: "" }],
+        ? socials.map((s) => ({
+            id: s.id,
+            platform: s.platform,
+            handle: s.handle,
+            followers: s.followers ? String(s.followers) : "",
+          }))
+        : [{ platform: "instagram", handle: "", followers: "" }],
     );
     setError(null);
     setEditando(true);
@@ -47,7 +60,9 @@ export function SocialsPanel({
     setGuardando(true);
     setError(null);
     try {
-      const limpio = borrador.filter((s) => s.handle.trim());
+      const limpio = borrador
+        .filter((s) => s.handle.trim())
+        .map((s) => ({ id: s.id, platform: s.platform, handle: s.handle, followers: parseCantidad(s.followers) }));
       const res = await fetch(`/api/creadores/${creatorId}/redes`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -120,6 +135,20 @@ export function SocialsPanel({
                 className="min-w-0 flex-1"
               />
 
+              <Input
+                value={fila.followers}
+                onChange={(e) =>
+                  setBorrador((prev) =>
+                    prev.map((f, j) => (j === i ? { ...f, followers: e.target.value } : f)),
+                  )
+                }
+                placeholder="353.1K"
+                aria-label={PLATFORM_METRICS[fila.platform].audience}
+                title={`${PLATFORM_METRICS[fila.platform].audience}: como salen en su perfil`}
+                inputMode="decimal"
+                className="tabular w-24 shrink-0 text-right"
+              />
+
               <button
                 onClick={() => setBorrador((prev) => prev.filter((_, j) => j !== i))}
                 aria-label="Quitar red"
@@ -133,11 +162,16 @@ export function SocialsPanel({
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => setBorrador((prev) => [...prev, { platform: "instagram", handle: "" }])}
+            onClick={() =>
+              setBorrador((prev) => [...prev, { platform: "instagram", handle: "", followers: "" }])
+            }
           >
             <Plus size={14} />
             Añadir red
           </Button>
+          <p className="text-[12px] text-[var(--text-subtle)]">
+            La última casilla son sus seguidores. Escríbelos como salen en el perfil: 353.1K, 4.2M.
+          </p>
         </div>
       ) : socials.length === 0 ? (
         <p className="border-t border-[var(--line)] px-4 py-3 text-[12.5px] text-[var(--text-muted)]">
@@ -158,6 +192,14 @@ export function SocialsPanel({
               >
                 {red.handle}
               </Link>
+              {red.followers > 0 && (
+                <span
+                  className="tabular shrink-0 text-[12.5px] text-[var(--text-muted)]"
+                  title={red.metricsUpdatedAt ? `Apuntado el ${formatDate(red.metricsUpdatedAt)}` : undefined}
+                >
+                  {formatCompact(red.followers)} {PLATFORM_METRICS[red.platform].audienceShort}
+                </span>
+              )}
               <ExternalLink size={13} className="shrink-0 text-[var(--text-subtle)]" />
             </div>
           ))}

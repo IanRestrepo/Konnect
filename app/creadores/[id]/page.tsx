@@ -32,7 +32,7 @@ import { CAMPAIGN_STATUS, CREATOR_STATUS, PAYMENT_METHOD } from "@/lib/labels";
 import { PLATFORM_LABEL, PLATFORM_METRICS, nombreCanal, piezaLabel } from "@/lib/socials";
 import { creatorViewsSeries, trend } from "@/lib/series";
 import type { Campaign, Company, Creator } from "@/lib/types";
-import { formatCompact, formatDate, formatMoney } from "@/lib/utils";
+import { formatAudiencia, formatCompact, formatDate, formatMoney } from "@/lib/utils";
 import { BackLink } from "@/components/ui/back-link";
 
 export default async function CreadorPage({ params }: { params: Promise<{ id: string }> }) {
@@ -112,7 +112,11 @@ export default async function CreadorPage({ params }: { params: Promise<{ id: st
         key: `red:${s.platform}:${usuario(s.handle)}`,
         platform: s.platform,
         nombre: s.handle,
-        detalle: `${formatCompact(s.followers)} ${PLATFORM_METRICS[s.platform].audienceShort}`,
+        // Sin seguidores apuntados no se enseña ningún cero.
+        detalle:
+          s.followers > 0
+            ? `${formatCompact(s.followers)} ${PLATFORM_METRICS[s.platform].audienceShort}`
+            : "Perfil",
       })),
   ];
 
@@ -399,9 +403,9 @@ export default async function CreadorPage({ params }: { params: Promise<{ id: st
       </div>
 
       <StatBand>
-        <Stat label={metricas.audience} value={formatCompact(creator.subscribers)} />
-        <Stat label={metricas.views} value={formatCompact(creator.totalViews)} />
-        <Stat label={metricas.content} value={formatCompact(creator.videoCount)} />
+        <Stat label={metricas.audience} value={formatAudiencia(creator.subscribers)} />
+        <Stat label={metricas.views} value={formatAudiencia(creator.totalViews)} />
+        <Stat label={metricas.content} value={formatAudiencia(creator.videoCount)} />
         <Stat
           label="Vistas para clientes"
           value={formatCompact(generatedViews)}

@@ -9,7 +9,7 @@ import { Modal } from "@/components/ui/modal";
 import { FieldHint, Input, Label } from "@/components/ui/field";
 import { Picker } from "@/components/ui/picker";
 import { useCan } from "@/components/session-provider";
-import { PLATFORM_LABEL } from "@/lib/socials";
+import { PLATFORMS, PLATFORM_LABEL } from "@/lib/socials";
 import type { CreatorStatShot, SocialPlatform } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
 import { ponerArchivo, subirABlob } from "@/lib/subir-cliente";
@@ -26,6 +26,9 @@ export type CuentaStats = {
   detalle: string;
 };
 
+/** En el selector de cuenta: una que todavía no está en la ficha. */
+const OTRA = "__otra__";
+
 /**
  * Capturas de las estadísticas del creador, separadas por cuenta.
  *
@@ -40,13 +43,28 @@ export type CuentaStats = {
 export function StatsPanel({
   creatorId,
   shots,
-  cuentas,
+  cuentas: deLaFicha,
 }: {
   creatorId: string;
   shots: CreatorStatShot[];
   /** Sus canales y redes, el principal primero. */
   cuentas: CuentaStats[];
 }) {
+  // Además de las de la ficha, las cuentas para las que ya se subió algo sin
+  // estar registradas: un Instagram que no se dio de alta, un canal de otro
+  // idioma. Salen de las propias capturas, así que no hay nada más que guardar.
+  const cuentas: CuentaStats[] = [...deLaFicha];
+  for (const s of shots) {
+    if (!s.accountKey.startsWith("otra:") || !s.platform) continue;
+    if (cuentas.some((c) => c.key === s.accountKey)) continue;
+    cuentas.push({
+      key: s.accountKey,
+      platform: s.platform,
+      nombre: s.accountLabel || PLATFORM_LABEL[s.platform],
+      detalle: "No está en la ficha",
+    });
+  }
+
   const router = useRouter();
   const can = useCan();
   const puedeEditar = can("editar_creadores");
@@ -89,10 +107,18 @@ export function StatsPanel({
 
   return (
     <div className="space-y-6">
-      <p className="max-w-2xl text-[12.5px] text-[var(--text-muted)]">
-        Pantallazos de su panel de estadísticas, para cuando no cede acceso a su API. Cada canal y
-        cada red tiene su bloque; van fechados para ver cómo cambian con el tiempo.
-      </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <p className="max-w-2xl text-[12.5px] text-[var(--text-muted)]">
+          Pantallazos de su panel de estadísticas, para cuando no cede acceso a su API. Cada canal
+          y cada red tiene su bloque; van fechados para ver cómo cambian con el tiempo.
+        </p>
+        {puedeEditar && (
+          <Button variant="secondary" onClick={() => setSubiendoA(OTRA)}>
+            <Plus size={15} />
+            Otra red o cuenta
+          </Button>
+        )}
+      </div>
 
       {error && (
         <p className="flex items-start gap-2 rounded-[var(--r-control)] bg-[var(--danger-soft)] px-3 py-2 text-[12.5px] text-[var(--danger)]">
@@ -265,7 +291,19 @@ function SubirCaptura({
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const cuenta = cuentas.find((c) => c.key === cuentaKey) ?? cuentas[0];
+  // Para una cuenta que no está en la ficha: su red y cómo se llama.
+  const [otraRed, setOtraRed] = useState<SocialPlatform>("instagram");
+  const [otraNombre, setOtraNombre] = useState("");
+
+  const esOtra = cuentaKey === OTRA;
+  const cuenta: CuentaStats | undefined = esOtra
+    ? {
+        key: `otra:${otraRed}:${otraNombre.trim().replace(/^@/, "").toLowerCase()}`,
+        platform: otraRed,
+        nombre: otraNombre.trim(),
+        detalle: "No está en la ficha",
+      }
+    : (cuentas.find((c) => c.key === cuentaKey) ?? cuentas[0]);
 
   async function guardar() {
     if (!archivo) {
@@ -274,6 +312,10 @@ function SubirCaptura({
     }
     if (!cuenta) {
       setError("Elige de qué cuenta es.");
+      return;
+    }
+    if (esOtra && !otraNombre.trim()) {
+      setError("Escribe el usuario o el nombre de la cuenta.");
       return;
     }
     setGuardando(true);
@@ -310,7 +352,13 @@ function SubirCaptura({
       onClose={onClose}
       icon={ImagePlus}
       title="Subir captura"
-      description={cuenta ? `${PLATFORM_LABEL[cuenta.platform]} · ${cuenta.nombre}` : undefined}
+      description={
+        esOtra
+          ? "De una red o cuenta que no está en la ficha."
+          : cuenta
+            ? `${PLATFORM_LABEL[cuenta.platform]} · ${cuenta.nombre}`
+            : undefined
+      }
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
@@ -348,11 +396,14 @@ function SubirCaptura({
               id="st-cuenta"
               value={cuentaKey}
               onChange={setCuentaKey}
-              options={cuentas.map((c) => ({
-                id: c.key,
-                label: c.nombre,
-                hint: `${PLATFORM_LABEL[c.platform]} · ${c.detalle}`,
-              }))}
+              options={[
+                ...cuentas.map((c) => ({
+                  id: c.key,
+                  label: c.nombre,
+                  hint: `${PLATFORM_LABEL[c.platform]} · ${c.detalle}`,
+                })),
+                { id: OTRA, label: "Otra red o cuenta…", hint: "Una que no está en la ficha" },
+              ]}
             />
           </div>
           <div>
@@ -360,6 +411,28 @@ function SubirCaptura({
             <Input id="st-fecha" type="date" value={takenAt} onChange={(e) => setTakenAt(e.target.value)} />
           </div>
         </div>
+        {esOtra && (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <Label htmlFor="st-otra-red">Red</Label>
+              <Picker
+                id="st-otra-red"
+                value={otraRed}
+                onChange={setOtraRed}
+                options={PLATFORMS.map((p) => ({ id: p.id, label: p.label }))}
+              />
+            </div>
+            <div>
+              <Label htmlFor="st-otra-nombre">Usuario o nombre</Label>
+              <Input
+                id="st-otra-nombre"
+                value={otraNombre}
+                onChange={(e) => setOtraNombre(e.target.value)}
+                placeholder="@usuario"
+              />
+            </div>
+          </div>
+        )}
         <div>
           <Label htmlFor="st-desc">Qué muestra</Label>
           <Input
