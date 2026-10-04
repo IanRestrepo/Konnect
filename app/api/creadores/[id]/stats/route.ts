@@ -28,6 +28,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const platform = String(form.get("platform") ?? "");
   const caption = String(form.get("caption") ?? "").trim().slice(0, 300);
+  // De qué cuenta es: la forma la decide la pantalla («principal»,
+  // «canal:<id>», «red:<id>»); aquí solo se acota.
+  const accountKey = String(form.get("accountKey") ?? "").trim().slice(0, 80);
+  const accountLabel = String(form.get("accountLabel") ?? "").trim().slice(0, 120);
   const fecha = String(form.get("takenAt") ?? "");
   const takenAt = /^\d{4}-\d{2}-\d{2}$/.test(fecha) ? new Date(`${fecha}T00:00:00`).toISOString() : null;
 
@@ -44,6 +48,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     url: subido.url,
     fileName: subido.fileName,
     platform: PLATFORMS.some((p) => p.id === platform) ? (platform as SocialPlatform) : null,
+    accountKey,
+    accountLabel,
     caption,
     takenAt,
     uploadedBy: session.name,

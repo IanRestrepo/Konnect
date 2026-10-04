@@ -148,8 +148,17 @@ model Creator {
   // Datos personales, cifrados como los bancarios y detrás del mismo código:
   // el nombre legal y la dirección hacen falta para facturar y enviar
   // productos, y son justo lo que no debe verse al pasar por la ficha.
-  realNameEnc String?
-  addressEnc  String?
+  realNameEnc   String?
+  addressEnc    String?
+  /// Documento de identidad del propio creador. Va aparte de la identificación
+  /// fiscal de la cuenta de cobro, que muchas veces es de un familiar o de una
+  /// empresa: aquí se sabe quién es él, pague quien pague.
+  idDocumentEnc String?
+
+  /// Solo trabaja con esta agencia. No es lo mismo que tener una agencia
+  /// externa en exclusiva (`CreatorAgency.exclusive`): esto es exclusividad con
+  /// nosotros.
+  exclusive Boolean @default(false)
 
   notes String @default("")
 
@@ -274,6 +283,11 @@ model CreatorChannel {
   videoCount       Int       @default(0)
   metricsUpdatedAt DateTime?
 
+  /// De qué va el canal: «Gameplays», «Minecraft», «Vlogs». Cada canal del
+  /// mismo creador suele tener su propio contenido, y las categorías de la
+  /// ficha solo describen al principal.
+  tags String[] @default([])
+
   createdAt DateTime @default(now())
 
   @@unique([creatorId, channelId])
@@ -344,13 +358,19 @@ model CreatorStatShot {
   creatorId String
   creator   Creator @relation(fields: [creatorId], references: [id], onDelete: Cascade)
 
-  url        String
-  fileName   String          @default("")
-  platform   SocialPlatform?
-  caption    String          @default("")
+  url          String
+  fileName     String          @default("")
+  platform     SocialPlatform?
+  caption      String          @default("")
+  /// De qué cuenta es la captura: «principal», «canal:<id>» o «red:<id>».
+  /// Vacío = sin cuenta concreta. Es texto y no una relación porque apunta a
+  /// tres tablas distintas, y la captura debe sobrevivir si la cuenta se borra.
+  accountKey   String          @default("")
+  /// Cómo se llamaba la cuenta al subirla, para seguir sabiéndolo si se borra.
+  accountLabel String          @default("")
   /// De cuándo son los datos de la captura, que no es cuándo se subió.
-  takenAt    DateTime?
-  uploadedBy String          @default("")
+  takenAt      DateTime?
+  uploadedBy   String          @default("")
 
   createdAt DateTime @default(now())
 

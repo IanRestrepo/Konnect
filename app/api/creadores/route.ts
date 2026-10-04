@@ -36,6 +36,8 @@ const schema = z.object({
   category: z.string().default(""),
   categories: z.array(z.string().max(60)).max(12, "Demasiadas categorías.").default([]),
   status: z.enum(["activo", "pausado", "prospecto", "archivado"]).default("prospecto"),
+  /** Solo trabaja con esta agencia. */
+  exclusive: z.boolean().default(false),
   email: z.string().default(""),
   phone: z.string().default(""),
   totalViews: z.number().default(0),
@@ -160,6 +162,7 @@ export async function POST(request: Request) {
     categories: categorias,
     hasRealName: false,
     hasAddress: false,
+    hasIdDocument: false,
     channels: [],
     // Los ids los pone la base; aquí sólo hace falta que el tipo cuadre.
     rates: rates.map((r) => ({ ...r, id: "" })),

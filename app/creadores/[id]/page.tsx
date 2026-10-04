@@ -304,6 +304,7 @@ export default async function CreadorPage({ params }: { params: Promise<{ id: st
             creatorId={creator.id}
             hasRealName={creator.hasRealName}
             hasAddress={creator.hasAddress}
+            hasIdDocument={creator.hasIdDocument}
           />
         </div>
       ),

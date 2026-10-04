@@ -266,6 +266,7 @@ function toChannel(row: CreatorRow["channels"][number]): CreatorChannel {
     totalViews: num(row.totalViews),
     videoCount: row.videoCount,
     metricsUpdatedAt: iso(row.metricsUpdatedAt),
+    tags: row.tags,
   };
 }
 
@@ -283,6 +284,8 @@ function toCreator(row: CreatorRow, apiConnections: CreatorApiConnection[] = [])
     categories: row.categories.length > 0 ? row.categories : row.category ? [row.category] : [],
     hasRealName: Boolean(row.realNameEnc),
     hasAddress: Boolean(row.addressEnc),
+    hasIdDocument: Boolean(row.idDocumentEnc),
+    exclusive: row.exclusive,
     status: row.status,
     email: row.email,
     phone: row.phone,
@@ -348,6 +351,8 @@ function toCreator(row: CreatorRow, apiConnections: CreatorApiConnection[] = [])
       url: s.url,
       fileName: s.fileName,
       platform: (s.platform as SocialPlatform | null) ?? null,
+      accountKey: s.accountKey,
+      accountLabel: s.accountLabel,
       caption: s.caption,
       takenAt: isoOrNull(s.takenAt),
       uploadedBy: s.uploadedBy,
@@ -656,6 +661,7 @@ export async function createCreator(
       channelUrl: input.channelUrl || null,
       avatarUrl: input.avatarUrl,
       country: input.country ?? "",
+      exclusive: input.exclusive ?? false,
       ...categoriasColumnas(input.categories, input.category),
       status: input.status,
       email: input.email ?? "",
@@ -763,6 +769,7 @@ export async function setCreatorPersonalData(
   const data: Prisma.CreatorUpdateInput = {};
   if (datos.realName !== undefined) data.realNameEnc = seal(datos.realName);
   if (datos.address !== undefined) data.addressEnc = seal(datos.address);
+  if (datos.idDocument !== undefined) data.idDocumentEnc = seal(datos.idDocument);
   const { count } = await prisma.creator.updateMany({ where: { id }, data });
   return count > 0;
 }
@@ -784,6 +791,7 @@ export async function updateCreator(id: string, patch: Partial<Creator>): Promis
     Object.assign(data, categoriasColumnas(patch.categories, patch.category));
   }
   if (patch.status !== undefined) data.status = patch.status;
+  if (patch.exclusive !== undefined) data.exclusive = patch.exclusive;
   if (patch.email !== undefined) data.email = patch.email;
   if (patch.phone !== undefined) data.phone = patch.phone;
   if (patch.subscribers !== undefined) data.subscribers = patch.subscribers;
@@ -888,6 +896,7 @@ export async function revealBanking(
     select: {
       realNameEnc: true,
       addressEnc: true,
+      idDocumentEnc: true,
       bankHolder: true,
       bankName: true,
       bankAccountEnc: true,
@@ -905,7 +914,11 @@ export async function revealBanking(
   return {
     banking: fullBanking(row),
     accounts: row.bankAccounts.map(fullAccount),
-    personal: { realName: unseal(row.realNameEnc), address: unseal(row.addressEnc) },
+    personal: {
+      realName: unseal(row.realNameEnc),
+      address: unseal(row.addressEnc),
+      idDocument: unseal(row.idDocumentEnc),
+    },
   };
 }
 
@@ -940,6 +953,7 @@ export async function addCreatorChannel(
       totalViews: BigInt(Math.trunc(channel.totalViews ?? 0)),
       videoCount: channel.videoCount ?? 0,
       metricsUpdatedAt: toDate(channel.metricsUpdatedAt),
+      tags: channel.tags ?? [],
     },
   });
 
@@ -948,6 +962,22 @@ export async function addCreatorChannel(
     include: creatorInclude,
   });
   return { creator: toCreator(actualizado!) };
+}
+
+/** Cambia cómo se llama un canal adicional y sus etiquetas. */
+export async function updateCreatorChannel(
+  creatorId: string,
+  channelId: string,
+  patch: { label?: string; tags?: string[] },
+): Promise<boolean> {
+  const { count } = await prisma.creatorChannel.updateMany({
+    where: { creatorId, id: channelId },
+    data: {
+      ...(patch.label !== undefined ? { label: patch.label } : {}),
+      ...(patch.tags !== undefined ? { tags: patch.tags } : {}),
+    },
+  });
+  return count > 0;
 }
 
 export async function removeCreatorChannel(
@@ -2449,6 +2479,8 @@ export async function addCreatorStatShot(
       url: input.url,
       fileName: input.fileName,
       platform: input.platform,
+      accountKey: input.accountKey,
+      accountLabel: input.accountLabel,
       caption: input.caption,
       takenAt: input.takenAt ? new Date(input.takenAt) : null,
       uploadedBy: input.uploadedBy,
@@ -2459,6 +2491,8 @@ export async function addCreatorStatShot(
     url: row.url,
     fileName: row.fileName,
     platform: (row.platform as SocialPlatform | null) ?? null,
+    accountKey: row.accountKey,
+    accountLabel: row.accountLabel,
     caption: row.caption,
     takenAt: isoOrNull(row.takenAt),
     uploadedBy: row.uploadedBy,

@@ -27,8 +27,11 @@ const schema = z.object({
     .object({
       realName: z.string().max(200).optional(),
       address: z.string().max(500).optional(),
+      idDocument: z.string().max(80).optional(),
     })
     .optional(),
+  /** Solo trabaja con esta agencia. */
+  exclusive: z.boolean().optional(),
   status: z.enum(["activo", "pausado", "prospecto", "archivado"]).optional(),
   email: z.string().optional(),
   phone: z.string().optional(),
@@ -102,18 +105,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   const { bankAccounts, personal, ...resto } = parsed.data;
 
-  if (personal) {
-    if (!(await setCreatorPersonalData(id, personal))) {
-      return NextResponse.json({ error: "Creador no encontrado." }, { status: 404 });
-    }
-    await registrar({
-      actorId: session.userId,
-      actorName: session.name,
-      action: "banca.editada",
-      entity: "creator",
-      entityId: id,
-      detail: "Datos personales",
-    });
+  if (personal && !(await setCreatorPersonalData(id, personal))) {
+    return NextResponse.json({ error: "Creador no encontrado." }, { status: 404 });
   }
 
   const creator = await updateCreator(id, {
@@ -122,6 +115,25 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     ...(bankAccounts ? { bankAccounts: bankAccounts.map((a) => ({ ...a, id: "" })) } : {}),
   });
   if (!creator) return NextResponse.json({ error: "Creador no encontrado." }, { status: 404 });
+
+  // Con el nombre del creador y con lo que se tocó: la entrada decía «cambió
+  // la información de pago» sin decir de quién, y los cambios en las cuentas
+  // de cobro ni siquiera quedaban anotados.
+  if (tocaDinero) {
+    const tocado = [
+      personal ? "Datos personales" : null,
+      parsed.data.banking !== undefined || bankAccounts !== undefined ? "Cuentas de cobro" : null,
+    ].filter(Boolean);
+    await registrar({
+      actorId: session.userId,
+      actorName: session.name,
+      action: "banca.editada",
+      entity: "creator",
+      entityId: id,
+      entityLabel: creator.name,
+      detail: tocado.join(" y "),
+    });
+  }
 
   revalidatePath("/creadores");
   revalidatePath(`/creadores/${id}`);

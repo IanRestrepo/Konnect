@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, Loader2, Lock, Pencil, ShieldAlert } from "lucide-react";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,12 +10,13 @@ import { DefList, DefRow } from "@/components/ui/def-list";
 import { FieldHint, Input, Label, Textarea } from "@/components/ui/field";
 import { useCan } from "@/components/session-provider";
 import type { PersonalData } from "@/lib/types";
+import { useCaducidad } from "@/components/creators/use-caducidad";
 
 /** Lo mismo que los datos bancarios: a los cinco minutos se vuelve a tapar. */
 const VISIBLE_MS = 5 * 60 * 1000;
 
 /**
- * Nombre real y dirección del creador.
+ * Nombre real, documento de identidad y dirección del creador.
  *
  * Van aparte de los datos bancarios pero con la misma llave —el permiso de
  * datos sensibles y el código—, y por la misma razón: hacen falta para
@@ -27,10 +28,12 @@ export function PersonalDataPanel({
   creatorId,
   hasRealName,
   hasAddress,
+  hasIdDocument,
 }: {
   creatorId: string;
   hasRealName: boolean;
   hasAddress: boolean;
+  hasIdDocument: boolean;
 }) {
   const router = useRouter();
   const can = useCan();
@@ -47,21 +50,20 @@ export function PersonalDataPanel({
   const [guardando, setGuardando] = useState(false);
   const [errorGuardar, setErrorGuardar] = useState<string | null>(null);
 
-  function ocultar() {
+  // Si se estaba editando, el formulario se va con los datos: sin descifrar
+  // no hay nada que corregir.
+  function tapar() {
     setClaro(null);
     setBorrador(null);
   }
 
-  // Se vuelve a tapar sola. Si se estaba editando, el formulario se va con
-  // los datos: sin descifrar no hay nada que corregir.
-  useEffect(() => {
-    if (!claro) return;
-    const fin = setTimeout(() => {
-      setClaro(null);
-      setBorrador(null);
-    }, VISIBLE_MS);
-    return () => clearTimeout(fin);
-  }, [claro]);
+  // Se vuelve a tapar sola a los 5 minutos de revelar; guardar no alarga el plazo.
+  const caducidad = useCaducidad(VISIBLE_MS, tapar);
+
+  function ocultar() {
+    caducidad.parar();
+    tapar();
+  }
 
   async function revelar() {
     setCargando(true);
@@ -74,7 +76,8 @@ export function PersonalDataPanel({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? "No se pudo validar el código.");
-      setClaro((data.personal as PersonalData) ?? { realName: "", address: "" });
+      setClaro({ realName: "", address: "", idDocument: "", ...(data.personal as Partial<PersonalData>) });
+      caducidad.empezar();
       setPidiendo(false);
       setCode("");
     } catch (e) {
@@ -88,17 +91,20 @@ export function PersonalDataPanel({
     if (!borrador) return;
     setGuardando(true);
     setErrorGuardar(null);
+    const limpio: PersonalData = {
+      realName: borrador.realName.trim(),
+      address: borrador.address.trim(),
+      idDocument: borrador.idDocument.trim(),
+    };
     try {
       const res = await fetch(`/api/creadores/${creatorId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          personal: { realName: borrador.realName.trim(), address: borrador.address.trim() },
-        }),
+        body: JSON.stringify({ personal: limpio }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? "No se pudo guardar.");
-      setClaro({ realName: borrador.realName.trim(), address: borrador.address.trim() });
+      setClaro(limpio);
       setBorrador(null);
       router.refresh();
     } catch (e) {
@@ -115,7 +121,14 @@ export function PersonalDataPanel({
     <>
       <Card>
         <CardHeader>
-          <CardTitle>Datos personales</CardTitle>
+          <CardTitle>
+            Datos personales
+            {claro && (
+              <span className="ml-2 text-[11.5px] font-normal tabular-nums text-[var(--warn)]">
+                Visible {caducidad.mmss}
+              </span>
+            )}
+          </CardTitle>
           {puedeVer &&
             (claro ? (
               <span className="flex gap-1.5">
@@ -150,6 +163,18 @@ export function PersonalDataPanel({
               />
             </div>
             <div>
+              <Label htmlFor="pd-documento">Documento de identidad</Label>
+              <Input
+                id="pd-documento"
+                value={borrador.idDocument}
+                onChange={(e) => setBorrador({ ...borrador, idDocument: e.target.value })}
+                placeholder="Cédula, DNI o pasaporte"
+              />
+              <FieldHint>
+                El suyo, aunque cobre con la cuenta de un familiar o de una empresa.
+              </FieldHint>
+            </div>
+            <div>
               <Label htmlFor="pd-direccion">Dirección</Label>
               <Textarea
                 id="pd-direccion"
@@ -179,6 +204,13 @@ export function PersonalDataPanel({
           <DefList className="border-t border-[var(--line)]">
             <DefRow label="Nombre real">
               {claro ? claro.realName || "Sin registrar" : tapado(hasRealName)}
+            </DefRow>
+            <DefRow label="Documento de identidad">
+              {claro ? (
+                <span className="tabular">{claro.idDocument || "Sin registrar"}</span>
+              ) : (
+                tapado(hasIdDocument)
+              )}
             </DefRow>
             <DefRow label="Dirección">
               {claro ? (

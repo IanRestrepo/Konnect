@@ -16,6 +16,11 @@ export type PersonalData = {
   realName: string;
   /** Dirección postal, para envíos de producto. */
   address: string;
+  /**
+   * Documento de identidad del propio creador. No es la identificación fiscal
+   * de la cuenta de cobro, que puede ser de un familiar o de una empresa.
+   */
+  idDocument: string;
 };
 
 export type BankingInfo = {
@@ -72,6 +77,10 @@ export type CreatorStatShot = {
   url: string;
   fileName: string;
   platform: SocialPlatform | null;
+  /** De qué cuenta es: «principal», «canal:<id>», «red:<id>» o vacío. */
+  accountKey: string;
+  /** Cómo se llamaba esa cuenta al subir la captura. */
+  accountLabel: string;
   caption: string;
   /** De cuándo son los datos, si se sabe. */
   takenAt: string | null;
@@ -155,6 +164,9 @@ export type Creator = {
    */
   hasRealName: boolean;
   hasAddress: boolean;
+  hasIdDocument: boolean;
+  /** Solo trabaja con esta agencia. */
+  exclusive: boolean;
   /** Sus cuentas de cobro, una por método. Censuradas hasta revelarlas. */
   bankAccounts: BankingAccount[];
   notes: string;
@@ -416,6 +428,8 @@ export type CreatorChannel = {
   totalViews: number;
   videoCount: number;
   metricsUpdatedAt: string;
+  /** De qué va el canal: «Gameplays», «Minecraft»… */
+  tags: string[];
 };
 
 export type SocialPlatform =

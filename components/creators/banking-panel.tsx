@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Copy, Eye, EyeOff, Loader2, Pencil, ShieldAlert } from "lucide-react";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,6 +10,7 @@ import { Input, Label } from "@/components/ui/field";
 import { Badge } from "@/components/ui/badge";
 import { useCan } from "@/components/session-provider";
 import { PaymentAccountsEditor } from "@/components/creators/payment-accounts-editor";
+import { useCaducidad } from "@/components/creators/use-caducidad";
 import { PAYMENT_FIELDS, PAYMENT_METHOD } from "@/lib/labels";
 import type { BankingAccount, BankingInfo, PaymentMethod } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -117,7 +118,6 @@ export function BankingPanel({
   const [claro, setClaro] = useState<{ banking: BankingInfo; accounts: BankingAccount[] } | null>(
     null,
   );
-  const [secondsLeft, setSecondsLeft] = useState(0);
 
   const [editando, setEditando] = useState(false);
   const [borrador, setBorrador] = useState<{
@@ -132,24 +132,20 @@ export function BankingPanel({
 
   /** Vuelve a censurar. Si se estaba editando, el formulario se va con los
    *  datos: sin descifrar no hay nada que corregir. */
-  function ocultar() {
+  function tapar() {
     setClaro(null);
     setEditando(false);
     setBorrador(null);
-    setSecondsLeft(0);
   }
 
-  // Auto-oculta a los 5 minutos. El cierre va en su propio temporizador y no
-  // dentro de la cuenta atrás: el contador es sólo lo que se pinta.
-  useEffect(() => {
-    if (!claro) return;
-    const tic = setInterval(() => setSecondsLeft((s) => Math.max(0, s - 1)), 1000);
-    const fin = setTimeout(ocultar, VISIBLE_MS);
-    return () => {
-      clearInterval(tic);
-      clearTimeout(fin);
-    };
-  }, [claro]);
+  // Se tapa sola a los 5 minutos de revelar. Guardar un cambio no alarga el
+  // plazo: la cuenta empieza al desbloquear y no vuelve a empezar.
+  const caducidad = useCaducidad(VISIBLE_MS, tapar);
+
+  function ocultar() {
+    caducidad.parar();
+    tapar();
+  }
 
   async function reveal() {
     setLoading(true);
@@ -166,7 +162,7 @@ export function BankingPanel({
         banking: data.banking as BankingInfo,
         accounts: (data.accounts ?? []) as BankingAccount[],
       });
-      setSecondsLeft(VISIBLE_MS / 1000);
+      caducidad.empezar();
       setOpen(false);
       setCode("");
     } catch (e) {
@@ -206,6 +202,8 @@ export function BankingPanel({
           reference: c.reference.trim(),
           routing: c.routing.trim(),
           notes: c.notes.trim(),
+          // Sin esto la casilla «Es de la agencia» se marcaba y no se guardaba.
+          forAgency: Boolean(c.forAgency),
         }));
 
       const res = await fetch(`/api/creadores/${creatorId}`, {
@@ -249,7 +247,7 @@ export function BankingPanel({
     }
   }
 
-  const mmss = `${String(Math.floor(secondsLeft / 60)).padStart(2, "0")}:${String(secondsLeft % 60).padStart(2, "0")}`;
+  const { mmss } = caducidad;
   const visibles = claro ? claro.accounts : accounts;
   const heredados = HEREDADOS.filter((r) => claro?.banking[r.key] || banking[r.key]);
 
