@@ -2,45 +2,68 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ImagePlus, LoaderCircle, Trash2, TriangleAlert } from "lucide-react";
+import { ImagePlus, LoaderCircle, Plus, Trash2, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { EmptyState } from "@/components/ui/empty-state";
+import { Badge } from "@/components/ui/badge";
 import { Modal } from "@/components/ui/modal";
 import { FieldHint, Input, Label } from "@/components/ui/field";
 import { Picker } from "@/components/ui/picker";
 import { useCan } from "@/components/session-provider";
-import { PLATFORMS, PLATFORM_LABEL } from "@/lib/socials";
+import { PLATFORM_LABEL } from "@/lib/socials";
 import type { CreatorStatShot, SocialPlatform } from "@/lib/types";
 import { formatDate } from "@/lib/utils";
 import { ponerArchivo, subirABlob } from "@/lib/subir-cliente";
 import { MAXIMO_CAPTURA, TIPOS_IMAGEN } from "@/lib/archivos";
 
-const SIN_RED = "";
+/** Una cuenta del creador de la que se pueden guardar estadísticas. */
+export type CuentaStats = {
+  /** «principal», «canal:<id>» o «red:<id>»: lo que se guarda en la captura. */
+  key: string;
+  platform: SocialPlatform;
+  /** El @ o el nombre con el que se reconoce. */
+  nombre: string;
+  /** «Canal principal», «Canal Gameplays»… */
+  detalle: string;
+};
 
 /**
- * Capturas de las estadísticas del creador.
+ * Capturas de las estadísticas del creador, separadas por cuenta.
  *
- * Es lo que se usa cuando el creador no cede la clave de su API: nos manda
- * pantallazos de su panel —alcance, audiencia por país, edades— y se guardan
- * aquí, con la red y la fecha de los datos, para enseñarlos a una marca y
- * compararlos con los de meses atrás.
+ * Es lo que se usa cuando el creador no cede la clave de su API: manda
+ * pantallazos de su panel y se guardan aquí, fechados.
+ *
+ * Van por cuenta y no en un solo montón: un creador con tres canales de
+ * YouTube y un TikTok tiene cuatro paneles distintos, y una captura de
+ * «audiencia por país» no dice nada si no se sabe de cuál de ellos es. Cada
+ * cuenta tiene su bloque y su botón, así que no hay que acordarse de elegirla.
  */
 export function StatsPanel({
   creatorId,
   shots,
-  mainPlatform,
+  cuentas,
 }: {
   creatorId: string;
   shots: CreatorStatShot[];
-  mainPlatform: SocialPlatform;
+  /** Sus canales y redes, el principal primero. */
+  cuentas: CuentaStats[];
 }) {
   const router = useRouter();
   const can = useCan();
   const puedeEditar = can("editar_creadores");
 
-  const [subiendo, setSubiendo] = useState(false);
+  /** Cuenta para la que se sube; `null` = diálogo cerrado. */
+  const [subiendoA, setSubiendoA] = useState<string | null>(null);
   const [abierta, setAbierta] = useState<CreatorStatShot | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const conocidas = new Set(cuentas.map((c) => c.key));
+  const de = (key: string) => shots.filter((s) => s.accountKey === key);
+  // Capturas de una cuenta que ya se quitó de la ficha, o de antes de que se
+  // separaran por cuenta: no se pierden, van al final.
+  const sueltas = shots.filter((s) => !conocidas.has(s.accountKey));
+
+  // Las cuentas, agrupadas por red y en el orden en que llegan.
+  const redes = [...new Set(cuentas.map((c) => c.platform))];
 
   async function quitar(shot: CreatorStatShot) {
     if (!window.confirm("¿Quitar esta captura? Se borra el archivo.")) return;
@@ -58,20 +81,18 @@ export function StatsPanel({
     router.refresh();
   }
 
+  const nombreDe = (shot: CreatorStatShot) => {
+    const cuenta = cuentas.find((c) => c.key === shot.accountKey);
+    if (cuenta) return `${PLATFORM_LABEL[cuenta.platform]} · ${cuenta.nombre}`;
+    return [shot.platform ? PLATFORM_LABEL[shot.platform] : null, shot.accountLabel].filter(Boolean).join(" · ");
+  };
+
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="max-w-xl text-[12.5px] text-[var(--text-muted)]">
-          Pantallazos de su panel de estadísticas, para cuando no cede acceso a su API. Van
-          fechados: sirven para enseñarlos y para ver cómo cambian con el tiempo.
-        </p>
-        {puedeEditar && (
-          <Button variant="primary" onClick={() => setSubiendo(true)}>
-            <ImagePlus size={15} />
-            Subir captura
-          </Button>
-        )}
-      </div>
+    <div className="space-y-6">
+      <p className="max-w-2xl text-[12.5px] text-[var(--text-muted)]">
+        Pantallazos de su panel de estadísticas, para cuando no cede acceso a su API. Cada canal y
+        cada red tiene su bloque; van fechados para ver cómo cambian con el tiempo.
+      </p>
 
       {error && (
         <p className="flex items-start gap-2 rounded-[var(--r-control)] bg-[var(--danger-soft)] px-3 py-2 text-[12.5px] text-[var(--danger)]">
@@ -80,51 +101,71 @@ export function StatsPanel({
         </p>
       )}
 
-      {shots.length === 0 ? (
-        <EmptyState
-          icon={ImagePlus}
-          title="Sin capturas"
-          description="Pídele al creador pantallazos de su panel: alcance, audiencia por país y edades."
-        />
-      ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {shots.map((shot) => (
-            <button
-              key={shot.id}
-              type="button"
-              onClick={() => setAbierta(shot)}
-              className="group overflow-hidden rounded-[var(--r-card)] border border-[var(--line)] bg-[var(--surface)] text-left transition hover:border-[var(--line-strong)]"
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={shot.url}
-                alt={shot.caption || "Captura de estadísticas"}
-                loading="lazy"
-                className="aspect-[4/3] w-full bg-[var(--surface-3)] object-cover object-top"
-              />
-              <span className="block p-3">
-                <span className="block truncate text-[13px] font-medium group-hover:text-[var(--accent)]">
-                  {shot.caption || (shot.platform ? PLATFORM_LABEL[shot.platform] : "Estadísticas")}
-                </span>
-                <span className="mt-0.5 block truncate text-[12px] text-[var(--text-muted)]">
-                  {[
-                    shot.platform && shot.caption ? PLATFORM_LABEL[shot.platform] : null,
-                    shot.takenAt ? `Datos del ${formatDate(shot.takenAt)}` : `Subida el ${formatDate(shot.createdAt)}`,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </span>
-              </span>
-            </button>
-          ))}
-        </div>
+      {redes.map((red) => (
+        <section key={red}>
+          <p className="eyebrow mb-2.5">{PLATFORM_LABEL[red]}</p>
+          <div className="space-y-3">
+            {cuentas
+              .filter((c) => c.platform === red)
+              .map((cuenta) => {
+                const suyas = de(cuenta.key);
+                return (
+                  <div
+                    key={cuenta.key}
+                    className="rounded-[var(--r-card)] border border-[var(--line)] bg-[var(--surface)]"
+                  >
+                    <header className="flex items-center gap-3 px-4 py-3">
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-2">
+                          <span className="truncate text-[13.5px] font-medium">{cuenta.nombre}</span>
+                          {suyas.length > 0 && <Badge plain>{suyas.length}</Badge>}
+                        </span>
+                        <span className="block truncate text-[12px] text-[var(--text-muted)]">
+                          {cuenta.detalle}
+                        </span>
+                      </span>
+                      {puedeEditar && (
+                        <Button variant="secondary" size="sm" onClick={() => setSubiendoA(cuenta.key)}>
+                          <Plus size={14} />
+                          Subir captura
+                        </Button>
+                      )}
+                    </header>
+                    {suyas.length === 0 ? (
+                      <p className="border-t border-[var(--line)] px-4 py-3 text-[12.5px] text-[var(--text-subtle)]">
+                        Sin capturas de esta cuenta.
+                      </p>
+                    ) : (
+                      <div className="grid gap-3 border-t border-[var(--line)] p-3 sm:grid-cols-2 xl:grid-cols-4">
+                        {suyas.map((shot) => (
+                          <Miniatura key={shot.id} shot={shot} onAbrir={() => setAbierta(shot)} />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+          </div>
+        </section>
+      ))}
+
+      {sueltas.length > 0 && (
+        <section>
+          <p className="eyebrow mb-2.5">Otras capturas</p>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {sueltas.map((shot) => (
+              <Miniatura key={shot.id} shot={shot} pie={nombreDe(shot)} onAbrir={() => setAbierta(shot)} />
+            ))}
+          </div>
+        </section>
       )}
 
-      {subiendo && (
+      {subiendoA !== null && (
         <SubirCaptura
           creatorId={creatorId}
-          mainPlatform={mainPlatform}
-          onClose={() => setSubiendo(false)}
+          cuentas={cuentas}
+          cuentaInicial={subiendoA}
+          onClose={() => setSubiendoA(null)}
         />
       )}
 
@@ -135,7 +176,7 @@ export function StatsPanel({
           size="xl"
           title={abierta.caption || "Captura de estadísticas"}
           description={[
-            abierta.platform ? PLATFORM_LABEL[abierta.platform] : null,
+            nombreDe(abierta) || null,
             abierta.takenAt ? `Datos del ${formatDate(abierta.takenAt)}` : null,
             `Subida por ${abierta.uploadedBy || "el equipo"} el ${formatDate(abierta.createdAt)}`,
           ]
@@ -167,27 +208,72 @@ export function StatsPanel({
   );
 }
 
+function Miniatura({
+  shot,
+  pie,
+  onAbrir,
+}: {
+  shot: CreatorStatShot;
+  /** De qué cuenta es, cuando no está dentro del bloque de esa cuenta. */
+  pie?: string;
+  onAbrir: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onAbrir}
+      className="group overflow-hidden rounded-[var(--r-control)] border border-[var(--line)] bg-[var(--surface)] text-left transition hover:border-[var(--line-strong)]"
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={shot.url}
+        alt={shot.caption || "Captura de estadísticas"}
+        loading="lazy"
+        className="aspect-[4/3] w-full bg-[var(--surface-3)] object-cover object-top"
+      />
+      <span className="block p-2.5">
+        <span className="block truncate text-[12.5px] font-medium group-hover:text-[var(--accent)]">
+          {shot.caption || "Estadísticas"}
+        </span>
+        <span className="mt-0.5 block truncate text-[11.5px] text-[var(--text-muted)]">
+          {[pie, shot.takenAt ? `Datos del ${formatDate(shot.takenAt)}` : `Subida el ${formatDate(shot.createdAt)}`]
+            .filter(Boolean)
+            .join(" · ")}
+        </span>
+      </span>
+    </button>
+  );
+}
+
 function SubirCaptura({
   creatorId,
-  mainPlatform,
+  cuentas,
+  cuentaInicial,
   onClose,
 }: {
   creatorId: string;
-  mainPlatform: SocialPlatform;
+  cuentas: CuentaStats[];
+  cuentaInicial: string;
   onClose: () => void;
 }) {
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
   const [archivo, setArchivo] = useState<File | null>(null);
-  const [platform, setPlatform] = useState<string>(mainPlatform);
+  const [cuentaKey, setCuentaKey] = useState(cuentaInicial);
   const [caption, setCaption] = useState("");
   const [takenAt, setTakenAt] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const cuenta = cuentas.find((c) => c.key === cuentaKey) ?? cuentas[0];
+
   async function guardar() {
     if (!archivo) {
       setError("Elige la imagen.");
+      return;
+    }
+    if (!cuenta) {
+      setError("Elige de qué cuenta es.");
       return;
     }
     setGuardando(true);
@@ -201,7 +287,9 @@ function SubirCaptura({
       });
       const form = new FormData();
       ponerArchivo(form, listo);
-      form.set("platform", platform);
+      form.set("platform", cuenta.platform);
+      form.set("accountKey", cuenta.key);
+      form.set("accountLabel", cuenta.nombre);
       form.set("caption", caption);
       form.set("takenAt", takenAt);
       const res = await fetch(`/api/creadores/${creatorId}/stats`, { method: "POST", body: form });
@@ -222,7 +310,7 @@ function SubirCaptura({
       onClose={onClose}
       icon={ImagePlus}
       title="Subir captura"
-      description="Un pantallazo de su panel de estadísticas."
+      description={cuenta ? `${PLATFORM_LABEL[cuenta.platform]} · ${cuenta.nombre}` : undefined}
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
@@ -255,15 +343,16 @@ function SubirCaptura({
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <Label htmlFor="st-red">Red</Label>
+            <Label htmlFor="st-cuenta">Cuenta</Label>
             <Picker
-              id="st-red"
-              value={platform}
-              onChange={setPlatform}
-              options={[
-                ...PLATFORMS.map((p) => ({ id: p.id as string, label: p.label })),
-                { id: SIN_RED, label: "Varias / otra" },
-              ]}
+              id="st-cuenta"
+              value={cuentaKey}
+              onChange={setCuentaKey}
+              options={cuentas.map((c) => ({
+                id: c.key,
+                label: c.nombre,
+                hint: `${PLATFORM_LABEL[c.platform]} · ${c.detalle}`,
+              }))}
             />
           </div>
           <div>

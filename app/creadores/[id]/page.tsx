@@ -22,14 +22,14 @@ import { ContactsPanel } from "@/components/companies/contacts-panel";
 import { EditCreatorButton } from "@/components/creators/edit-creator-dialog";
 import { MediaKitButton } from "@/components/creators/media-kit-button";
 import { AgencyCard } from "@/components/creators/agency-card";
-import { StatsPanel } from "@/components/creators/stats-panel";
+import { StatsPanel, type CuentaStats } from "@/components/creators/stats-panel";
 import { PackagesPanel } from "@/components/creators/packages-panel";
 import { CreatorTabs } from "@/app/creadores/[id]/creator-tabs";
 import { creatorCampaigns, getCampaigns, getCompanies, getCreator } from "@/lib/data";
 import { listCreatorCategories } from "@/lib/store";
 import { creatorPayout } from "@/lib/pricing";
 import { CAMPAIGN_STATUS, CREATOR_STATUS, PAYMENT_METHOD } from "@/lib/labels";
-import { PLATFORM_LABEL, PLATFORM_METRICS, piezaLabel } from "@/lib/socials";
+import { PLATFORM_LABEL, PLATFORM_METRICS, nombreCanal, piezaLabel } from "@/lib/socials";
 import { creatorViewsSeries, trend } from "@/lib/series";
 import type { Campaign, Company, Creator } from "@/lib/types";
 import { formatCompact, formatDate, formatMoney } from "@/lib/utils";
@@ -81,6 +81,40 @@ export default async function CreadorPage({ params }: { params: Promise<{ id: st
         })),
     )
     .sort((a, b) => (b.d.publishedAt ?? "").localeCompare(a.d.publishedAt ?? ""));
+
+  /*
+   * Las cuentas de las que se guardan capturas: el principal, sus canales
+   * adicionales y sus otras redes.
+   *
+   * La llave de cada una sale de lo que no cambia —el id del canal en
+   * YouTube, la red y el usuario—, no del id de la fila: las redes se
+   * reescriben enteras al editarlas y con el id de fila las capturas se
+   * quedarían sin dueño.
+   */
+  const usuario = (h: string) => h.trim().replace(/^@/, "").toLowerCase();
+  const cuentasStats: CuentaStats[] = [
+    {
+      key: "principal",
+      platform: creator.mainPlatform,
+      nombre: creator.handle || creator.name,
+      detalle: "Cuenta principal",
+    },
+    ...creator.channels.map((c) => ({
+      key: `canal:${c.channelId}`,
+      platform: "youtube" as const,
+      nombre: nombreCanal(c),
+      detalle: [c.label, ...c.tags].filter(Boolean).join(" · ") || "Canal adicional",
+    })),
+    ...creator.socials
+      // Su perfil en la red principal suele estar también entre las redes.
+      .filter((s) => !(s.platform === creator.mainPlatform && usuario(s.handle) === usuario(creator.handle)))
+      .map((s) => ({
+        key: `red:${s.platform}:${usuario(s.handle)}`,
+        platform: s.platform,
+        nombre: s.handle,
+        detalle: `${formatCompact(s.followers)} ${PLATFORM_METRICS[s.platform].audienceShort}`,
+      })),
+  ];
 
   const pestanas = [
     {
@@ -178,7 +212,7 @@ export default async function CreadorPage({ params }: { params: Promise<{ id: st
         <StatsPanel
           creatorId={creator.id}
           shots={creator.statShots}
-          mainPlatform={creator.mainPlatform}
+          cuentas={cuentasStats}
         />
       ),
     },
@@ -243,8 +277,10 @@ export default async function CreadorPage({ params }: { params: Promise<{ id: st
               avatarUrl: creator.avatarUrl,
               subscribers: creator.subscribers,
               channelUrl: creator.channelUrl,
+              categories: creator.categories,
             }}
             channels={creator.channels}
+            sugerencias={categories}
           />
           <div className="space-y-6">
             <SocialsPanel creatorId={creator.id} socials={creator.socials} />
@@ -341,6 +377,7 @@ export default async function CreadorPage({ params }: { params: Promise<{ id: st
           />
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <Badge tone={status.tone}>{status.label}</Badge>
+            {creator.exclusive && <Badge tone="accent">Exclusivo</Badge>}
             {/* Se ve antes que nada: con agencia se negocia y se paga a ella. */}
             {creator.agency && (
               <Badge tone="info">

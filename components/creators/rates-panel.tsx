@@ -111,6 +111,12 @@ export function RatesPanel({
     // Sus redes siempre, aunque no tengan precio: son las que se le encargan.
     const base = new Map<string, Grupo>();
     for (const p of suyas) base.set(clave({ platform: p, channelId: TODA_LA_RED }), { platform: p, channelId: TODA_LA_RED });
+    // Y sus canales adicionales: había que ir a buscarlos al desplegable de
+    // abajo, y parecía que no se les podía poner precio.
+    for (const c of channels) {
+      const g = { platform: "youtube" as SocialPlatform, channelId: c.id };
+      base.set(clave(g), g);
+    }
     for (const g of gruposConPrecio()) base.set(clave(g), g);
 
     const inicial: Record<string, Partial<Record<DeliverableType, string>>> = {};
@@ -186,6 +192,17 @@ export function RatesPanel({
     return canal ? nombreCanal(canal) : "Canal borrado";
   };
 
+  /** Qué es el bloque, bajo su nombre: sin esto dos canales se confunden. */
+  const detalle = (g: Grupo): string | null => {
+    if (g.channelId) {
+      const canal = channels.find((c) => c.id === g.channelId);
+      return ["Canal de YouTube", canal?.label, ...(canal?.tags ?? [])].filter(Boolean).join(" · ");
+    }
+    // Con canales adicionales, «YouTube» a secas es el principal y lo que se
+    // cobra en un canal que no tenga precio propio.
+    return g.platform === "youtube" && channels.length > 0 ? "Canal principal y precio por defecto" : null;
+  };
+
   // Lo que aún se puede añadir en la edición: otras redes y canales de YouTube.
   const faltan = [
     ...PLATFORMS.filter((p) => !grupos.some((g) => g.platform === p.id && !g.channelId)).map((p) => ({
@@ -243,8 +260,10 @@ export function RatesPanel({
                 <header className="mb-2 flex items-center justify-between gap-2">
                   <span className="min-w-0">
                     <span className="block truncate text-[13px] font-semibold">{titulo(g)}</span>
-                    {g.channelId && (
-                      <span className="block text-[11.5px] text-[var(--text-subtle)]">Canal de YouTube</span>
+                    {detalle(g) && (
+                      <span className="block truncate text-[11.5px] text-[var(--text-subtle)]">
+                        {detalle(g)}
+                      </span>
                     )}
                   </span>
                   <button
@@ -317,8 +336,10 @@ export function RatesPanel({
               >
                 <header className="mb-1.5">
                   <span className="block truncate text-[13px] font-semibold">{titulo(g)}</span>
-                  {g.channelId && (
-                    <span className="block text-[11.5px] text-[var(--text-subtle)]">Canal de YouTube</span>
+                  {detalle(g) && (
+                    <span className="block truncate text-[11.5px] text-[var(--text-subtle)]">
+                      {detalle(g)}
+                    </span>
                   )}
                 </header>
                 <dl className="space-y-1">

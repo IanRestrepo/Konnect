@@ -6,6 +6,7 @@ import { LoaderCircle, Pencil, TriangleAlert } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Textarea } from "@/components/ui/field";
+import { Switch } from "@/components/ui/switch";
 import { useCan } from "@/components/session-provider";
 import { CategoryField } from "@/components/creators/category-field";
 import { Picker } from "@/components/ui/picker";
@@ -23,6 +24,7 @@ type Campos = {
   country: string;
   categories: string[];
   status: Creator["status"];
+  exclusive: boolean;
   email: string;
   phone: string;
   currency: string;
@@ -39,6 +41,7 @@ function desde(creator: Creator): Campos {
     country: creator.country,
     categories: creator.categories,
     status: creator.status,
+    exclusive: creator.exclusive,
     email: creator.email,
     phone: creator.phone,
     currency: creator.currency,
@@ -101,6 +104,7 @@ export function EditCreatorButton({
           country: form.country.trim(),
           categories: form.categories,
           status: form.status,
+          exclusive: form.exclusive,
           email: form.email.trim(),
           phone: form.phone.trim(),
           currency: form.currency,
@@ -194,6 +198,22 @@ export function EditCreatorButton({
                 { id: "prospecto", label: "Prospecto" },
                 { id: "archivado", label: "Archivado" },
               ]}
+            />
+          </div>
+
+          {/* Exclusividad con la agencia, no con una agencia externa: esa va
+              en Contacto. */}
+          <div className="flex items-center justify-between gap-3 rounded-[var(--r-control)] bg-[var(--surface-2)] px-3 py-2.5 sm:col-span-2">
+            <span>
+              <span className="block text-[13px] font-medium">Exclusivo</span>
+              <span className="block text-[12px] text-[var(--text-muted)]">
+                Solo trabaja con nosotros.
+              </span>
+            </span>
+            <Switch
+              checked={form.exclusive}
+              onChange={(v) => set("exclusive", v)}
+              label="Exclusivo: solo trabaja con nosotros"
             />
           </div>
 

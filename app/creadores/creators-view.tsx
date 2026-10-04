@@ -17,7 +17,7 @@ import { PLATFORM_METRICS } from "@/lib/socials";
 import type { Creator, CreatorStatus } from "@/lib/types";
 import { formatCompact, formatMoney } from "@/lib/utils";
 
-type Filter = CreatorStatus | "todos";
+type Filter = CreatorStatus | "todos" | "exclusivo";
 
 export function CreatorsView({
   creators,
@@ -48,6 +48,9 @@ export function CreatorsView({
         label: "Prospectos",
         count: creators.filter((c) => c.status === "prospecto").length,
       },
+      // No es un estado: un exclusivo puede estar activo o en pausa. Va aquí
+      // porque es la otra forma en que se busca a alguien en la cartera.
+      { id: "exclusivo", label: "Exclusivos", count: creators.filter((c) => c.exclusive).length },
     ],
     [creators],
   );
@@ -55,7 +58,7 @@ export function CreatorsView({
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return creators.filter((c) => {
-      if (status !== "todos" && c.status !== status) return false;
+      if (status === "exclusivo" ? !c.exclusive : status !== "todos" && c.status !== status) return false;
       if (!q) return true;
       return [c.name, c.handle, ...c.categories, c.email, c.country]
         .join(" ")
@@ -132,7 +135,12 @@ export function CreatorsView({
                     key={creator.id}
                     href={`/creadores/${creator.id}`}
                     leading={<Avatar src={creator.avatarUrl} name={creator.name} size={38} />}
-                    title={creator.name}
+                    title={
+                      <span className="flex items-center gap-2">
+                        <span className="truncate">{creator.name}</span>
+                        {creator.exclusive && <Badge tone="accent">Exclusivo</Badge>}
+                      </span>
+                    }
                     subtitle={`${creator.handle} · ${formatCompact(creator.subscribers)} ${PLATFORM_METRICS[creator.mainPlatform].audienceShort} · ${campaignCount[creator.id] ?? 0} campañas`}
                     trailing={
                       <span className="flex items-center gap-4">

@@ -957,7 +957,7 @@ export function NewCampaignForm({
                                             ...creator.channels.map((c) => ({
                                               id: c.id,
                                               label: nombreCanal(c),
-                                              hint: tarifaCanal(creator, linea.platform, linea.type, c.id),
+                                              hint: [tarifaCanal(creator, linea.platform, linea.type, c.id), ...c.tags].join(" · "),
                                             })),
                                           ]}
                                         />

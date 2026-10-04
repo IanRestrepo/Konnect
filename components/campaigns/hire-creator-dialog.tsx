@@ -362,7 +362,7 @@ export function HireCreatorDialog({
                       ...elegido.channels.map((c) => ({
                         id: c.id,
                         label: nombreCanal(c),
-                        hint: tarifaCanal(elegido, platform, tipo, c.id),
+                        hint: [tarifaCanal(elegido, platform, tipo, c.id), ...c.tags].join(" · "),
                       })),
                     ]}
                   />

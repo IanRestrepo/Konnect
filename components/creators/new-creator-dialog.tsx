@@ -9,6 +9,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { FieldHint, Input, InputWithIcon, Label, Textarea } from "@/components/ui/field";
 import { CategoryField } from "@/components/creators/category-field";
+import { Switch } from "@/components/ui/switch";
 import { Picker } from "@/components/ui/picker";
 import { ContactFieldsEditor } from "@/components/creators/contact-fields-editor";
 import { PaymentAccountsEditor } from "@/components/creators/payment-accounts-editor";
@@ -98,6 +99,8 @@ export function NewCreatorDialog({
     { id: string; name: string; handle: string; motivo: string }[] | null
   >(null);
   const [form, setForm] = useState({ ...EMPTY });
+  /** Solo trabaja con la agencia. */
+  const [exclusive, setExclusive] = useState(false);
   /** Varias categorías; la primera es la principal. */
   const [categorias, setCategorias] = useState<string[]>(categories[0] ? [categories[0]] : []);
   /** El catálogo puede crecer sin recargar: se crean categorías desde aquí. */
@@ -123,6 +126,7 @@ export function NewCreatorDialog({
     setAccounts(CUENTA_INICIAL);
     setContactFields([]);
     setDuplicados(null);
+    setExclusive(false);
     setForm({ ...EMPTY });
     setCategorias(categories[0] ? [categories[0]] : []);
     onClose();
@@ -184,6 +188,7 @@ export function NewCreatorDialog({
           socials: [{ platform, handle, url: enlace, followers: seguidores }],
           categories: categorias,
           status: form.status,
+          exclusive,
           email: form.email.trim(),
           phone: form.phone.trim(),
           currency: form.currency,
@@ -447,6 +452,19 @@ export function NewCreatorDialog({
                     { id: "pausado", label: "En pausa" },
                     { id: "prospecto", label: "Prospecto" },
                   ]}
+                />
+              </div>
+              <div className="flex items-center justify-between gap-3 rounded-[var(--r-control)] bg-[var(--surface-2)] px-3 py-2.5 sm:col-span-2">
+                <span>
+                  <span className="block text-[13px] font-medium">Exclusivo</span>
+                  <span className="block text-[12px] text-[var(--text-muted)]">
+                    Solo trabaja con nosotros.
+                  </span>
+                </span>
+                <Switch
+                  checked={exclusive}
+                  onChange={setExclusive}
+                  label="Exclusivo: solo trabaja con nosotros"
                 />
               </div>
               <div>
