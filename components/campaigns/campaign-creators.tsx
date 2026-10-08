@@ -7,6 +7,7 @@ import {
   Film,
   LoaderCircle,
   MoreHorizontal,
+  Pencil,
   Plus,
   RotateCcw,
   SquareArrowOutUpRight,
@@ -30,14 +31,18 @@ import { AddDeliverableDialog } from "@/components/campaigns/add-deliverable-dia
 import { CreatorPaymentDialog } from "@/components/campaigns/creator-payment-dialog";
 import { Paginador, usePagina } from "@/components/ui/pager";
 import type { Empleado } from "@/components/campaigns/campaign-team";
+import { EditDeliverableDialog } from "@/components/campaigns/edit-deliverable-dialog";
 import { creatorPayout } from "@/lib/pricing";
-import type { Campaign, Creator, Currency, DeliverableKind } from "@/lib/types";
+import { piezaLabel } from "@/lib/socials";
+import type { Campaign, Creator, Currency, Deliverable, DeliverableKind } from "@/lib/types";
 import { formatDate, formatMoney } from "@/lib/utils";
 
 /** Lo que hay que saber de un creador dentro de esta campaña. */
 type Participante = {
   creator: Creator;
   piezas: number;
+  /** Las que no están canceladas: lo que se puede corregir desde el menú. */
+  vivas: Deliverable[];
   /** Las que siguen esperándose. Son las que se cancelan al cerrar. */
   pendientes: number;
   /** Cuántas tienen el dinero ya fuera. Pesa al decidir si se borra o se cierra. */
@@ -98,6 +103,7 @@ export function CampaignCreators({
   const [cerrando, setCerrando] = useState<Participante | null>(null);
   const [quitando, setQuitando] = useState<Participante | null>(null);
   const [pagando, setPagando] = useState<Creator | null>(null);
+  const [editando, setEditando] = useState<Deliverable | null>(null);
   const [razon, setRazon] = useState("");
   const [ocupado, setOcupado] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -124,6 +130,7 @@ export function CampaignCreators({
       return {
         creator,
         piezas: suyas.length,
+        vivas,
         pendientes: suyas.filter((d) => d.status === "pendiente").length,
         pagadas: suyas.filter((d) => d.paymentStatus === "pagado").length,
         total: vivas.reduce((s, d) => s + creatorPayout(d, campaign), 0),
@@ -298,7 +305,7 @@ export function CampaignCreators({
                         )}
                       >
                         {({ close }) => (
-                          <div className="w-60 p-1">
+                          <div className="max-h-[70vh] w-60 overflow-y-auto p-1">
                             <Enlace href={ficha} onClick={close} icono={SquareArrowOutUpRight}>
                               Abrir en la campaña
                             </Enlace>
@@ -309,6 +316,37 @@ export function CampaignCreators({
                             >
                               Ver su ficha
                             </Enlace>
+
+                            {/* Lo pactado se corrige desde aquí, sin entrar a
+                                la ficha: el pago al creador es el número que
+                                casi nunca se sabe el día que se le añade, y
+                                como no se veía dónde cambiarlo se acababa
+                                quitando al creador y contratándolo otra vez. */}
+                            {p.vivas.length > 0 && (
+                              <>
+                                <div className="my-1 h-px bg-[var(--line)]" />
+                                <p className="px-2.5 pt-1 pb-1 text-[11px] font-medium tracking-wide text-[var(--text-subtle)] uppercase">
+                                  Editar lo pactado
+                                </p>
+                                {p.vivas.map((d) => (
+                                  <Opcion
+                                    key={d.id}
+                                    icono={Pencil}
+                                    onClick={() => {
+                                      close();
+                                      setEditando(d);
+                                    }}
+                                  >
+                                    <span className="min-w-0 flex-1 truncate">
+                                      {piezaLabel(d.platform, d.type, d.customType)}
+                                    </span>
+                                    <span className="tabular shrink-0 text-[12px] text-[var(--text-subtle)]">
+                                      {formatMoney(creatorPayout(d, campaign), currency)}
+                                    </span>
+                                  </Opcion>
+                                ))}
+                              </>
+                            )}
 
                             <div className="my-1 h-px bg-[var(--line)]" />
 
@@ -386,6 +424,18 @@ export function CampaignCreators({
           creator={pagando}
         />
       )}
+
+      <EditDeliverableDialog
+        key={editando?.id ?? "sin-pieza"}
+        open={editando !== null}
+        onClose={() => setEditando(null)}
+        campaignId={campaign.id}
+        deliverable={editando}
+        creator={editando ? (creators.find((c) => c.id === editando.creatorId) ?? null) : null}
+        currency={currency}
+        kinds={catalogo}
+        onKindsChange={setCatalogo}
+      />
 
       <AddDeliverableDialog
         open={registrando}

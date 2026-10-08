@@ -2,8 +2,16 @@
 
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronDown } from "lucide-react";
+import { Check, ChevronDown, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+/** Sin mayúsculas ni acentos: «educacion» tiene que encontrar «Educación». */
+function plano(texto: string): string {
+  return texto
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "");
+}
 
 /**
  * Desplegable propio.
@@ -20,6 +28,10 @@ import { cn } from "@/lib/utils";
  * dentro de una tarjeta se corta por abajo por mucho `z-index` que tenga —y
  * eso pasaba en la mitad de los formularios—. Colocarla contra la posición
  * real del disparador es lo único que lo arregla en todos los sitios a la vez.
+ *
+ * Con `buscable`, la lista abre con un campo para escribir y se va quedando
+ * con lo que coincide. Es para los catálogos que crecen solos —las categorías—,
+ * donde encontrar una a base de rueda dejó de ser razonable.
  */
 export function Picker<T extends string>({
   value,
@@ -30,6 +42,7 @@ export function Picker<T extends string>({
   disabled,
   className,
   size = "md",
+  buscable = false,
 }: {
   value: T;
   onChange: (value: T) => void;
@@ -40,21 +53,37 @@ export function Picker<T extends string>({
   className?: string;
   /** `sm` para ponerlo dentro de una fila de tabla, junto a texto pequeño. */
   size?: "md" | "sm";
+  /** Pone un campo de búsqueda encima de la lista. */
+  buscable?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [marcado, setMarcado] = useState(0);
+  const [consulta, setConsulta] = useState("");
   const listaId = useId();
   const caja = useRef<HTMLDivElement>(null);
+  const boton = useRef<HTMLButtonElement>(null);
   const lista = useRef<HTMLDivElement>(null);
+  /** Solo las opciones: el buscador se queda fijo y ellas desplazan debajo. */
+  const opciones = useRef<HTMLDivElement>(null);
   /** Dónde y con qué ancho se pinta la lista, medida contra el disparador. */
   const [sitio, setSitio] = useState<{ top: number; left: number; width: number } | null>(null);
 
   const elegido = options.find((o) => o.id === value);
 
+  const buscado = buscable ? plano(consulta.trim()) : "";
+  const visibles = buscado ? options.filter((o) => plano(o.label).includes(buscado)) : options;
+
   /** Abre dejando marcada la opción actual, para no empezar siempre arriba. */
   function abrir() {
+    setConsulta("");
     setMarcado(Math.max(0, options.findIndex((o) => o.id === value)));
     setOpen(true);
+  }
+
+  /** Cierra y devuelve el foco al campo: con búsqueda, el foco estaba dentro. */
+  function cerrar() {
+    setOpen(false);
+    if (buscable) boton.current?.focus();
   }
 
   useEffect(() => {
@@ -103,12 +132,14 @@ export function Picker<T extends string>({
       window.removeEventListener("scroll", medir, true);
       window.removeEventListener("resize", medir);
     };
-  }, [open, options.length]);
+    // Al filtrar cambia el alto de la lista, y si estaba volteada hacia arriba
+    // hay que recolocarla.
+  }, [open, visibles.length]);
 
   // Mantiene a la vista la opción marcada al navegar con el teclado.
   useEffect(() => {
-    if (!open || !lista.current) return;
-    lista.current.children[marcado]?.scrollIntoView({ block: "nearest" });
+    if (!open || !opciones.current) return;
+    opciones.current.children[marcado]?.scrollIntoView({ block: "nearest" });
   }, [marcado, open]);
 
   function teclado(e: React.KeyboardEvent) {
@@ -124,19 +155,22 @@ export function Picker<T extends string>({
 
     if (e.key === "Escape") {
       e.preventDefault();
-      setOpen(false);
+      cerrar();
     } else if (e.key === "ArrowDown") {
       e.preventDefault();
-      setMarcado((i) => (i + 1) % options.length);
+      if (visibles.length) setMarcado((i) => (i + 1) % visibles.length);
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      setMarcado((i) => (i - 1 + options.length) % options.length);
+      if (visibles.length) setMarcado((i) => (i - 1 + visibles.length) % visibles.length);
     } else if (e.key === "Enter" || e.key === "Tab") {
-      const opcion = options[marcado];
+      const opcion = visibles[marcado];
       if (opcion) {
         e.preventDefault();
         onChange(opcion.id);
-        setOpen(false);
+        cerrar();
+      } else if (e.key === "Enter") {
+        // Sin coincidencias, Enter no debe enviar el formulario de detrás.
+        e.preventDefault();
       }
     }
   }
@@ -144,6 +178,7 @@ export function Picker<T extends string>({
   return (
     <div ref={caja} className={cn("relative", className)}>
       <button
+        ref={boton}
         id={id}
         type="button"
         disabled={disabled}
@@ -179,8 +214,6 @@ export function Picker<T extends string>({
         createPortal(
           <div
             ref={lista}
-            id={listaId}
-            role="listbox"
             // `fixed` y no `absolute`: al vivir fuera del campo, se posiciona
             // contra la ventana con las medidas que tomó `medir`.
             style={{
@@ -188,44 +221,65 @@ export function Picker<T extends string>({
               left: sitio?.left ?? -9999,
               width: sitio?.width,
             }}
-            className="animate-layer fixed z-[100] max-h-64 overflow-y-auto rounded-[var(--r-control)] border border-[var(--line)] bg-[var(--surface)] p-1 shadow-[var(--shadow-pop)]"
+            className="animate-layer fixed z-[100] rounded-[var(--r-control)] border border-[var(--line)] bg-[var(--surface)] p-1 shadow-[var(--shadow-pop)]"
           >
-            {options.length === 0 ? (
-            <p className="px-2.5 py-3 text-center text-[12.5px] text-[var(--text-subtle)]">
-              Nada que elegir
-            </p>
-          ) : (
-            options.map((option, i) => {
-              const activo = option.id === value;
-              return (
-                <button
-                  key={option.id}
-                  type="button"
-                  role="option"
-                  aria-selected={activo}
-                  onMouseEnter={() => setMarcado(i)}
-                  onClick={() => {
-                    onChange(option.id);
-                    setOpen(false);
+            {buscable && (
+              <div className="mb-1 flex items-center gap-2 border-b border-[var(--line)] px-2.5 pb-1">
+                <Search size={14} className="shrink-0 text-[var(--text-subtle)]" />
+                <input
+                  autoFocus
+                  value={consulta}
+                  onChange={(e) => {
+                    setConsulta(e.target.value);
+                    setMarcado(0);
                   }}
-                  className={cn(
-                    "flex w-full items-center gap-2 rounded-[var(--r-chip)] px-2.5 py-2 text-left text-[13px] transition",
-                    i === marcado ? "bg-[var(--surface-3)]" : "bg-transparent",
-                  )}
-                >
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate">{option.label}</span>
-                    {option.hint && (
-                      <span className="block truncate text-[12px] text-[var(--text-subtle)]">
-                        {option.hint}
+                  onKeyDown={teclado}
+                  placeholder="Escribe para buscar…"
+                  aria-label="Buscar en la lista"
+                  aria-controls={listaId}
+                  className="h-8 min-w-0 flex-1 bg-transparent text-[13px] placeholder:text-[var(--text-subtle)] focus:outline-none"
+                />
+              </div>
+            )}
+
+            <div ref={opciones} id={listaId} role="listbox" className="max-h-64 overflow-y-auto">
+              {visibles.length === 0 ? (
+                <p className="px-2.5 py-3 text-center text-[12.5px] text-[var(--text-subtle)]">
+                  {buscado ? "Nada con ese nombre" : "Nada que elegir"}
+                </p>
+              ) : (
+                visibles.map((option, i) => {
+                  const activo = option.id === value;
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      role="option"
+                      aria-selected={activo}
+                      onMouseEnter={() => setMarcado(i)}
+                      onClick={() => {
+                        onChange(option.id);
+                        cerrar();
+                      }}
+                      className={cn(
+                        "flex w-full items-center gap-2 rounded-[var(--r-chip)] px-2.5 py-2 text-left text-[13px] transition",
+                        i === marcado ? "bg-[var(--surface-3)]" : "bg-transparent",
+                      )}
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate">{option.label}</span>
+                        {option.hint && (
+                          <span className="block truncate text-[12px] text-[var(--text-subtle)]">
+                            {option.hint}
+                          </span>
+                        )}
                       </span>
-                    )}
-                  </span>
-                  {activo && <Check size={14} className="shrink-0 text-[var(--accent)]" />}
-                </button>
-              );
-            })
-          )}
+                      {activo && <Check size={14} className="shrink-0 text-[var(--accent)]" />}
+                    </button>
+                  );
+                })
+              )}
+            </div>
           </div>,
           document.body,
         )}

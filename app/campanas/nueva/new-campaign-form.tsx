@@ -52,7 +52,7 @@ import type {
   DeliverableType,
   SocialPlatform,
 } from "@/lib/types";
-import { cn, formatMoney } from "@/lib/utils";
+import { cn, formatDate, formatMoney } from "@/lib/utils";
 import { BackLink } from "@/components/ui/back-link";
 import { resumenPaquete } from "@/components/creators/packages-panel";
 
@@ -149,6 +149,18 @@ export function NewCampaignForm({
   const [endDate, setEndDate] = useState("");
   const [notes, setNotes] = useState("");
   const [managerId, setManagerId] = useState(responsablePorDefecto);
+
+  // El nombre se guarda con su fecha: las campañas se repiten con el mismo
+  // cliente y el mismo título, y en la lista no había forma de distinguir la
+  // de este mes de la del anterior. Es la de inicio, o la de hoy si no se puso.
+  // Se lee como fecha local: `new Date("2026-10-06")` es medianoche UTC y aquí
+  // saldría como el día 5.
+  const fechaNombre = formatDate(startDate ? new Date(`${startDate}T00:00:00`) : new Date());
+  const nombreFinal = !name.trim()
+    ? ""
+    : name.includes(fechaNombre)
+      ? name.trim()
+      : `${name.trim()} · ${fechaNombre}`;
 
 
   // Filtros del buscador de creadores.
@@ -345,7 +357,7 @@ export function NewCampaignForm({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: name.trim(),
+          name: nombreFinal,
           companyId,
           status,
           objective,
@@ -463,6 +475,11 @@ export function NewCampaignForm({
                       placeholder="Lanzamiento de verano"
                       autoFocus
                     />
+                    <FieldHint>
+                      {nombreFinal
+                        ? `Se guarda como «${nombreFinal}».`
+                        : "La fecha se le añade sola al guardar."}
+                    </FieldHint>
                   </div>
                   <div>
                     <Label htmlFor="company">Cliente</Label>
@@ -1049,7 +1066,7 @@ export function NewCampaignForm({
             <CardTitle>Resumen</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2.5 text-[13px]">
-            <Fila etiqueta="Nombre" valor={name || "—"} />
+            <Fila etiqueta="Nombre" valor={nombreFinal || "—"} />
             <Fila
               etiqueta="Cliente"
               valor={clientes.find((c) => c.id === companyId)?.name ?? "—"}

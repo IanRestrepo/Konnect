@@ -136,6 +136,19 @@ export function MasterSessionView({
     );
   }
 
+  /** Pone, mueve o quita la fecha de una petición sin salir de la maestra. */
+  function fechar(sessionId: string, req: SessionRequirement, dueDate: string | null) {
+    return llamar(
+      `/api/sesiones/${sessionId}/peticiones`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requirementId: req.id, accion: "editar", dueDate }),
+      },
+      "No se pudo cambiar la fecha.",
+    );
+  }
+
   const destinos = [
     { id: TODAS, label: "Todas las sesiones", hint: `${filas.length}` },
     ...filas.map((f) => ({
@@ -237,6 +250,7 @@ export function MasterSessionView({
               puedeEditar={puedeEditar}
               ocupado={ocupado}
               onRevisar={revisar}
+              onFecha={fechar}
             />
           ) : (
             <div className="space-y-3">
@@ -249,6 +263,7 @@ export function MasterSessionView({
                   puedeEditar={puedeEditar}
                   ocupado={ocupado}
                   onRevisar={(req, accion, nota) => revisar(fila.session.id, req, accion, nota)}
+                  onFecha={(req, dueDate) => fechar(fila.session.id, req, dueDate)}
                   onNuevaPeticion={() => setPeticion({ destino: fila.session.id, editando: null })}
                   onNuevoMaterial={() => setMaterial({ destino: fila.session.id })}
                 />
@@ -427,6 +442,7 @@ function TarjetaSesion({
   puedeEditar,
   ocupado,
   onRevisar,
+  onFecha,
   onNuevaPeticion,
   onNuevoMaterial,
 }: {
@@ -436,6 +452,7 @@ function TarjetaSesion({
   puedeEditar: boolean;
   ocupado: boolean;
   onRevisar: (req: SessionRequirement, accion: "aprobar" | "cambios", nota: string) => void;
+  onFecha: (req: SessionRequirement, dueDate: string | null) => void;
   onNuevaPeticion: () => void;
   onNuevoMaterial: () => void;
 }) {
@@ -528,7 +545,11 @@ function TarjetaSesion({
                         {req.masterId && <Badge plain>Común</Badge>}
                       </span>
                       <span className="block truncate text-[12px] text-[var(--text-muted)]">
-                        <Fecha iso={req.dueDate} tarde={esTarde} />
+                        <Fecha
+                          iso={req.dueDate}
+                          tarde={esTarde}
+                          onCambiar={puedeEditar ? (dueDate) => onFecha(req, dueDate) : undefined}
+                        />
                         {req.url && (
                           <>
                             {" · "}
@@ -621,18 +642,84 @@ function TarjetaSesion({
 
 /* ---------------- Todas las peticiones, por fecha ---------------- */
 
-/** La fecha de una petición, con su icono; en rojo si ya pasó. */
-function Fecha({ iso, tarde }: { iso: string | null; tarde: boolean }) {
+/**
+ * La fecha de una petición, con su icono; en rojo si ya pasó.
+ *
+ * Con `onCambiar` se puede pulsar para ponerla o moverla. Antes solo se leía:
+ * las piezas pactadas nacen sin fecha, y desde la maestra —que es donde se
+ * mira qué vence— no había forma de dársela sin entrar sesión por sesión.
+ */
+function Fecha({
+  iso,
+  tarde,
+  onCambiar,
+}: {
+  iso: string | null;
+  tarde: boolean;
+  /** Recibe la fecha en ISO, o null para quitarla. Sin él, la fecha solo se lee. */
+  onCambiar?: (dueDate: string | null) => void;
+}) {
+  const [editando, setEditando] = useState(false);
+  const [valor, setValor] = useState("");
+
+  const tono = tarde
+    ? "text-[var(--danger)]"
+    : iso
+      ? "text-[var(--text-muted)]"
+      : "text-[var(--text-subtle)]";
+  const texto = iso ? `Para el ${formatDate(iso)}` : "Sin fecha";
+
+  if (!onCambiar) {
+    return (
+      <span className={cn("inline-flex items-center gap-1 tabular-nums", tono)}>
+        <CalendarDays size={12} className="shrink-0" />
+        {texto}
+      </span>
+    );
+  }
+
+  // Se guarda al salir del campo o con Enter, no en cada cambio: mientras se
+  // teclea el año, el campo ya da por buena la fecha «0002» y la mandaría.
+  function guardar() {
+    setEditando(false);
+    if (valor === aInput(iso)) return;
+    onCambiar?.(valor ? new Date(`${valor}T00:00:00`).toISOString() : null);
+  }
+
+  if (editando) {
+    return (
+      <input
+        type="date"
+        autoFocus
+        value={valor}
+        onChange={(e) => setValor(e.target.value)}
+        onBlur={guardar}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.currentTarget.blur();
+          if (e.key === "Escape") setEditando(false);
+        }}
+        aria-label="Para cuándo"
+        className="h-6 rounded-[var(--r-chip)] border border-[var(--line-strong)] bg-[var(--surface-2)] px-1.5 text-[12px] text-[var(--text)] tabular-nums focus:outline-none"
+      />
+    );
+  }
+
   return (
-    <span
+    <button
+      type="button"
+      onClick={() => {
+        setValor(aInput(iso));
+        setEditando(true);
+      }}
+      title={iso ? "Cambiar la fecha" : "Poner fecha"}
       className={cn(
-        "inline-flex items-center gap-1 tabular-nums",
-        tarde ? "text-[var(--danger)]" : iso ? "text-[var(--text-muted)]" : "text-[var(--text-subtle)]",
+        "-mx-1 inline-flex items-center gap-1 rounded-[var(--r-chip)] px-1 tabular-nums transition hover:bg-[var(--surface-3)] hover:text-[var(--text)]",
+        tono,
       )}
     >
       <CalendarDays size={12} className="shrink-0" />
-      {iso ? `Para el ${formatDate(iso)}` : "Sin fecha"}
-    </span>
+      {texto}
+    </button>
   );
 }
 
@@ -649,11 +736,13 @@ function ListaPeticiones({
   puedeEditar,
   ocupado,
   onRevisar,
+  onFecha,
 }: {
   filas: SesionFila[];
   ahora: number;
   puedeEditar: boolean;
   ocupado: boolean;
+  onFecha: (sessionId: string, req: SessionRequirement, dueDate: string | null) => void;
   onRevisar: (sessionId: string, req: SessionRequirement, accion: "aprobar" | "cambios", nota: string) => void;
 }) {
   const [soloPendientes, setSoloPendientes] = useState(true);
@@ -703,7 +792,13 @@ function ListaPeticiones({
                   <span className="flex min-w-0 items-center gap-2 text-[12px] text-[var(--text-muted)]">
                     <span className="truncate">{nombre}</span>
                     <span aria-hidden>·</span>
-                    <Fecha iso={req.dueDate} tarde={esTarde} />
+                    <Fecha
+                      iso={req.dueDate}
+                      tarde={esTarde}
+                      onCambiar={
+                        puedeEditar ? (dueDate) => onFecha(fila.session.id, req, dueDate) : undefined
+                      }
+                    />
                     {req.url && (
                       <>
                         <span aria-hidden>·</span>

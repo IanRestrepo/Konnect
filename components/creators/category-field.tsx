@@ -181,6 +181,7 @@ export function CategoryField({
             placeholder={disponibles.length ? "Añadir categoría…" : "Ya tiene todas"}
             disabled={disponibles.length === 0}
             options={disponibles.map((c) => ({ id: c, label: c }))}
+            buscable
             className="min-w-0 flex-1"
           />
           <button
