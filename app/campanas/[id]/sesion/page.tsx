@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { requirePermission } from "@/lib/session";
 import { getCampaign, getCompany, getCreators } from "@/lib/data";
-import { getCampaignMaster, listSessions, seedRequirementsFromCampaign } from "@/lib/store";
+import { getCampaignMaster, listSessions } from "@/lib/store";
 import { puedeVerCampana } from "@/lib/campaign-access";
 import { enlacePersonal, portalBase } from "@/lib/portal-link";
 import {
@@ -28,21 +28,15 @@ export default async function SesionMaestraPage({ params }: { params: Promise<{ 
   if (!campaign) notFound();
   if (!puedeVerCampana(cuenta, campaign)) notFound();
 
-  const [company, creators, sesionesAntes, master] = await Promise.all([
+  const [company, creators, todas, master] = await Promise.all([
     getCompany(campaign.companyId),
     getCreators(),
     listSessions(),
     getCampaignMaster(id),
   ]);
 
-  // El acuerdo se mantiene solo: cada pieza pactada tiene su petición en el
-  // checklist de su creador sin que nadie pulse nada. No duplica.
-  const nuevas = await Promise.all(
-    sesionesAntes
-      .filter((s) => s.campaignId === id && s.creatorId)
-      .map((s) => seedRequirementsFromCampaign(s.id, id, s.creatorId!)),
-  );
-  const todas = nuevas.some((n) => n > 0) ? await listSessions() : sesionesAntes;
+  // Las peticiones de cada pieza nacen al pactarla. No se repasan aquí: hacerlo
+  // en cada carga devolvía las que el equipo había borrado a propósito.
 
   const porId = new Map(creators.map((c) => [c.id, c]));
 

@@ -2,7 +2,7 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { requirePermission } from "@/lib/session";
 import { getCampaign, getCreator } from "@/lib/data";
-import { getCollabSession, seedRequirementsFromCampaign } from "@/lib/store";
+import { getCollabSession } from "@/lib/store";
 import { SessionDetail } from "@/app/sesiones/[id]/session-detail";
 import { puedeVerCampana, soloLoSuyo } from "@/lib/campaign-access";
 
@@ -12,7 +12,7 @@ export default async function SesionPage({ params }: { params: Promise<{ id: str
   const cuenta = await requirePermission("ver_sesiones");
   const { id } = await params;
 
-  let session = await getCollabSession(id);
+  const session = await getCollabSession(id);
   if (!session) notFound();
 
   // El enlace se arma en el servidor: leer window durante el render rompía la
@@ -27,16 +27,9 @@ export default async function SesionPage({ params }: { params: Promise<{ id: str
     session.creatorId ? getCreator(session.creatorId) : null,
   ]);
 
-  // El acuerdo se mantiene solo: las piezas pactadas que aún no tienen su
-  // petición la reciben al abrir la sesión. Sustituye al botón «Traer del
-  // acuerdo», que había que acordarse de pulsar. No duplica nada.
-  if (session.campaignId && session.creatorId && campaign) {
-    const nuevas = await seedRequirementsFromCampaign(id, session.campaignId, session.creatorId);
-    if (nuevas > 0) {
-      const fresca = await getCollabSession(id);
-      if (fresca) session = fresca;
-    }
-  }
+  // Las peticiones de las piezas pactadas nacen al pactar la pieza, no al
+  // abrir la sesión. Antes se repasaban aquí en cada carga, y una petición
+  // que el equipo borraba volvía a aparecer sola al refrescar.
 
   /**
    * La sesión hereda el acceso de su campaña. Una sesión suelta —sin campaña,

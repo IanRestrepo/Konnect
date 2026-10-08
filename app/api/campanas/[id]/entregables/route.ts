@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { addDeliverable, ensureCreatorSession, seedRequirementsFromCampaign } from "@/lib/store";
+import {
+  addDeliverable,
+  completeRequirementFor,
+  ensureCreatorSession,
+  fulfillPendingDeliverable,
+  seedRequirementsFromCampaign,
+} from "@/lib/store";
 import { getSession } from "@/lib/session";
 import { hasPermission } from "@/lib/permissions";
 import { getCampaign } from "@/lib/data";
@@ -62,15 +68,22 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     );
   }
 
-  const deliverable = await addDeliverable(id, {
-    ...parsed.data,
-    metricsUpdatedAt: parsed.data.views !== null ? new Date().toISOString() : null,
-    paidAt: null,
-    // El comprobante se sube después, cuando el pago se marca como hecho.
-    receiptUrl: null,
-    receiptName: null,
-    receiptUploadedAt: null,
-  });
+  // Un video ya publicado completa la pieza que se le había pactado, si la
+  // hay; solo si no esperaba ninguna se crea una pieza nueva.
+  const yaPublicado = parsed.data.status === "publicado" && Boolean(parsed.data.videoUrl);
+  const rellenada = yaPublicado ? await fulfillPendingDeliverable(id, parsed.data) : null;
+
+  const deliverable =
+    rellenada ??
+    (await addDeliverable(id, {
+      ...parsed.data,
+      metricsUpdatedAt: parsed.data.views !== null ? new Date().toISOString() : null,
+      paidAt: null,
+      // El comprobante se sube después, cuando el pago se marca como hecho.
+      receiptUrl: null,
+      receiptName: null,
+      receiptUploadedAt: null,
+    }));
 
   if (!deliverable) {
     return NextResponse.json({ error: "Campaña no encontrada." }, { status: 404 });
@@ -80,10 +93,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   // creador sin pasar por «Traer del acuerdo», y si el creador no tenía sesión
   // en esta campaña —llegó pegando un video ya publicado— se le abre.
   const sesionId = await ensureCreatorSession(id, deliverable.creatorId);
-  if (sesionId) await seedRequirementsFromCampaign(sesionId, id, deliverable.creatorId);
+  if (sesionId) {
+    await seedRequirementsFromCampaign(sesionId, id, deliverable.creatorId, [deliverable.id]);
+  }
+  // Lo que ya está publicado no se le pide al creador.
+  if (yaPublicado) await completeRequirementFor(deliverable.id, deliverable.videoUrl);
 
   revalidatePath(`/campanas/${id}`);
   revalidatePath(`/campanas/${id}/sesion`);
   revalidatePath("/campanas");
-  return NextResponse.json({ deliverable }, { status: 201 });
+  return NextResponse.json({ deliverable, rellenada: Boolean(rellenada) }, { status: 201 });
 }

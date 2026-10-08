@@ -1397,7 +1397,7 @@ export async function hireCreator(
   const sesionId = await ensureCreatorSession(campaignId, input.creatorId);
   if (!sesionId) return null;
 
-  await seedRequirementsFromCampaign(sesionId, campaignId, input.creatorId);
+  await seedRequirementsFromCampaign(sesionId, campaignId, input.creatorId, [deliverableId]);
 
   const row = await prisma.campaign.findUnique({
     where: { id: campaignId },
@@ -1554,6 +1554,83 @@ export async function addDeliverable(
   });
 
   return toDeliverable(row);
+}
+
+/**
+ * Rellena con un video ya publicado la pieza pactada que estaba esperándolo.
+ *
+ * «Video publicado» creaba siempre una pieza nueva. Si al creador ya se le
+ * había pactado ese video, quedaban dos: la publicada y la pactada, todavía
+ * pendiente, con su petición abierta en la sesión del creador pidiéndole algo
+ * que ya había entregado. Ahora, si hay una pieza suya del mismo tipo y red
+ * sin publicar, el video va a esa —conservando lo pactado: precios, canal,
+ * nombre—. Devuelve null si no hay ninguna que rellenar.
+ */
+export async function fulfillPendingDeliverable(
+  campaignId: string,
+  input: Pick<
+    Deliverable,
+    | "creatorId"
+    | "platform"
+    | "type"
+    | "videoId"
+    | "videoUrl"
+    | "title"
+    | "thumbnail"
+    | "publishedAt"
+    | "durationSeconds"
+    | "views"
+    | "likes"
+    | "comments"
+  >,
+): Promise<Deliverable | null> {
+  const pendiente = await prisma.deliverable.findFirst({
+    where: {
+      campaignId,
+      creatorId: input.creatorId,
+      platform: input.platform,
+      type: input.type,
+      status: { in: ["pendiente", "en_revision"] },
+      videoUrl: null,
+    },
+    orderBy: { createdAt: "asc" },
+    select: { id: true },
+  });
+  if (!pendiente) return null;
+
+  const row = await prisma.deliverable.update({
+    where: { id: pendiente.id },
+    data: {
+      status: "publicado",
+      videoId: input.videoId,
+      videoUrl: input.videoUrl,
+      title: input.title,
+      thumbnail: input.thumbnail,
+      publishedAt: toDate(input.publishedAt),
+      durationSeconds: input.durationSeconds,
+      views: input.views,
+      likes: input.likes,
+      comments: input.comments,
+      metricsUpdatedAt: input.views !== null ? new Date() : null,
+    },
+  });
+  return toDeliverable(row);
+}
+
+/**
+ * Da por cumplida la petición de una pieza que la agencia registró como
+ * publicada: ya no hay nada que el creador tenga que entregar ahí, y dejarla
+ * «pendiente» en su portal le pide un enlace que ya tenemos.
+ */
+export async function completeRequirementFor(
+  deliverableId: string,
+  url: string | null,
+): Promise<void> {
+  const ahora = new Date();
+  await prisma.sessionRequirement.updateMany({
+    where: { deliverableId, status: { not: "aprobado" } },
+    data: { status: "aprobado", url, submittedAt: ahora, reviewedAt: ahora, reviewNotes: "" },
+  });
 }
 
 /* ---------------- Ajustes ---------------- */
@@ -3237,9 +3314,15 @@ export async function seedRequirementsFromCampaign(
   sessionId: string,
   campaignId: string,
   creatorId: string,
+  /**
+   * Solo estas piezas. Al añadir una pieza se siembra la suya y nada más: si
+   * se miraran todas, volvería la petición de otra pieza que el equipo borró
+   * a propósito.
+   */
+  soloPiezas?: string[],
 ): Promise<number> {
   const piezas = await prisma.deliverable.findMany({
-    where: { campaignId, creatorId },
+    where: { campaignId, creatorId, ...(soloPiezas ? { id: { in: soloPiezas } } : {}) },
     orderBy: { createdAt: "asc" },
     select: { id: true, type: true, platform: true, customType: true },
   });
@@ -3329,6 +3412,7 @@ export async function updateRequirement(
   sessionId: string,
   requirementId: string,
   patch: Partial<{
+    kind: SessionItemKind;
     title: string;
     instructions: string;
     steps: string[];

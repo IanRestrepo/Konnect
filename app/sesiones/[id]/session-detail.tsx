@@ -11,6 +11,7 @@ import {
   FileText,
   GripVertical,
   Link2,
+  Pencil,
   ListChecks,
   LoaderCircle,
   Plus,
@@ -55,6 +56,15 @@ const PETICION_VACIA = {
   /** Para cuándo se espera, en `yyyy-mm-dd`. Vacío = sin plazo. */
   dueDate: "",
 };
+
+/** La fecha de una petición para el campo `date`, en hora local. */
+function aCampoFecha(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const dos = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${dos(d.getMonth() + 1)}-${dos(d.getDate())}`;
+}
 
 type CreatorResumen = {
   id: string;
@@ -106,6 +116,29 @@ export function SessionDetail({
 
   const [peticionOpen, setPeticionOpen] = useState(false);
   const [peticion, setPeticion] = useState({ ...PETICION_VACIA });
+  /** Petición que se está editando; null = el diálogo crea una nueva. */
+  const [editandoReq, setEditandoReq] = useState<string | null>(null);
+
+  function nuevaPeticion() {
+    setEditandoReq(null);
+    setPeticion({ ...PETICION_VACIA });
+    setPeticionOpen(true);
+  }
+
+  // Las peticiones no se podían tocar una vez creadas: para corregir un
+  // título o moverle la fecha había que borrarla y hacerla otra vez, y con
+  // eso se perdía lo que el creador ya hubiera entregado en ella.
+  function editarPeticion(req: SessionRequirement) {
+    setEditandoReq(req.id);
+    setPeticion({
+      kind: req.kind,
+      title: req.title,
+      instructions: req.instructions,
+      steps: req.steps.join("\n"),
+      dueDate: aCampoFecha(req.dueDate),
+    });
+    setPeticionOpen(true);
+  }
 
   const abierta = session.status === "abierta";
 
@@ -208,25 +241,31 @@ export function SessionDetail({
       setError("Ponle un título a la petición.");
       return;
     }
-    const ok = await llamar(
-      `/api/sesiones/${session.id}/peticiones`,
-      json({
-        kind: peticion.kind,
-        title: peticion.title.trim(),
-        instructions: peticion.instructions.trim(),
-        // Una línea por paso; las vacías se descartan.
-        steps: peticion.steps
-          .split("\n")
-          .map((s) => s.trim())
-          .filter(Boolean),
-        dueDate: peticion.dueDate
-          ? new Date(`${peticion.dueDate}T00:00:00`).toISOString()
-          : null,
-      }),
-      "No se pudo crear la petición.",
-    );
+    const campos = {
+      kind: peticion.kind,
+      title: peticion.title.trim(),
+      instructions: peticion.instructions.trim(),
+      // Una línea por paso; las vacías se descartan.
+      steps: peticion.steps
+        .split("\n")
+        .map((s) => s.trim())
+        .filter(Boolean),
+      dueDate: peticion.dueDate ? new Date(`${peticion.dueDate}T00:00:00`).toISOString() : null,
+    };
+    const ok = editandoReq
+      ? await llamar(
+          `/api/sesiones/${session.id}/peticiones`,
+          json({ requirementId: editandoReq, accion: "editar", ...campos }, "PATCH"),
+          "No se pudo guardar la petición.",
+        )
+      : await llamar(
+          `/api/sesiones/${session.id}/peticiones`,
+          json(campos),
+          "No se pudo crear la petición.",
+        );
     if (ok) {
       setPeticion({ ...PETICION_VACIA });
+      setEditandoReq(null);
       setPeticionOpen(false);
     }
   }
@@ -320,7 +359,7 @@ export function SessionDetail({
             }
             action={
               puedeEditar && session.requirements.length > 0 ? (
-                <Button variant="secondary" size="sm" onClick={() => setPeticionOpen(true)}>
+                <Button variant="secondary" size="sm" onClick={nuevaPeticion}>
                   <Plus size={15} />
                   Añadir
                 </Button>
@@ -335,7 +374,7 @@ export function SessionDetail({
               description="Define qué tiene que entregar el creador. Le aparecerá como una lista de casillas en su portal."
               action={
                 puedeEditar && (
-                  <Button variant="accent" onClick={() => setPeticionOpen(true)}>
+                  <Button variant="accent" onClick={nuevaPeticion}>
                     <Plus size={16} />
                     Crear petición
                   </Button>
@@ -458,6 +497,17 @@ export function SessionDetail({
                               <RotateCcw size={14} />
                             </button>
                           </>
+                        )}
+
+                        {puedeEditar && (
+                          <button
+                            onClick={() => editarPeticion(req)}
+                            aria-label={`Editar ${req.title}`}
+                            title="Editar título, tipo, instrucciones y fecha"
+                            className="grid h-8 w-8 place-items-center rounded-[var(--r-control)] text-[var(--text-subtle)] transition hover:bg-[var(--surface-3)] hover:text-[var(--text)]"
+                          >
+                            <Pencil size={14} />
+                          </button>
                         )}
 
                         {puedeEditar && (
@@ -782,8 +832,12 @@ export function SessionDetail({
         open={peticionOpen}
         onClose={() => setPeticionOpen(false)}
         icon={ListChecks}
-        title="Nueva petición"
-        description="Le aparecerá al creador como una casilla que debe completar."
+        title={editandoReq ? "Editar petición" : "Nueva petición"}
+        description={
+          editandoReq
+            ? "Lo que el creador ya haya entregado en ella se conserva."
+            : "Le aparecerá al creador como una casilla que debe completar."
+        }
         footer={
           <>
             <Button variant="ghost" onClick={() => setPeticionOpen(false)}>
@@ -791,7 +845,7 @@ export function SessionDetail({
             </Button>
             <Button variant="primary" onClick={guardarPeticion} disabled={ocupado}>
               {ocupado && <LoaderCircle size={14} className="animate-spin" />}
-              Crear petición
+              {editandoReq ? "Guardar cambios" : "Crear petición"}
             </Button>
           </>
         }

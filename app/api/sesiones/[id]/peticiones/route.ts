@@ -80,7 +80,8 @@ const revisar = z.object({
   requirementId: z.string().min(1),
   accion: z.enum(["aprobar", "cambios", "editar"]),
   reviewNotes: z.string().default(""),
-  title: z.string().optional(),
+  kind: z.enum(KINDS).optional(),
+  title: z.string().trim().min(1, "Ponle un título a la petición.").optional(),
   instructions: z.string().optional(),
   steps: z.array(z.string()).optional(),
   required: z.boolean().optional(),
@@ -131,9 +132,9 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     return NextResponse.json({ error: "Falta la petición." }, { status: 400 });
   }
 
-  if (!(await removeRequirement(id, requirementId))) {
-    return NextResponse.json({ error: "Esa petición no existe." }, { status: 404 });
-  }
+  // Si ya no está, está borrada, que es lo que se pedía: dos clics seguidos
+  // sobre la papelera daban «esa petición no existe» en el segundo.
+  await removeRequirement(id, requirementId);
 
   revalidatePath(`/sesiones/${id}`);
   revalidatePath(`/portal/${id}`);
