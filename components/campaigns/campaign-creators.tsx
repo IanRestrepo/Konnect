@@ -73,9 +73,8 @@ const ESTADO_PAGO: Record<
  *
  * Existe porque la lista de entregables responde «qué piezas hay» pero no «con
  * quién estamos trabajando y cuánto le debemos», que es la pregunta con la que
- * se entra a una campaña a mitad de mes. Cada fila lleva a su ficha dentro de
- * la campaña, que es donde se controlan sus piezas, sus fechas y quién lo
- * lleva.
+ * se entra a una campaña a mitad de mes. El nombre lleva a su sesión, que es
+ * donde se trabaja con él; sus piezas y sus pagos están en el menú.
  */
 export function CampaignCreators({
   campaign,
@@ -83,7 +82,10 @@ export function CampaignCreators({
   currency,
   kinds,
   empleados,
+  sesiones = [],
 }: {
+  /** La sesión de entrega de cada creador en esta campaña. */
+  sesiones?: { id: string; creatorId: string | null }[];
   campaign: Campaign;
   /** Todos los del catálogo: hacen falta para poder contratar a uno nuevo. */
   creators: Creator[];
@@ -114,10 +116,15 @@ export function CampaignCreators({
   const finPorCreador = new Map(campaign.endedContracts.map((e) => [e.creatorId, e]));
   const empleadoPorId = new Map(empleados.map((e) => [e.id, e]));
 
-  // Participa quien tiene alguna pieza. El orden es el de entrada, que es como
-  // el equipo los recuerda.
+  const sesionDe = new Map(
+    sesiones.filter((s) => s.creatorId).map((s) => [s.creatorId as string, s.id]),
+  );
+
+  // Participa quien tiene alguna pieza o su sesión abierta en la campaña. Con
+  // solo las piezas, quitarle la última a un creador lo borraba de la lista
+  // como si se le hubiera sacado de la campaña. El orden es el de entrada.
   const participantes: Participante[] = [
-    ...new Set(campaign.deliverables.map((d) => d.creatorId)),
+    ...new Set([...campaign.deliverables.map((d) => d.creatorId), ...sesionDe.keys()]),
   ]
     .map((creatorId) => {
       const creator = creators.find((c) => c.id === creatorId);
@@ -240,6 +247,10 @@ export function CampaignCreators({
         <ListBox>
           {pagina.visibles.map((p) => {
             const ficha = `/campanas/${campaign.id}/creador/${p.creator.id}`;
+            const sesionId = sesionDe.get(p.creator.id);
+            // A la sesión, que es donde se trabaja con él. Su ficha dentro de
+            // la campaña repetía casi lo mismo y obligaba a un clic más.
+            const destino = sesionId ? `/sesiones/${sesionId}` : ficha;
             return (
               <ListRow
                 key={p.creator.id}
@@ -248,7 +259,7 @@ export function CampaignCreators({
                 // El nombre es el enlace y no la fila entera: la fila ya lleva
                 // un menú, y un botón dentro de un enlace se porta mal.
                 title={
-                  <Link href={ficha} className="transition hover:text-[var(--accent)]">
+                  <Link href={destino} className="transition hover:text-[var(--accent)]">
                     {p.creator.name}
                   </Link>
                 }
@@ -258,7 +269,7 @@ export function CampaignCreators({
                         p.finalizado.reason ? ` · ${p.finalizado.reason}` : ""
                       }`
                     : [
-                        `${p.piezas} pieza${p.piezas === 1 ? "" : "s"}`,
+                        p.piezas === 0 ? "Sin piezas" : `${p.piezas} pieza${p.piezas === 1 ? "" : "s"}`,
                         p.pendientes ? `${p.pendientes} por entregar` : null,
                         p.encargados.length
                           ? `lleva ${p.encargados.map((e) => e.name).join(", ")}`
@@ -306,8 +317,17 @@ export function CampaignCreators({
                       >
                         {({ close }) => (
                           <div className="max-h-[70vh] w-60 overflow-y-auto p-1">
-                            <Enlace href={ficha} onClick={close} icono={SquareArrowOutUpRight}>
-                              Abrir en la campaña
+                            {sesionId && (
+                              <Enlace
+                                href={`/sesiones/${sesionId}`}
+                                onClick={close}
+                                icono={SquareArrowOutUpRight}
+                              >
+                                Abrir su sesión
+                              </Enlace>
+                            )}
+                            <Enlace href={ficha} onClick={close} icono={Film}>
+                              Piezas y pagos
                             </Enlace>
                             <Enlace
                               href={`/creadores/${p.creator.id}`}

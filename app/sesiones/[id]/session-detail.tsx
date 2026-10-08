@@ -296,12 +296,23 @@ export function SessionDetail({
           title={session.name}
           description={session.notes || "Sin notas."}
           actions={
-            puedeEditar && (
-              <Button variant="accent" size="lg" onClick={() => setItemOpen(true)}>
-                <Plus size={16} />
-                Subir material
-              </Button>
-            )
+            <>
+              {/* Desde la campaña se llega aquí directamente; lo que se pactó
+                  con él y lo que se le debe queda a un clic. */}
+              {session.campaignId && session.creatorId && (
+                <Link href={`/campanas/${session.campaignId}/creador/${session.creatorId}`}>
+                  <Button variant="secondary" size="lg">
+                    Piezas y pagos
+                  </Button>
+                </Link>
+              )}
+              {puedeEditar && (
+                <Button variant="accent" size="lg" onClick={() => setItemOpen(true)}>
+                  <Plus size={16} />
+                  Subir material
+                </Button>
+              )}
+            </>
           }
         />
         <div className="mt-3 flex flex-wrap items-center gap-2">

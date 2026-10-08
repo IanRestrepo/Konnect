@@ -162,7 +162,13 @@ export function CampaignCreatorView({
                 {errorPieza}
               </p>
             )}
-            <ListBox>
+            {deliverables.length === 0 && (
+              <p className="rounded-[var(--r-card)] border border-[var(--line)] px-4 py-5 text-[12.5px] text-[var(--text-muted)]">
+                Sin piezas pactadas. Sigue en la campaña con su sesión; añádele una pieza desde
+                «Añadir creador» o registra un «Video publicado».
+              </p>
+            )}
+            <ListBox className={deliverables.length === 0 ? "hidden" : undefined}>
               {deliverables.map((d) => {
                 const estado = DELIVERABLE_STATUS[d.status];
                 return (
@@ -205,10 +211,11 @@ export function CampaignCreatorView({
                             deliverable={d}
                             onEditar={() => setEditando(d)}
                             onError={setErrorPieza}
-                            // Si era su última pieza, esta ficha deja de existir:
-                            // se vuelve a la campaña en vez de caer en un 404.
+                            // Quitar la última pieza no saca al creador: sigue
+                            // con su sesión. Solo si tampoco tiene sesión esta
+                            // ficha deja de existir, y se vuelve a la campaña.
                             onBorrada={
-                              deliverables.length === 1
+                              deliverables.length === 1 && !session
                                 ? () => router.push(`/campanas/${campaign.id}`)
                                 : undefined
                             }

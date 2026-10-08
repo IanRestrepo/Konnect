@@ -265,6 +265,7 @@ export default async function CampanaPage({ params }: { params: Promise<{ id: st
             currency={campaign.currency}
             kinds={kinds}
             empleados={empleados}
+            sesiones={sessions.map((s) => ({ id: s.id, creatorId: s.creatorId }))}
           />
         </div>
 

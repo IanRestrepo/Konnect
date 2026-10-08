@@ -30,9 +30,7 @@ export default async function CampanaCreadorPage({
   const creator = await getCreator(creatorId);
   if (!creator) notFound();
 
-  // Sin piezas no participa en esta campaña: la ficha no tendría de qué hablar.
   const deliverables = campaign.deliverables.filter((d) => d.creatorId === creatorId);
-  if (deliverables.length === 0) notFound();
 
   const [company, todasSesiones, usuarios, kinds] = await Promise.all([
     getCompany(campaign.companyId),
@@ -43,6 +41,10 @@ export default async function CampanaCreadorPage({
 
   const sesion =
     todasSesiones.find((s) => s.campaignId === campaign.id && s.creatorId === creatorId) ?? null;
+
+  // Participa mientras tenga alguna pieza o su sesión: quitarle la última
+  // pieza no lo saca de la campaña. Sin ninguna de las dos, aquí no hay nada.
+  if (deliverables.length === 0 && !sesion) notFound();
 
   // Solo las cuentas activas: nombrar encargado a quien ya no entra deja la
   // ficha diciendo que responde quien no responde.

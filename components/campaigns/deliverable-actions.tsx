@@ -64,7 +64,7 @@ export function DeliverableActions({
     const seguro = window.confirm(
       d.paymentStatus === "pagado"
         ? "Esta pieza ya está pagada. Si la quitas, ese pago desaparece de los informes. ¿Seguir?"
-        : "¿Quitar esta pieza de la campaña? Si todavía no se entregó, sale también del checklist del creador.",
+        : "¿Quitar esta pieza? El creador sigue en la campaña con su sesión. Si la pieza todavía no se entregó, sale también de su checklist.",
     );
     if (!seguro) return;
     if (await llamar({ method: "DELETE" })) {
@@ -161,7 +161,7 @@ export function DeliverableActions({
               void quitar();
             }}
           >
-            Quitar de la campaña
+            Quitar esta pieza
           </Opcion>
         </div>
       )}
