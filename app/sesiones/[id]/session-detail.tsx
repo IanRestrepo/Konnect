@@ -523,13 +523,26 @@ export function SessionDetail({
 
                         {puedeEditar && (
                           <button
-                            onClick={() =>
-                              llamar(
-                                `/api/sesiones/${session.id}/peticiones?requirementId=${req.id}`,
+                            onClick={() => {
+                              // Una petición de una pieza pactada es esa pieza:
+                              // borrarla aquí y dejar la pieza en la campaña
+                              // hacía que sus vistas y su pago siguieran
+                              // contando para algo que el equipo ya había
+                              // dado por borrado.
+                              if (req.deliverableId) {
+                                const seguro = window.confirm(
+                                  `«${req.title}» es una pieza pactada de la campaña. Al borrarla se quita también de la campaña, con sus vistas y lo que se le iba a pagar. ¿Borrar?`,
+                                );
+                                if (!seguro) return;
+                              }
+                              void llamar(
+                                `/api/sesiones/${session.id}/peticiones?requirementId=${req.id}${
+                                  req.deliverableId ? "&conPieza=1" : ""
+                                }`,
                                 { method: "DELETE" },
                                 "No se pudo borrar.",
-                              )
-                            }
+                              );
+                            }}
                             aria-label={`Borrar ${req.title}`}
                             className="grid h-8 w-8 place-items-center rounded-[var(--r-control)] text-[var(--text-subtle)] transition hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"
                           >
@@ -539,6 +552,45 @@ export function SessionDetail({
                       </span>
                     }
                   />
+                  {/* Lo que mandó el creador, a la vista: el enlace tal como lo
+                      escribió y su comentario. Antes solo se veía un icono para
+                      abrir el enlace, y lo que contaba al entregar no salía en
+                      ningún sitio. */}
+                  {(req.url || req.notes || req.reviewNotes) && (
+                    <div className="space-y-1.5 px-4 pb-3 pl-[76px] text-[12.5px]">
+                      {req.url && (
+                        <p className="flex gap-2">
+                          <span className="shrink-0 text-[var(--text-subtle)]">Entregó</span>
+                          {/^https?:\/\//i.test(req.url.trim()) ? (
+                            <a
+                              href={req.url.trim()}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="min-w-0 break-all text-[var(--accent)] hover:underline"
+                            >
+                              {req.url}
+                            </a>
+                          ) : (
+                            <span className="min-w-0 break-words">{req.url}</span>
+                          )}
+                        </p>
+                      )}
+                      {req.notes && (
+                        <p className="flex gap-2">
+                          <span className="shrink-0 text-[var(--text-subtle)]">Comentario</span>
+                          <span className="min-w-0 whitespace-pre-line break-words">{req.notes}</span>
+                        </p>
+                      )}
+                      {req.reviewNotes && req.status === "cambios" && (
+                        <p className="flex gap-2">
+                          <span className="shrink-0 text-[var(--text-subtle)]">Se le pidió</span>
+                          <span className="min-w-0 whitespace-pre-line break-words text-[var(--warn)]">
+                            {req.reviewNotes}
+                          </span>
+                        </p>
+                      )}
+                    </div>
+                  )}
                   </div>
                 );
               })}

@@ -2,10 +2,16 @@ import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requirePermission } from "@/lib/session";
+import { hasPermission } from "@/lib/permissions";
+import { getCampaign } from "@/lib/data";
+import { puedeEditarCampana } from "@/lib/campaign-access";
 import {
   addRequirement,
+  getCollabSession,
+  removeDeliverable,
   removeRequirement,
   reorderRequirements,
+  requirementDeliverableId,
   reviewRequirement,
   updateRequirement,
 } from "@/lib/store";
@@ -124,12 +130,42 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
 /** Elimina una petición del checklist. */
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  await requirePermission("editar_sesiones");
+  const cuenta = await requirePermission("editar_sesiones");
   const { id } = await params;
 
-  const requirementId = new URL(request.url).searchParams.get("requirementId");
+  const url = new URL(request.url);
+  const requirementId = url.searchParams.get("requirementId");
   if (!requirementId) {
     return NextResponse.json({ error: "Falta la petición." }, { status: 400 });
+  }
+
+  // Con `conPieza`, se quita también la pieza pactada de la que era petición.
+  // Es tocar el dinero de la campaña, así que pide su permiso además del de
+  // sesiones, y una pieza ya pagada no se borra desde aquí.
+  if (url.searchParams.get("conPieza")) {
+    const deliverableId = await requirementDeliverableId(id, requirementId);
+    const sesion = deliverableId ? await getCollabSession(id) : null;
+    if (deliverableId && sesion?.campaignId) {
+      const campana = await getCampaign(sesion.campaignId);
+      const pieza = campana?.deliverables.find((d) => d.id === deliverableId);
+      if (campana && pieza) {
+        if (!hasPermission(cuenta.permissions, "editar_campanas") || !puedeEditarCampana(cuenta, campana)) {
+          return NextResponse.json(
+            { error: "Esa petición es de una pieza pactada y tu rol no permite quitar piezas de la campaña." },
+            { status: 403 },
+          );
+        }
+        if (pieza.paymentStatus === "pagado") {
+          return NextResponse.json(
+            { error: "Esa pieza ya está pagada. Quítala desde «Piezas y pagos» si de verdad hay que borrarla." },
+            { status: 409 },
+          );
+        }
+        await removeDeliverable(campana.id, deliverableId);
+        revalidatePath(`/campanas/${campana.id}`);
+        revalidatePath("/campanas");
+      }
+    }
   }
 
   // Si ya no está, está borrada, que es lo que se pedía: dos clics seguidos

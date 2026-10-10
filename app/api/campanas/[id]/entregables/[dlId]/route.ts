@@ -93,18 +93,18 @@ export async function PATCH(
     return NextResponse.json({ error: "Esa campaña no es tuya." }, { status: 403 });
   }
 
-  // Sin comprobante no hay pago que aprobar ni que dar por hecho. Se comprueba
-  // aquí y no solo escondiendo el botón: el estado de pago lo ve el creador en
-  // su portal, y un «pagado» sin papel es una promesa, no un pago.
+  // Aprobar un pago no pide papel; darlo por hecho, sí. Se comprueba aquí y
+  // no solo escondiendo el botón: el estado de pago lo ve el creador en su
+  // portal, y un «pagado» sin comprobante es una promesa, no un pago.
   const pieza = antes.deliverables.find((d) => d.id === dlId);
   if (
     pieza &&
     !pieza.receiptUrl &&
-    (parsed.data.paymentStatus === "aprobado" || parsed.data.paymentStatus === "pagado") &&
-    parsed.data.paymentStatus !== pieza.paymentStatus
+    parsed.data.paymentStatus === "pagado" &&
+    pieza.paymentStatus !== "pagado"
   ) {
     return NextResponse.json(
-      { error: "Adjunta el comprobante de pago antes de aprobarlo o marcarlo como pagado." },
+      { error: "Sube el comprobante para marcarlo como pagado." },
       { status: 400 },
     );
   }

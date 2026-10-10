@@ -56,6 +56,9 @@ export function CreatorPaymentDialog({
   const seleccion = piezas.filter((d) => elegidas.includes(d.id));
   const total = seleccion.reduce((s, d) => s + creatorPayout(d, campaign), 0);
   const sinComprobante = seleccion.filter((d) => !d.receiptUrl).length;
+  // El orden es aprobar y después subir el comprobante, que lo deja pagado.
+  const sinAprobar = seleccion.filter((d) => d.paymentStatus === "pendiente").length;
+  const porPagar = seleccion.filter((d) => d.paymentStatus === "aprobado").length;
   const debe = piezas
     .filter((d) => d.paymentStatus !== "pagado")
     .reduce((s, d) => s + creatorPayout(d, campaign), 0);
@@ -204,9 +207,11 @@ export function CreatorPaymentDialog({
             <p className="text-[12.5px] text-[var(--text-muted)]">
               {nada
                 ? "Marca las piezas que cubre el pago."
-                : sinComprobante > 0
-                  ? `Primero el comprobante: ${sinComprobante} de las elegidas todavía no lo tiene${sinComprobante === 1 ? "" : "n"}.`
-                  : "Con comprobante: ya se puede aprobar o marcar pagado."}
+                : sinAprobar > 0
+                  ? "Paso 1: aprueba el pago. El creador lo ve en su portal y sabe que está en camino."
+                  : porPagar > 0
+                    ? "Paso 2: sube el comprobante de la transferencia. Con eso queda pagado y se le avisa."
+                    : "Todo lo elegido está pagado."}
             </p>
             <input
               ref={campo}
@@ -220,9 +225,21 @@ export function CreatorPaymentDialog({
             />
             <div className="flex flex-wrap gap-1.5">
               <Button
-                variant={sinComprobante > 0 ? "primary" : "secondary"}
+                variant={sinAprobar > 0 ? "primary" : "secondary"}
                 size="sm"
-                disabled={nada || ocupado !== null}
+                disabled={nada || sinAprobar === 0 || ocupado !== null}
+                onClick={() => cambiar("aprobado")}
+              >
+                {ocupado === "aprobado" ? <LoaderCircle size={13} className="animate-spin" /> : <Wallet size={13} />}
+                Aprobar pago
+              </Button>
+              {/* Solo con todo lo elegido ya aprobado: subir el comprobante de
+                  algo sin aprobar lo dejaría con papel pero sin pagar. */}
+              <Button
+                variant={sinAprobar === 0 && porPagar > 0 ? "primary" : "secondary"}
+                size="sm"
+                disabled={nada || sinAprobar > 0 || ocupado !== null}
+                title={sinAprobar > 0 ? "Primero aprueba el pago" : undefined}
                 onClick={() => campo.current?.click()}
               >
                 {ocupado === "comprobante" ? (
@@ -230,26 +247,20 @@ export function CreatorPaymentDialog({
                 ) : (
                   <Upload size={13} />
                 )}
-                Subir comprobante
+                {porPagar > 0 ? "Subir comprobante y marcar pagado" : "Cambiar comprobante"}
               </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={nada || sinComprobante > 0 || ocupado !== null}
-                onClick={() => cambiar("aprobado")}
-              >
-                {ocupado === "aprobado" ? <LoaderCircle size={13} className="animate-spin" /> : <Wallet size={13} />}
-                Aprobar pago
-              </Button>
-              <Button
-                variant={sinComprobante === 0 && !nada ? "primary" : "secondary"}
-                size="sm"
-                disabled={nada || sinComprobante > 0 || ocupado !== null}
-                onClick={() => cambiar("pagado")}
-              >
-                {ocupado === "pagado" ? <LoaderCircle size={13} className="animate-spin" /> : <Check size={13} />}
-                Marcar pagado
-              </Button>
+              {/* Por si el comprobante ya estaba subido de antes. */}
+              {porPagar > 0 && sinComprobante === 0 && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={ocupado !== null}
+                  onClick={() => cambiar("pagado")}
+                >
+                  {ocupado === "pagado" ? <LoaderCircle size={13} className="animate-spin" /> : <Check size={13} />}
+                  Marcar pagado
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="sm"

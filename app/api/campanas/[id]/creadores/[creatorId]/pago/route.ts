@@ -47,6 +47,7 @@ function refrescar(id: string, creatorId: string) {
  *
  * Una transferencia paga todo lo que se le debía en la campaña: el mismo
  * archivo vale para todas esas piezas, en vez de subirlo una vez por pieza.
+ * Las que ya tenían el pago aprobado quedan pagadas al subirlo.
  */
 export async function POST(
   request: Request,
@@ -109,8 +110,9 @@ const cambio = z.object({
 /**
  * Aprueba, marca pagado o vuelve a sin pagar varias piezas de un creador.
  *
- * Sin comprobante no se aprueba ni se paga, igual que pieza a pieza: se
- * comprueba aquí contra cada pieza elegida, no solo en la pantalla.
+ * Primero se aprueba y después se sube el comprobante, que es lo que lo deja
+ * pagado. Sin comprobante no se da por pagado: se comprueba aquí contra cada
+ * pieza elegida, no solo en la pantalla.
  */
 export async function PATCH(
   request: Request,
@@ -137,9 +139,11 @@ export async function PATCH(
     return NextResponse.json({ error: "Ninguna de esas piezas es de este creador." }, { status: 404 });
   }
 
-  if (paymentStatus !== "pendiente" && piezas.some((d) => !d.receiptUrl)) {
+  // Aprobar no pide papel: es decirle al creador que su pago está en camino.
+  // Darlo por pagado sí: sin comprobante, «pagado» es una promesa.
+  if (paymentStatus === "pagado" && piezas.some((d) => !d.receiptUrl)) {
     return NextResponse.json(
-      { error: "Adjunta el comprobante de pago antes de aprobarlo o marcarlo como pagado." },
+      { error: "Sube el comprobante para marcarlo como pagado." },
       { status: 400 },
     );
   }

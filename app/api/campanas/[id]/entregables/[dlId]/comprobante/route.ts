@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "@/lib/session";
-import { setDeliverableReceipt } from "@/lib/store";
+import { setDeliverableReceipt, updateDeliverable } from "@/lib/store";
 import { getCampaign } from "@/lib/data";
 import { puedeEditarCampana } from "@/lib/campaign-access";
 import { MAXIMO_COMPROBANTE, TIPOS_COMPROBANTE, esFallo, archivoDeFormulario } from "@/lib/uploads";
@@ -35,12 +35,17 @@ export async function POST(
     return NextResponse.json({ error: subido.error }, { status: subido.status });
   }
 
-  const campaign = await setDeliverableReceipt(id, dlId, {
+  let campaign = await setDeliverableReceipt(id, dlId, {
     receiptUrl: subido.url,
     receiptName: subido.fileName,
   });
   if (!campaign) {
     return NextResponse.json({ error: "Ese entregable no existe." }, { status: 404 });
+  }
+
+  // Con el pago ya aprobado, el comprobante lo deja pagado y avisa al creador.
+  if (campaign.deliverables.find((d) => d.id === dlId)?.paymentStatus === "aprobado") {
+    campaign = (await updateDeliverable(id, dlId, { paymentStatus: "pagado" })) ?? campaign;
   }
 
   await registrar({
@@ -72,12 +77,12 @@ export async function DELETE(
     return NextResponse.json({ error: "Esa campaña no es tuya." }, { status: 403 });
   }
 
-  // Quitarlo con el pago ya aprobado o hecho dejaría justo lo que el
-  // comprobante obligatorio quiere evitar: un pago dado por bueno sin papel.
+  // Quitarlo con el pago ya hecho dejaría justo lo que el comprobante
+  // obligatorio quiere evitar: un pago dado por bueno sin papel.
   const pieza = antes.deliverables.find((d) => d.id === dlId);
-  if (pieza && pieza.paymentStatus !== "pendiente") {
+  if (pieza && pieza.paymentStatus === "pagado") {
     return NextResponse.json(
-      { error: "Ese pago ya está aprobado. Vuélvelo a «sin pagar» antes de quitar el comprobante." },
+      { error: "Ese pago ya está marcado como pagado. Vuélvelo a «aprobado» o «sin pagar» antes de quitar el comprobante." },
       { status: 400 },
     );
   }

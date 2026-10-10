@@ -188,7 +188,14 @@ export function CampaignCreatorView({
                         </span>
                       )
                     }
-                    title={d.title ?? "Pendiente de publicar"}
+                    // Una pieza dada por publicada sin enlace —un post de
+                    // comunidad, un directo— no está «pendiente de publicar».
+                    title={
+                      d.title ??
+                      (d.status === "publicado"
+                        ? piezaLabel(d.platform, d.type, d.customType)
+                        : "Pendiente de publicar")
+                    }
                     subtitle={
                       <>
                         {piezaLabel(d.platform, d.type, d.customType)} ·{" "}

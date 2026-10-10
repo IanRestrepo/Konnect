@@ -2787,6 +2787,12 @@ export async function updateDeliverable(
     await avisarPago(campaignId, actual.creatorId, patch.paymentStatus);
   }
 
+  // Darla por publicada desde la campaña cierra su petición: si no, en la
+  // sesión del creador seguía «pendiente» algo que ya estaba hecho.
+  if (patch.status === "publicado" && actual.status !== "publicado") {
+    await completeRequirementFor(deliverableId, patch.videoUrl ?? actual.videoUrl);
+  }
+
   const row = await prisma.campaign.findUnique({
     where: { id: campaignId },
     include: campaignInclude,
@@ -3167,6 +3173,14 @@ export async function setCreatorPayment(
       },
     });
     cambiadas = count;
+
+    // El comprobante es la prueba de que el dinero salió: lo que ya estaba
+    // aprobado pasa a pagado en el mismo gesto, y el creador recibe el aviso.
+    const { count: pagadas } = await prisma.deliverable.updateMany({
+      where: { ...where, paymentStatus: "aprobado" },
+      data: { paymentStatus: "pagado", paidAt: new Date() },
+    });
+    if (pagadas > 0) await avisarPago(campaignId, creatorId, "pagado");
   }
 
   if (cambio.paymentStatus) {
