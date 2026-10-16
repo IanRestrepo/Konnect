@@ -16,8 +16,7 @@ import { IMPORTE_MAXIMO } from "@/lib/pricing";
 
 export const dynamic = "force-dynamic";
 
-const contratar = z.object({
-  creatorId: z.string({ error: "Selecciona un creador." }).min(1, "Selecciona un creador."),
+const pieza = z.object({
   platform: z.enum([
     "youtube",
     "instagram",
@@ -47,7 +46,15 @@ const contratar = z.object({
     .default(0),
 });
 
-/** Contrata a un creador dentro de una campaña ya empezada. */
+const contratar = z.object({
+  creatorId: z.string({ error: "Selecciona un creador." }).min(1, "Selecciona un creador."),
+  piezas: z
+    .array(pieza)
+    .min(1, "Añade al menos un entregable.")
+    .max(30, "Son demasiadas piezas de una vez."),
+});
+
+/** Contrata a un creador dentro de una campaña ya empezada, con todo lo que se le encarga. */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession();
   if (!session || !hasPermission(session.permissions, "editar_campanas")) {
@@ -72,19 +79,26 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const creator = await getCreator(parsed.data.creatorId);
   if (!creator) return NextResponse.json({ error: "Ese creador no existe." }, { status: 404 });
 
-  // La comisión se guarda como cantidad fija: es exactamente la diferencia,
-  // sin porcentajes que la redondeen por el camino.
-  const comision = Math.max(parsed.data.clientPrice - parsed.data.creatorCost, 0);
+  if (parsed.data.piezas.some((p) => p.creatorCost > p.clientPrice)) {
+    return NextResponse.json(
+      { error: "El pago al creador no puede superar lo que paga el cliente." },
+      { status: 400 },
+    );
+  }
 
   const hecho = await hireCreator(id, {
     creatorId: creator.id,
     creatorName: creator.name,
-    platform: parsed.data.platform,
-    type: parsed.data.type,
-    customType: parsed.data.customType.trim(),
-    channelId: parsed.data.channelId,
-    clientPrice: parsed.data.clientPrice,
-    commissionFixed: comision,
+    piezas: parsed.data.piezas.map((p) => ({
+      platform: p.platform,
+      type: p.type,
+      customType: p.customType.trim(),
+      channelId: p.channelId,
+      clientPrice: p.clientPrice,
+      // La comisión se guarda como cantidad fija: es exactamente la
+      // diferencia, sin porcentajes que la redondeen por el camino.
+      commissionFixed: p.clientPrice - p.creatorCost,
+    })),
   });
   if (!hecho) return NextResponse.json({ error: "Campaña no encontrada." }, { status: 404 });
 

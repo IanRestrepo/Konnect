@@ -167,7 +167,7 @@ export function DeliverableTypeField({
         </div>
 
         <div className="mt-2">
-          <Label htmlFor={`${id}-familia`}>Cobra como</Label>
+          <Label htmlFor={`${id}-familia`}>Usa la tarifa de</Label>
           <Picker
             id={`${id}-familia`}
             value={familia}
@@ -183,7 +183,8 @@ export function DeliverableTypeField({
           <FieldHint className="text-[var(--danger)]">{error}</FieldHint>
         ) : (
           <FieldHint>
-            De ahí sale el precio que se propone. Se añade al catálogo y queda elegido.
+            Es un nombre nuevo para el catálogo, no otra pieza: el precio se propone con la tarifa
+            que el creador tenga para eso.
           </FieldHint>
         )}
       </div>
@@ -204,8 +205,8 @@ export function DeliverableTypeField({
         <button
           type="button"
           onClick={abrirCreacion}
-          aria-label="Crear un tipo de pieza"
-          title="Crear un tipo de pieza"
+          aria-label="Crear un tipo de pieza nuevo"
+          title="Crear un tipo de pieza nuevo (Unboxing, Podcast…)"
           className="grid h-10 w-9 shrink-0 place-items-center rounded-[var(--r-control)] border border-[var(--line)] text-[var(--text-subtle)] transition hover:border-[var(--line-strong)] hover:text-[var(--text)]"
         >
           <Plus size={15} />

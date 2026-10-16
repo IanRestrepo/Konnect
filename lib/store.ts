@@ -1358,13 +1358,19 @@ export async function hireCreator(
   input: {
     creatorId: string;
     creatorName: string;
-    platform: SocialPlatform;
-    type: Deliverable["type"];
-    /** Nombre propio del encargo. Vacío = la tarea estándar de esa red. */
-    customType: string;
-    channelId: string;
-    clientPrice: number;
-    commissionFixed: number;
+    /**
+     * Todo lo que se le encarga de una vez. Dos piezas iguales —dos TikToks—
+     * son dos acuerdos con su precio cada uno, no uno con cantidad.
+     */
+    piezas: {
+      platform: SocialPlatform;
+      type: Deliverable["type"];
+      /** Nombre propio del encargo. Vacío = la tarea estándar de esa red. */
+      customType: string;
+      channelId: string;
+      clientPrice: number;
+      commissionFixed: number;
+    }[];
   },
 ): Promise<{ campaign: Campaign; sessionId: string } | null> {
   const campana = await prisma.campaign.findUnique({
@@ -1373,31 +1379,36 @@ export async function hireCreator(
   });
   if (!campana) return null;
 
-  const deliverableId = newId("dl");
-  await prisma.deliverable.create({
-    data: {
-      id: deliverableId,
-      campaignId,
-      creatorId: input.creatorId,
-      type: input.type,
-      status: "pendiente",
-      platform: input.platform,
-      channelId: input.channelId,
-      customType: input.customType,
-      clientPrice: input.clientPrice,
-      commissionPct: null,
-      commissionFixed: input.commissionFixed,
-      agreedFee: input.clientPrice - input.commissionFixed,
-      paymentStatus: "pendiente",
-    },
-  });
+  // Juntas y no de una en una desde la pantalla: así no queda medio encargo
+  // si una falla, y la sesión se abre una sola vez.
+  const piezas = input.piezas.map((p) => ({
+    id: newId("dl"),
+    campaignId,
+    creatorId: input.creatorId,
+    type: p.type,
+    status: "pendiente" as const,
+    platform: p.platform,
+    channelId: p.channelId,
+    customType: p.customType,
+    clientPrice: p.clientPrice,
+    commissionPct: null,
+    commissionFixed: p.commissionFixed,
+    agreedFee: p.clientPrice - p.commissionFixed,
+    paymentStatus: "pendiente" as const,
+  }));
+  await prisma.deliverable.createMany({ data: piezas });
 
   await prisma.campaignCreatorEnd.deleteMany({ where: { campaignId, creatorId: input.creatorId } });
 
   const sesionId = await ensureCreatorSession(campaignId, input.creatorId);
   if (!sesionId) return null;
 
-  await seedRequirementsFromCampaign(sesionId, campaignId, input.creatorId, [deliverableId]);
+  await seedRequirementsFromCampaign(
+    sesionId,
+    campaignId,
+    input.creatorId,
+    piezas.map((p) => p.id),
+  );
 
   const row = await prisma.campaign.findUnique({
     where: { id: campaignId },
@@ -3360,6 +3371,20 @@ export async function seedRequirementsFromCampaign(
   });
   const desde = (ultimo?.position ?? -1) + 1;
 
+  // Dos piezas iguales —dos videos de TikTok— no pueden llamarse igual en el
+  // checklist: el creador no sabría a cuál pegarle cada enlace. La segunda
+  // sale como «Video 2», contando también las que ya estaban en la sesión.
+  const titulos = (
+    await prisma.sessionRequirement.findMany({ where: { sessionId }, select: { title: true } })
+  ).map((r) => r.title);
+  const usados = new Set(titulos.map((t) => t.toLowerCase()));
+  const nombrar = (base: string) => {
+    let titulo = base;
+    for (let n = 2; usados.has(titulo.toLowerCase()); n++) titulo = `${base} ${n}`;
+    usados.add(titulo.toLowerCase());
+    return titulo;
+  };
+
   await prisma.sessionRequirement.createMany({
     data: nuevas.map((p, i) => ({
       id: newId("rq"),
@@ -3369,7 +3394,7 @@ export async function seedRequirementsFromCampaign(
       // Se nombra como se llama en su red: «Mención dentro de un video», no
       // «integracion», que no le dice nada a quien lo lee en el portal. Si la
       // pieza tiene nombre propio, ese gana.
-      title: piezaLabel(p.platform as SocialPlatform, p.type, p.customType),
+      title: nombrar(piezaLabel(p.platform as SocialPlatform, p.type, p.customType)),
       instructions: "Pega el enlace cuando esté publicado.",
       steps: [],
       required: true,

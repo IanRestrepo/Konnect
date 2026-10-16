@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Check,
+  Copy,
   Eye,
   LoaderCircle,
   MousePointerClick,
@@ -323,6 +324,18 @@ export function NewCampaignForm({
       paquete: pkg.name,
     }));
     setLineas((prev) => [...prev, ...nuevas]);
+  }
+
+  /**
+   * Otra pieza igual justo debajo, para ponerle su propio precio: a veces se
+   * piden dos TikToks y cada uno se cobra distinto. Desde la lista de creadores
+   * no se puede, porque ahí la casilla marca o desmarca esa pieza.
+   */
+  function duplicarLinea(indice: number) {
+    setLineas((prev) => {
+      const copia = { ...prev[indice]!, paquete: undefined };
+      return [...prev.slice(0, indice + 1), copia, ...prev.slice(indice + 1)];
+    });
   }
 
   function editarLinea(indice: number, patch: Partial<Linea>) {
@@ -755,7 +768,7 @@ export function NewCampaignForm({
                         const quien = creators.find((c) => c.id === l.creatorId);
                         return (
                           <span
-                            key={`${l.creatorId}-${l.platform}-${l.type}-${l.customType}`}
+                            key={`${l.creatorId}-${i}`}
                             className="inline-flex h-7 items-center gap-1.5 rounded-[var(--r-pill)] border border-[var(--line)] bg-[var(--surface)] pr-1 pl-1 text-[12px]"
                           >
                             <Avatar src={quien?.avatarUrl ?? null} name={quien?.name ?? "?"} size={18} />
@@ -907,7 +920,7 @@ export function NewCampaignForm({
               ) : (
                 <div className="overflow-x-auto border-t border-[var(--line)]">
                   <div className="min-w-[640px]">
-                    <div className="grid grid-cols-[minmax(0,1fr)_8.5rem_8.5rem_7rem_2rem] items-center gap-2 px-4 py-2 text-[11.5px] font-medium tracking-[0.01em] text-[var(--text-subtle)]">
+                    <div className="grid grid-cols-[minmax(0,1fr)_8.5rem_8.5rem_7rem_4rem] items-center gap-2 px-4 py-2 text-[11.5px] font-medium tracking-[0.01em] text-[var(--text-subtle)]">
                       <span>Pieza</span>
                       <span>Pago del cliente</span>
                       <span>Costo del influencer</span>
@@ -949,7 +962,7 @@ export function NewCampaignForm({
                             return (
                               <div
                                 key={`${linea.creatorId}-${i}`}
-                                className="grid grid-cols-[minmax(0,1fr)_8.5rem_8.5rem_7rem_2rem] items-center gap-2 px-4 py-1.5"
+                                className="grid grid-cols-[minmax(0,1fr)_8.5rem_8.5rem_7rem_4rem] items-center gap-2 px-4 py-1.5"
                               >
                                 <span className="min-w-0">
                                   <span className="block truncate text-[13px]">
@@ -1010,21 +1023,32 @@ export function NewCampaignForm({
                                 >
                                   {formatMoney(ganancia, currency as "USD")}
                                 </span>
-                                <button
-                                  type="button"
-                                  onClick={() => setLineas((p) => p.filter((_, j) => j !== i))}
-                                  className="grid h-7 w-7 place-items-center rounded-[var(--r-chip)] text-[var(--text-subtle)] transition hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"
-                                  aria-label={`Quitar ${piezaLabel(linea.platform, linea.type, linea.customType)} de ${creator.name}`}
-                                >
-                                  <X size={14} />
-                                </button>
+                                <span className="flex justify-end">
+                                  <button
+                                    type="button"
+                                    onClick={() => duplicarLinea(i)}
+                                    className="grid h-7 w-7 place-items-center rounded-[var(--r-chip)] text-[var(--text-subtle)] transition hover:bg-[var(--surface-3)] hover:text-[var(--text)]"
+                                    aria-label={`Otra pieza igual para ${creator.name}`}
+                                    title="Otra pieza igual, con su propio precio"
+                                  >
+                                    <Copy size={13} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setLineas((p) => p.filter((_, j) => j !== i))}
+                                    className="grid h-7 w-7 place-items-center rounded-[var(--r-chip)] text-[var(--text-subtle)] transition hover:bg-[var(--danger-soft)] hover:text-[var(--danger)]"
+                                    aria-label={`Quitar ${piezaLabel(linea.platform, linea.type, linea.customType)} de ${creator.name}`}
+                                  >
+                                    <X size={14} />
+                                  </button>
+                                </span>
                               </div>
                             );
                           })}
                         </section>
                       );
                     })}
-                    <div className="grid grid-cols-[minmax(0,1fr)_8.5rem_8.5rem_7rem_2rem] items-center gap-2 border-t border-[var(--line)] px-4 py-2.5 text-[13px] font-semibold">
+                    <div className="grid grid-cols-[minmax(0,1fr)_8.5rem_8.5rem_7rem_4rem] items-center gap-2 border-t border-[var(--line)] px-4 py-2.5 text-[13px] font-semibold">
                       <span>Total</span>
                       <span className="tabular">{formatMoney(totales.cliente, currency as "USD")}</span>
                       <span className="tabular">{formatMoney(totales.creadores, currency as "USD")}</span>
