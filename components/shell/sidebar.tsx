@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { NAV_ITEMS } from "@/lib/nav";
 import { useCan, useIsDeveloper } from "@/components/session-provider";
 import { OptionsMenu } from "@/components/shell/options-menu";
+import { NotificationBell } from "@/components/shell/notifications";
 import { KonnectMark } from "@/components/brand/logo";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Avatar } from "@/components/ui/avatar";
@@ -70,6 +71,11 @@ export function Sidebar() {
       </nav>
 
       <div className="mt-auto flex flex-col items-center gap-2 pt-5">
+        <NotificationBell
+          side="right"
+          align="end"
+          className="h-10 w-10 rounded-[var(--r-control)] border border-transparent hover:border-[var(--line)] hover:bg-[var(--surface)]"
+        />
         <OptionsMenu
           trigger={
             <Tooltip label="Opciones">

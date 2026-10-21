@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { NAV_ITEMS } from "@/lib/nav";
 import { useCan } from "@/components/session-provider";
 import { OptionsMenu } from "@/components/shell/options-menu";
+import { NotificationBell } from "@/components/shell/notifications";
 import { cn } from "@/lib/utils";
 
 /**
@@ -46,6 +47,12 @@ export function MobileDock() {
         })}
 
         <span className="mx-0.5 h-6 w-px bg-[var(--line)]" />
+
+        <NotificationBell
+          side="top"
+          align="end"
+          className="h-11 w-11 rounded-[var(--r-pill)] active:bg-[var(--surface-2)]"
+        />
 
         <OptionsMenu
           side="top"

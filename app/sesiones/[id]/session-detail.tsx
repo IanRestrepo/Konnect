@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { EVENTO_AVISOS } from "@/components/shell/notifications";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -99,6 +100,14 @@ export function SessionDetail({
   const router = useRouter();
   const can = useCan();
   const puedeEditar = can("editar_sesiones");
+
+  // Abrir la sesión es verla: sus avisos quedan leídos y se deja de insistirle
+  // al resto del equipo, porque ya hay alguien atendiéndola.
+  useEffect(() => {
+    void fetch(`/api/sesiones/${session.id}/visto`, { method: "POST" }).then(() =>
+      window.dispatchEvent(new Event(EVENTO_AVISOS)),
+    );
+  }, [session.id]);
 
   const [error, setError] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);

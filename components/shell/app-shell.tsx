@@ -5,6 +5,7 @@ import { Sidebar } from "@/components/shell/sidebar";
 import { MobileDock } from "@/components/shell/mobile-dock";
 import { useSession } from "@/components/session-provider";
 import { Announcements } from "@/components/shell/announcements";
+import { NotificationsProvider } from "@/components/shell/notifications";
 import type { Announcement } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -33,33 +34,35 @@ export function AppShell({
   const fullBleed = FULL_BLEED.some((route) => pathname.startsWith(route));
 
   return (
-    <div className="flex h-dvh overflow-hidden bg-[var(--canvas)]">
-      {/* Riel lateral desde tablet; en teléfono manda el menú flotante. */}
-      <div className="hidden md:flex">
-        <Sidebar />
+    <NotificationsProvider>
+      <div className="flex h-dvh overflow-hidden bg-[var(--canvas)]">
+        {/* Riel lateral desde tablet; en teléfono manda el menú flotante. */}
+        <div className="hidden md:flex">
+          <Sidebar />
+        </div>
+
+        <main
+          data-scroll-principal
+          className={cn(
+            "m-2 min-w-0 flex-1 rounded-[var(--r-panel)] border border-[var(--line)] bg-[var(--surface)] shadow-[var(--shadow-soft)] md:my-3 md:mr-3 md:ml-0",
+            fullBleed ? "overflow-hidden" : "overflow-y-auto",
+          )}
+        >
+          {fullBleed ? (
+            <div className="flex h-full flex-col">
+              <Announcements items={announcements} />
+              <div className="min-h-0 flex-1">{children}</div>
+            </div>
+          ) : (
+            <>
+              <Announcements items={announcements} />
+              <div className="page px-4 py-6 pb-28 sm:px-6 md:px-8 md:py-8 md:pb-20">{children}</div>
+            </>
+          )}
+        </main>
+
+        <MobileDock />
       </div>
-
-      <main
-        data-scroll-principal
-        className={cn(
-          "m-2 min-w-0 flex-1 rounded-[var(--r-panel)] border border-[var(--line)] bg-[var(--surface)] shadow-[var(--shadow-soft)] md:my-3 md:mr-3 md:ml-0",
-          fullBleed ? "overflow-hidden" : "overflow-y-auto",
-        )}
-      >
-        {fullBleed ? (
-          <div className="flex h-full flex-col">
-            <Announcements items={announcements} />
-            <div className="min-h-0 flex-1">{children}</div>
-          </div>
-        ) : (
-          <>
-            <Announcements items={announcements} />
-            <div className="page px-4 py-6 pb-28 sm:px-6 md:px-8 md:py-8 md:pb-20">{children}</div>
-          </>
-        )}
-      </main>
-
-      <MobileDock />
-    </div>
+    </NotificationsProvider>
   );
 }

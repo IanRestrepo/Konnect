@@ -1,0 +1,33 @@
+# Recordatorios de los avisos del equipo.
+#
+# Un aviso que nadie abre insiste a la hora, a las 4, a las 8 y a las 12 horas
+# (ver `sendDueReminders` en lib/store.ts). Alguien tiene que llamar a la ruta
+# cada pocos minutos para que eso pase, y el cron de Vercel en el plan gratuito
+# solo corre una vez al día: por eso lo hace GitHub.
+#
+# Necesita el secreto CRON_SECRET del repositorio, igual al de Vercel. Sin él
+# no hace nada y termina bien, para no llenar el correo de fallos.
+name: Recordatorios de avisos
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  recordar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Mandar los recordatorios que tocan
+        env:
+          SECRETO: ${{ secrets.CRON_SECRET }}
+          URL: ${{ vars.KONNECT_URL || 'https://konnect-os-five.vercel.app' }}
+        run: |
+          if [ -z "$SECRETO" ]; then
+            echo "Falta el secreto CRON_SECRET en el repositorio; no se manda nada."
+            exit 0
+          fi
+          curl -fsS --max-time 60 -X POST \
+            -H "Authorization: Bearer $SECRETO" \
+            "$URL/api/avisos/recordar"

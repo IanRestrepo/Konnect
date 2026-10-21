@@ -718,6 +718,9 @@ model User {
   campaignMembers  CampaignMember[]
   creatorLeads     CampaignCreatorLead[]
 
+  pushSubscriptions PushSubscription[]
+  notifications     TeamNotification[]
+
   createdAt DateTime @default(now())
 
   @@index([roleId])
@@ -1334,4 +1337,51 @@ model CompanyContactField {
   createdAt DateTime @default(now())
 
   @@index([companyId])
+}
+
+/// Un navegador o teléfono donde una cuenta del equipo aceptó recibir avisos.
+///
+/// Una cuenta puede tener varios: el portátil y el teléfono. Cuando el
+/// servicio de push dice que la suscripción ya no existe (410), se borra.
+model PushSubscription {
+  id        String @id
+  userId    String
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String @unique
+  p256dh    String
+  auth      String
+  userAgent String @default("")
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+/// Aviso para una persona del equipo: un creador entregó o subió algo.
+///
+/// Si nadie lo atiende, insiste: un recordatorio a la hora, a las 4, a las 8
+/// y a las 12 horas. Deja de insistir en cuanto esa persona lo abre, o en
+/// cuanto alguien del equipo abre la sesión, que es lo que de verdad importa:
+/// que alguien conteste al creador.
+model TeamNotification {
+  id        String  @id
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Sesión de la que viene, para dejar de insistir cuando alguien la abre.
+  sessionId String?
+  title     String
+  body      String
+  url       String
+
+  readAt         DateTime?
+  /// Recordatorios ya mandados, de 0 a 4.
+  reminders      Int       @default(0)
+  /// Cuándo toca el siguiente. Null = ya no se insiste.
+  nextReminderAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, readAt])
+  @@index([nextReminderAt])
+  @@index([sessionId])
 }

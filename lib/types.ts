@@ -680,3 +680,17 @@ export type Doc = {
 
 /** Versión ligera para listados: sin el árbol del contenido. */
 export type DocSummary = Omit<Doc, "content" | "plainText">;
+
+/* ---------------- Avisos del equipo ---------------- */
+
+/** Aviso para una persona del equipo; ver `TeamNotification` en el esquema. */
+export type TeamNotification = {
+  id: string;
+  sessionId: string | null;
+  title: string;
+  body: string;
+  url: string;
+  readAt: string | null;
+  reminders: number;
+  createdAt: string;
+};

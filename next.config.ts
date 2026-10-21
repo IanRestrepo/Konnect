@@ -9,6 +9,20 @@ const nextConfig: NextConfig = {
       "./node_modules/@fontsource/poppins/files/poppins-latin-*-normal.woff",
     ],
   },
+
+  // El service worker de los avisos no se guarda en caché: si se quedara una
+  // versión vieja, los cambios en cómo se enseña un aviso no llegarían nunca.
+  async headers() {
+    return [
+      {
+        source: "/sw.js",
+        headers: [
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+          { key: "Service-Worker-Allowed", value: "/" },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

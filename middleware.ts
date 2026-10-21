@@ -18,8 +18,11 @@ const PORTAL = ["/portal", "/api/portal"];
  * sesión y el creador con su token del portal. Si el middleware exigiera
  * sesión de equipo, el creador no podría subir su entrega; la ruta mira las
  * dos cosas y niega lo que no toque.
+ *
+ * Los recordatorios los dispara un cron, que no tiene sesión: la ruta pide su
+ * propio secreto.
  */
-const PROPIAS = ["/api/blob/subir"];
+const PROPIAS = ["/api/blob/subir", "/api/avisos/recordar"];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -61,5 +64,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|brand/).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|brand/|sw.js|manifest.webmanifest).*)"],
 };

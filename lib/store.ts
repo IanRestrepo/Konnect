@@ -6,9 +6,12 @@ import { codeHint, generateAccessCode, normalizeAccessCode } from "@/lib/portal"
 import { piezaLabel } from "@/lib/socials";
 import { MARGEN_AGENCIA } from "@/lib/pricing";
 import { CATEGORIAS_INICIALES } from "@/lib/labels";
+import { hasPermission } from "@/lib/permissions";
+import { enviarPush, type AvisoPush } from "@/lib/push";
 import type {
   Announcement,
   BankingAccount,
+  TeamNotification,
   BankingInfo,
   Campaign,
   CampaignMaterial,
@@ -3674,6 +3677,9 @@ export async function logSessionEvent(
       unreadCreator: input.unreadCreator ?? true,
     },
   });
+
+  // Lo que hace el creador le llega al equipo como aviso, con push.
+  if (input.unreadAgency ?? true) await notifySessionTeam(sessionId, input.message);
 }
 
 export async function markEventsRead(sessionId: string, lado: "agencia" | "creador"): Promise<void> {
@@ -4280,4 +4286,221 @@ export async function listOpenTasks(
   }
 
   return { total: tareas.length, tareas: tareas.slice(0, limite) };
+}
+
+/* ---------------- Avisos del equipo y push ---------------- */
+
+/**
+ * Cuándo insiste un aviso sin abrir, en horas desde que llegó: a la hora, a
+ * las 4, a las 8 y a las 12. Después se deja: lo que lleva medio día sin
+ * respuesta ya no se arregla con otro aviso.
+ */
+const RECORDATORIOS_HORAS = [1, 4, 8, 12];
+
+function toNotification(row: Prisma.TeamNotificationGetPayload<object>): TeamNotification {
+  return {
+    id: row.id,
+    sessionId: row.sessionId,
+    title: row.title,
+    body: row.body,
+    url: row.url,
+    readAt: row.readAt?.toISOString() ?? null,
+    reminders: row.reminders,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+export async function savePushSubscription(
+  userId: string,
+  sub: { endpoint: string; p256dh: string; auth: string; userAgent: string },
+): Promise<void> {
+  // El mismo navegador puede pasar a otra cuenta: el endpoint manda.
+  await prisma.pushSubscription.upsert({
+    where: { endpoint: sub.endpoint },
+    create: { id: newId("ps"), userId, ...sub },
+    update: { userId, p256dh: sub.p256dh, auth: sub.auth, userAgent: sub.userAgent },
+  });
+}
+
+export async function removePushSubscription(endpoint: string): Promise<void> {
+  await prisma.pushSubscription.deleteMany({ where: { endpoint } });
+}
+
+/** Manda un push a todos los dispositivos de esas cuentas y limpia los muertos. */
+async function empujar(userIds: string[], aviso: AvisoPush): Promise<void> {
+  if (userIds.length === 0) return;
+  const subs = await prisma.pushSubscription.findMany({
+    where: { userId: { in: userIds } },
+    select: { endpoint: true, p256dh: true, auth: true },
+  });
+  const muertas = await enviarPush(subs, aviso);
+  if (muertas.length) {
+    await prisma.pushSubscription.deleteMany({ where: { endpoint: { in: muertas } } });
+  }
+}
+
+/**
+ * Quién se entera de lo que pasa en una sesión.
+ *
+ * Quien responde por ese creador en la campaña; si nadie, el encargado; si
+ * tampoco, quien la creó. Solo si la campaña no tiene a nadie se avisa a todo
+ * el que puede ver sesiones: avisar siempre a todos hace que nadie se sienta
+ * responsable de contestar.
+ */
+async function equipoDeSesion(sessionId: string): Promise<string[]> {
+  const sesion = await prisma.collabSession.findUnique({
+    where: { id: sessionId },
+    select: {
+      creatorId: true,
+      campaign: {
+        select: {
+          managerId: true,
+          createdById: true,
+          creatorLeads: { select: { userId: true, creatorId: true } },
+        },
+      },
+    },
+  });
+  const c = sesion?.campaign;
+  const leads =
+    c?.creatorLeads.filter((l) => l.creatorId === sesion?.creatorId).map((l) => l.userId) ?? [];
+  const elegidos = leads.length
+    ? leads
+    : [c?.managerId ?? c?.createdById].filter((x): x is string => Boolean(x));
+
+  const activos = await prisma.user.findMany({
+    where: { active: true },
+    select: { id: true, role: { select: { permissions: true } } },
+  });
+  const vivos = activos.filter((u) => elegidos.includes(u.id)).map((u) => u.id);
+  if (vivos.length) return vivos;
+  return activos.filter((u) => hasPermission(u.role.permissions, "ver_sesiones")).map((u) => u.id);
+}
+
+/**
+ * Avisa al equipo de algo que hizo el creador en su sesión: aviso en la
+ * campana y push a sus dispositivos, con los recordatorios ya programados.
+ *
+ * Nunca lanza: si el push falla, la entrega del creador no puede fallar con él.
+ */
+export async function notifySessionTeam(sessionId: string, message: string): Promise<void> {
+  try {
+    const sesion = await prisma.collabSession.findUnique({
+      where: { id: sessionId },
+      select: {
+        name: true,
+        creator: { select: { name: true } },
+        campaign: { select: { name: true } },
+      },
+    });
+    if (!sesion) return;
+
+    const quien = sesion.creator?.name ?? sesion.name;
+    const title = `${quien} · ${message}`;
+    const body = sesion.campaign?.name
+      ? `En ${sesion.campaign.name}. Toca para revisarlo.`
+      : "Toca para revisarlo.";
+    const url = `/sesiones/${sessionId}`;
+    const usuarios = await equipoDeSesion(sessionId);
+    const ahora = Date.now();
+
+    await prisma.teamNotification.createMany({
+      data: usuarios.map((userId) => ({
+        id: newId("nt"),
+        userId,
+        sessionId,
+        title,
+        body,
+        url,
+        nextReminderAt: new Date(ahora + RECORDATORIOS_HORAS[0]! * 3_600_000),
+      })),
+    });
+    await empujar(usuarios, { title, body, url, tag: `sesion-${sessionId}` });
+  } catch (e) {
+    console.error("No se pudo avisar al equipo:", e);
+  }
+}
+
+export async function listNotifications(
+  userId: string,
+  limite = 30,
+): Promise<{ unread: number; items: TeamNotification[] }> {
+  const [unread, rows] = await Promise.all([
+    prisma.teamNotification.count({ where: { userId, readAt: null } }),
+    prisma.teamNotification.findMany({
+      where: { userId },
+      orderBy: { createdAt: "desc" },
+      take: limite,
+    }),
+  ]);
+  return { unread, items: rows.map(toNotification) };
+}
+
+/** Marca leídos los avisos de esa cuenta: unos concretos, o todos. */
+export async function markNotificationsRead(userId: string, ids?: string[]): Promise<void> {
+  await prisma.teamNotification.updateMany({
+    where: { userId, readAt: null, ...(ids ? { id: { in: ids } } : {}) },
+    data: { readAt: new Date(), nextReminderAt: null },
+  });
+}
+
+/**
+ * Alguien del equipo abrió la sesión.
+ *
+ * Sus avisos de esa sesión quedan leídos, las novedades se dan por vistas, y
+ * a los demás se les deja de insistir: ya hay quien la está atendiendo. Sus
+ * avisos siguen en la campana sin leer, por si quieren mirarlos.
+ */
+export async function markSessionSeen(sessionId: string, userId: string): Promise<void> {
+  await Promise.all([
+    markEventsRead(sessionId, "agencia"),
+    prisma.teamNotification.updateMany({
+      where: { sessionId, userId, readAt: null },
+      data: { readAt: new Date(), nextReminderAt: null },
+    }),
+    prisma.teamNotification.updateMany({
+      where: { sessionId, nextReminderAt: { not: null } },
+      data: { nextReminderAt: null },
+    }),
+  ]);
+}
+
+/**
+ * Manda los recordatorios que ya tocan. Lo llama el cron cada pocos minutos.
+ *
+ * Si el cron se retrasó y ya pasaron dos plazos, sale un solo recordatorio y
+ * se salta al siguiente plazo que quede por delante: no se mandan tres de
+ * golpe para ponerse al día.
+ */
+export async function sendDueReminders(): Promise<number> {
+  const ahora = new Date();
+  const debidos = await prisma.teamNotification.findMany({
+    where: { readAt: null, nextReminderAt: { lte: ahora } },
+    orderBy: { nextReminderAt: "asc" },
+    take: 200,
+  });
+
+  for (const n of debidos) {
+    const horas = (ahora.getTime() - n.createdAt.getTime()) / 3_600_000;
+    const siguiente = RECORDATORIOS_HORAS.find((h) => h > horas + 0.01);
+    // Se guarda antes de mandar: si el envío tarda y el cron vuelve a pasar,
+    // no sale dos veces el mismo recordatorio.
+    await prisma.teamNotification.update({
+      where: { id: n.id },
+      data: {
+        reminders: { increment: 1 },
+        nextReminderAt: siguiente
+          ? new Date(n.createdAt.getTime() + siguiente * 3_600_000)
+          : null,
+      },
+    });
+    const espera = horas < 1.5 ? "1 hora" : `${Math.round(horas)} horas`;
+    await empujar([n.userId], {
+      title: `Sin respuesta: ${n.title}`,
+      body: `Lleva ${espera} esperando. ${n.body}`,
+      url: n.url,
+      tag: n.sessionId ? `sesion-${n.sessionId}` : n.id,
+    });
+  }
+  return debidos.length;
 }
