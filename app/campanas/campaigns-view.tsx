@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar } from "@/components/ui/avatar";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Table, TableWrap, Td, Th, Tr } from "@/components/ui/table";
+import { Stat } from "@/components/ui/stat";
 import { ListBox, ListRow } from "@/components/ui/list";
 import { CampaignSwitch } from "@/components/campaigns/campaign-switch";
 import { CAMPAIGN_OBJECTIVE, CAMPAIGN_STATUS } from "@/lib/labels";
@@ -19,27 +20,52 @@ import type { Campaign, CampaignMetrics, CampaignStatus, Company, Creator } from
 import { formatCompact, formatDate, formatMoney } from "@/lib/utils";
 import { downloadCsv } from "@/lib/csv";
 
+type Persona = { id: string; name: string; avatarUrl: string | null };
+
 export type CampaignRow = {
   campaign: Campaign;
   metrics: CampaignMetrics;
   company: Company | null;
   creators: Creator[];
+  /** Quien la lleva. */
+  manager: Persona | null;
+  /** Quien la creó. */
+  createdBy: Persona | null;
 };
 
-type Filter = "activas" | "inactivas" | "borradores" | "todas";
+type Filter = "activas" | "finalizadas" | "inactivas" | "borradores" | "todas";
 
 /**
  * Qué estados entran en cada pestaña.
  *
- * Pausada, finalizada y cancelada van juntas en «Inactivas»: lo que se mira a
- * diario es lo que está en marcha, y cinco pestañas con cero dentro solo
- * empujaban «Activas» a la segunda posición.
+ * Las finalizadas van aparte: son las que se repasan para cobrar y para ver
+ * qué salió bien, y mezcladas con las pausadas y canceladas había que
+ * buscarlas. Pausada y cancelada siguen juntas en «Inactivas».
  */
 const ESTADOS: Record<Exclude<Filter, "todas">, CampaignStatus[]> = {
   activas: ["activa"],
-  inactivas: ["pausada", "finalizada", "cancelada"],
+  finalizadas: ["finalizada"],
+  inactivas: ["pausada", "cancelada"],
   borradores: ["borrador"],
 };
+
+/** El encargado, y quién la creó si es otra persona. */
+function Encargado({ manager, createdBy }: { manager: Persona | null; createdBy: Persona | null }) {
+  const quien = manager ?? createdBy;
+  if (!quien) return <span className="text-[var(--text-subtle)]">—</span>;
+  const otro = manager && createdBy && createdBy.id !== manager.id ? createdBy : null;
+  return (
+    <span className="flex min-w-0 items-center gap-2">
+      <Avatar src={quien.avatarUrl} name={quien.name} size={26} />
+      <span className="min-w-0">
+        <span className="block max-w-36 truncate text-[13px]">{quien.name}</span>
+        <span className="block max-w-36 truncate text-[11.5px] text-[var(--text-subtle)]">
+          {manager ? (otro ? `Creada por ${otro.name}` : "Encargado") : "Creador · sin encargado"}
+        </span>
+      </span>
+    </span>
+  );
+}
 
 export function CampaignsView({ rows }: { rows: CampaignRow[] }) {
   // Recordados: al volver de una campaña la lista sigue como la dejaste.
@@ -51,6 +77,7 @@ export function CampaignsView({ rows }: { rows: CampaignRow[] }) {
       rows.filter((r) => ESTADOS[filtro].includes(r.campaign.status)).length;
     return [
       { id: "activas", label: "Activas", count: count("activas") },
+      { id: "finalizadas", label: "Finalizadas", count: count("finalizadas") },
       { id: "inactivas", label: "Inactivas", count: count("inactivas") },
       { id: "borradores", label: "Borradores", count: count("borradores") },
       { id: "todas", label: "Todas", count: rows.length },
@@ -59,10 +86,12 @@ export function CampaignsView({ rows }: { rows: CampaignRow[] }) {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return rows.filter(({ campaign, company }) => {
+    return rows.filter(({ campaign, company, manager }) => {
       if (tab !== "todas" && !ESTADOS[tab].includes(campaign.status)) return false;
       if (!q) return true;
-      return `${campaign.name} ${company?.name ?? ""}`.toLowerCase().includes(q);
+      return `${campaign.name} ${company?.name ?? ""} ${manager?.name ?? ""}`
+        .toLowerCase()
+        .includes(q);
     });
   }, [rows, tab, query]);
 
@@ -72,9 +101,10 @@ export function CampaignsView({ rows }: { rows: CampaignRow[] }) {
         (acc, { metrics }) => ({
           budget: acc.budget + metrics.clientTotal,
           spent: acc.spent + metrics.spent,
+          profit: acc.profit + metrics.grossProfit,
           views: acc.views + metrics.views,
         }),
-        { budget: 0, spent: 0, views: 0 },
+        { budget: 0, spent: 0, profit: 0, views: 0 },
       ),
     [filtered],
   );
@@ -86,6 +116,7 @@ export function CampaignsView({ rows }: { rows: CampaignRow[] }) {
       [
         "Campaña",
         "Cliente",
+        "Encargado",
         "Estado",
         "Objetivo",
         "Creadores",
@@ -94,13 +125,15 @@ export function CampaignsView({ rows }: { rows: CampaignRow[] }) {
         "CPM",
         "Comprometido",
         "Facturado",
+        "Ganancia",
         "Moneda",
         "Inicio",
         "Fin",
       ],
-      ...filtered.map(({ campaign, metrics, company, creators }) => [
+      ...filtered.map(({ campaign, metrics, company, creators, manager }) => [
         campaign.name,
         company?.name ?? "",
+        manager?.name ?? "",
         CAMPAIGN_STATUS[campaign.status].label,
         CAMPAIGN_OBJECTIVE[campaign.objective],
         creators.map((c) => c.name).join(", "),
@@ -109,6 +142,7 @@ export function CampaignsView({ rows }: { rows: CampaignRow[] }) {
         metrics.cpm ? metrics.cpm.toFixed(2) : "",
         metrics.spent,
         metrics.clientTotal,
+        metrics.grossProfit,
         campaign.currency,
         campaign.startDate.slice(0, 10),
         campaign.endDate ? campaign.endDate.slice(0, 10) : "",
@@ -143,6 +177,29 @@ export function CampaignsView({ rows }: { rows: CampaignRow[] }) {
         }
       />
 
+      {/* Lo que dejan las campañas de la pestaña elegida: con «Finalizadas»
+          es lo ganado, con «Activas» lo que está en marcha. */}
+      {filtered.length > 0 && (
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Stat
+            label="Facturado al cliente"
+            value={formatMoney(totals.budget)}
+            hint={`${filtered.length} campaña${filtered.length === 1 ? "" : "s"}`}
+          />
+          <Stat label="Pactado con creadores" value={formatMoney(totals.spent)} />
+          <Stat
+            label="Ganancia"
+            value={formatMoney(totals.profit)}
+            tone={totals.profit < 0 ? "danger" : "ok"}
+            hint={
+              totals.budget > 0
+                ? `${((totals.profit / totals.budget) * 100).toFixed(0)}% de lo facturado`
+                : undefined
+            }
+          />
+        </div>
+      )}
+
       <Toolbar>
         <Segmented options={tabs} value={tab} onChange={setTab} />
         <Button variant="secondary" size="md">
@@ -175,19 +232,25 @@ export function CampaignsView({ rows }: { rows: CampaignRow[] }) {
         <>
           {/* Teléfono y tablet: filas apiladas. La tabla pide 880px y no cabe. */}
           <ListBox className="lg:hidden">
-            {pagina.visibles.map(({ campaign, metrics, company, creators }) => {
+            {pagina.visibles.map(({ campaign, metrics, company, creators, manager }) => {
               const status = CAMPAIGN_STATUS[campaign.status];
               return (
                 <ListRow
                   key={campaign.id}
                   href={`/campanas/${campaign.id}`}
                   title={campaign.name}
-                  subtitle={`${company?.name ?? "Sin cliente"} · ${creators.length} creadores`}
+                  subtitle={[
+                    company?.name ?? "Sin cliente",
+                    manager ? `lleva ${manager.name}` : null,
+                    `${creators.length} creadores`,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
                   trailing={
                     <span className="flex items-center gap-3">
                       <span className="flex flex-col items-end gap-1">
-                        <span className="tabular text-[13px] font-semibold">
-                          {formatCompact(metrics.views)}
+                        <span className="tabular text-[13px] font-semibold text-[var(--ok)]">
+                          {formatMoney(metrics.grossProfit, campaign.currency)}
                         </span>
                         <Badge tone={status.tone}>{status.label}</Badge>
                       </span>
@@ -204,21 +267,23 @@ export function CampaignsView({ rows }: { rows: CampaignRow[] }) {
           </ListBox>
 
           <TableWrap className="hidden lg:block">
-            <Table className="min-w-[880px]">
+            <Table className="min-w-[1080px]">
             <thead>
               <tr>
                 <Th className="w-12 pl-4" aria-label="Activa" />
                 <Th>Campaña</Th>
+                <Th>Encargado</Th>
                 <Th>Creadores</Th>
                 <Th>Estado</Th>
                 <Th align="right">Vistas</Th>
                 <Th align="right">CPM</Th>
                 <Th align="right">Facturado</Th>
+                <Th align="right">Ganancia</Th>
                 <Th>Periodo</Th>
               </tr>
             </thead>
             <tbody>
-              {pagina.visibles.map(({ campaign, metrics, company, creators }) => {
+              {pagina.visibles.map(({ campaign, metrics, company, creators, manager, createdBy }) => {
                 const status = CAMPAIGN_STATUS[campaign.status];
                 return (
                   <Tr key={campaign.id}>
@@ -239,6 +304,9 @@ export function CampaignsView({ rows }: { rows: CampaignRow[] }) {
                           {CAMPAIGN_OBJECTIVE[campaign.objective]}
                         </span>
                       </Link>
+                    </Td>
+                    <Td>
+                      <Encargado manager={manager} createdBy={createdBy} />
                     </Td>
                     <Td>
                       {creators.length === 0 ? (
@@ -274,6 +342,21 @@ export function CampaignsView({ rows }: { rows: CampaignRow[] }) {
                     <Td align="right" className="tabular">
                       {formatMoney(metrics.clientTotal, campaign.currency)}
                     </Td>
+                    <Td
+                      align="right"
+                      className={
+                        metrics.grossProfit < 0
+                          ? "tabular font-semibold text-[var(--danger)]"
+                          : "tabular font-semibold text-[var(--ok)]"
+                      }
+                      title={
+                        metrics.clientTotal > 0
+                          ? `${((metrics.grossProfit / metrics.clientTotal) * 100).toFixed(0)}% de lo facturado`
+                          : undefined
+                      }
+                    >
+                      {formatMoney(metrics.grossProfit, campaign.currency)}
+                    </Td>
                     <Td className="whitespace-nowrap text-[12.5px] text-[var(--text-muted)]">
                       {formatDate(campaign.startDate)}
                       <br />
@@ -292,10 +375,11 @@ export function CampaignsView({ rows }: { rows: CampaignRow[] }) {
                     {filtered.length} campañas
                   </span>
                 </td>
-                <td colSpan={2} />
+                <td colSpan={3} />
                 <td className="tabular px-4 text-right">{formatCompact(totals.views)}</td>
                 <td />
                 <td className="tabular px-4 text-right">{formatMoney(totals.budget)}</td>
+                <td className="tabular px-4 text-right text-[var(--ok)]">{formatMoney(totals.profit)}</td>
                 <td />
               </tr>
             </tfoot>
