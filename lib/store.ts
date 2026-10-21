@@ -4231,3 +4231,53 @@ export async function duplicateCampaign(
 
   return toCampaign(nueva);
 }
+
+/* ---------------- Tareas sueltas en las notas ---------------- */
+
+type NodoTiptap = {
+  type?: string;
+  text?: string;
+  attrs?: Record<string, unknown>;
+  content?: NodoTiptap[];
+};
+
+/** Texto de un nodo sin bajar a sus listas anidadas: esas son otras tareas. */
+function textoPropio(nodo: NodoTiptap): string {
+  if (nodo.text) return nodo.text;
+  return (nodo.content ?? [])
+    .filter((n) => n.type !== "taskList" && n.type !== "bulletList" && n.type !== "orderedList")
+    .map(textoPropio)
+    .join(" ");
+}
+
+/**
+ * Casillas sin marcar de las notas, para el inicio.
+ *
+ * Las tareas del equipo viven como listas de tareas dentro de las notas; sin
+ * esto había que abrir nota por nota para saber qué quedaba por hacer. Se
+ * leen todas las notas sin archivar: con el volumen de una agencia, recorrer
+ * el árbol en memoria es de sobra y no obliga a guardar las tareas aparte.
+ */
+export async function listOpenTasks(
+  limite = 8,
+): Promise<{ total: number; tareas: { docId: string; docTitle: string; text: string }[] }> {
+  const docs = await prisma.doc.findMany({
+    where: { archived: false },
+    select: { id: true, title: true, content: true },
+    orderBy: { updatedAt: "desc" },
+  });
+
+  const tareas: { docId: string; docTitle: string; text: string }[] = [];
+  const recorrer = (nodo: NodoTiptap, doc: { id: string; title: string }) => {
+    if (nodo.type === "taskItem" && nodo.attrs?.checked !== true) {
+      const text = textoPropio(nodo).replace(/\s+/g, " ").trim();
+      if (text) tareas.push({ docId: doc.id, docTitle: doc.title, text });
+    }
+    for (const hijo of nodo.content ?? []) recorrer(hijo, doc);
+  };
+  for (const doc of docs) {
+    if (doc.content && typeof doc.content === "object") recorrer(doc.content as NodoTiptap, doc);
+  }
+
+  return { total: tareas.length, tareas: tareas.slice(0, limite) };
+}

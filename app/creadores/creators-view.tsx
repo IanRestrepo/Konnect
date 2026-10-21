@@ -24,16 +24,19 @@ export function CreatorsView({
   creators,
   campaignCount,
   categories,
+  abrirNuevo = false,
 }: {
   creators: Creator[];
   campaignCount: Record<string, number>;
   /** Catálogo vivo, para el alta. */
   categories: string[];
+  /** Llegar con el alta abierta, desde los accesos del inicio. */
+  abrirNuevo?: boolean;
 }) {
   // Recordados: al volver de una ficha la lista sigue como la dejaste.
   const [query, setQuery] = useRecordado("creadores.busqueda", "");
   const [status, setStatus] = useRecordado<Filter>("creadores.filtro", "todos");
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(abrirNuevo);
 
   const filters = useMemo<{ id: Filter; label: string; count: number }[]>(
     () => [

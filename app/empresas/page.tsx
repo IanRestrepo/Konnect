@@ -4,7 +4,11 @@ import { CompaniesView } from "@/app/empresas/companies-view";
 
 export const metadata = { title: "Empresas — Konnect" };
 
-export default async function EmpresasPage() {
+export default async function EmpresasPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ nueva?: string }>;
+}) {
   await requirePermission("ver_empresas");
   const [companies, campaigns] = await Promise.all([getCompanies(), getCampaigns()]);
 
@@ -22,5 +26,7 @@ export default async function EmpresasPage() {
     }),
   );
 
-  return <CompaniesView companies={companies} stats={stats} />;
+  // Desde los accesos del inicio se llega con el alta ya abierta.
+  const { nueva } = await searchParams;
+  return <CompaniesView companies={companies} stats={stats} abrirNueva={nueva === "1"} />;
 }

@@ -5,7 +5,11 @@ import { CreatorsView } from "@/app/creadores/creators-view";
 
 export const metadata = { title: "Creadores — Konnect" };
 
-export default async function CreadoresPage() {
+export default async function CreadoresPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ nuevo?: string }>;
+}) {
   await requirePermission("ver_creadores");
   const [creators, campaigns, categories] = await Promise.all([
     getCreators(),
@@ -21,6 +25,12 @@ export default async function CreadoresPage() {
   );
 
   return (
-    <CreatorsView creators={creators} campaignCount={campaignCount} categories={categories} />
+    <CreatorsView
+      creators={creators}
+      campaignCount={campaignCount}
+      categories={categories}
+      // Desde los accesos del inicio se llega con el alta ya abierta.
+      abrirNuevo={(await searchParams).nuevo === "1"}
+    />
   );
 }

@@ -19,11 +19,20 @@ import { formatCompact, formatMoney } from "@/lib/utils";
 type Stats = Record<string, { campaigns: number; invested: number; views: number }>;
 type Filter = "todas" | "activo" | "prospecto" | "inactivo";
 
-export function CompaniesView({ companies, stats }: { companies: Company[]; stats: Stats }) {
+export function CompaniesView({
+  companies,
+  stats,
+  abrirNueva = false,
+}: {
+  companies: Company[];
+  stats: Stats;
+  /** Llegar con el alta abierta, desde los accesos del inicio. */
+  abrirNueva?: boolean;
+}) {
   // Recordados: al volver de una ficha la lista sigue como la dejaste.
   const [query, setQuery] = useRecordado("empresas.busqueda", "");
   const [filter, setFilter] = useRecordado<Filter>("empresas.filtro", "todas");
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(abrirNueva);
 
   const filters = useMemo<{ id: Filter; label: string; count: number }[]>(
     () => [
