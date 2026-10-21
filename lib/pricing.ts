@@ -54,6 +54,10 @@ export function agencyCut(deliverable: Deliverable, campaign: Campaign): number 
 
 /** Lo que le queda al creador después de la comisión. */
 export function creatorPayout(deliverable: Deliverable, campaign: Campaign): number {
+  // Una pieza con lo del creador pero sin cobro al cliente —así nacían los
+  // videos registrados a mano, que solo pedían «tarifa acordada»— salía con
+  // pago cero: la campaña decía «comprometido USD 0» con 900 pactados.
+  if (deliverable.clientPrice <= 0) return Math.max(deliverable.agreedFee, 0);
   return deliverable.clientPrice - agencyCut(deliverable, campaign);
 }
 
@@ -167,6 +171,32 @@ export function hasRateFor(
 export function clientPriceForRate(rate: number, commissionPct: number): number {
   const pct = Math.min(Math.max(commissionPct, 0), 99);
   return rate / (1 - pct / 100);
+}
+
+/**
+ * Lo que se le cobra al cliente por una pieza de ese creador.
+ *
+ * Si en su tarifa se escribió un precio al cliente —el que sale en el media
+ * kit—, ese manda: el kit y la campaña tienen que decir lo mismo. Si no, la
+ * tarifa del creador con el margen de la agencia encima. Cero = sin tarifa.
+ */
+export function clientRateFor(
+  creator: Pick<Creator, "rates" | "rateVideo" | "rateShort" | "rateIntegration">,
+  platform: SocialPlatform,
+  type: DeliverableType,
+  channelId = "",
+): number {
+  // La misma fila que usa `rateFor`: la del canal si la tiene, si no la de la red.
+  const fila =
+    (channelId
+      ? creator.rates?.find(
+          (r) => r.platform === platform && r.type === type && r.channelId === channelId,
+        )
+      : undefined) ??
+    creator.rates?.find((r) => r.platform === platform && r.type === type && !r.channelId);
+  if (fila?.clientAmount && fila.clientAmount > 0) return fila.clientAmount;
+  const tarifa = rateFor(creator, platform, type, channelId);
+  return tarifa > 0 ? Math.round(clientPriceForRate(tarifa, MARGEN_AGENCIA)) : 0;
 }
 
 /**

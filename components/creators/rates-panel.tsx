@@ -9,7 +9,7 @@ import { FieldHint, Input } from "@/components/ui/field";
 import { Picker } from "@/components/ui/picker";
 import { useCan } from "@/components/session-provider";
 import { PLATFORMS, PLATFORM_LABEL, TAREAS, nombreCanal, tareaLabel } from "@/lib/socials";
-import { IMPORTE_MAXIMO } from "@/lib/pricing";
+import { IMPORTE_MAXIMO, MARGEN_AGENCIA, clientPriceForRate } from "@/lib/pricing";
 import type {
   Creator,
   CreatorChannel,
@@ -27,12 +27,17 @@ type Grupo = { platform: SocialPlatform; channelId: string };
 
 const clave = (g: Grupo) => `${g.platform}|${g.channelId}`;
 
+/** El precio al cliente que sale solo: la tarifa con el margen encima. */
+const conMargen = (monto: number) => Math.round(clientPriceForRate(monto, MARGEN_AGENCIA));
+
 /**
  * Precio base del creador por red y tipo de pieza.
  *
- * Es lo que el creador quiere recibir, no lo que se le cobra al cliente: al
- * armar una campaña sale como precio de partida y de ahí se calcula el cobro
- * con la comisión de la agencia.
+ * Cada pieza lleva dos precios: lo que quiere recibir el creador y lo que se
+ * le cobra al cliente, que es el que sale en el media kit y el que se propone
+ * al contratarlo. El segundo, si se deja vacío, es el primero con el margen
+ * de la agencia encima; antes no se podía cambiar, y el kit enseñaba precios
+ * que el equipo no había decidido.
  *
  * Va agrupado por red. Antes era una lista de filas con tres selectores cada
  * una —red, pieza, canal— y un creador con cinco redes acababa con veinte
@@ -64,6 +69,10 @@ export function RatesPanel({
   const [grupos, setGrupos] = useState<Grupo[]>([]);
   /** Precio escrito por grupo y pieza: `borrador[clave][type]`. */
   const [borrador, setBorrador] = useState<Record<string, Partial<Record<DeliverableType, string>>>>({});
+  /** Precio al cliente escrito, con la misma forma. Vacío = con el margen. */
+  const [borradorCliente, setBorradorCliente] = useState<
+    Record<string, Partial<Record<DeliverableType, string>>>
+  >({});
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -120,12 +129,17 @@ export function RatesPanel({
     for (const g of gruposConPrecio()) base.set(clave(g), g);
 
     const inicial: Record<string, Partial<Record<DeliverableType, string>>> = {};
+    const inicialCliente: Record<string, Partial<Record<DeliverableType, string>>> = {};
     for (const r of rates) {
       const k = clave(r);
       inicial[k] = { ...inicial[k], [r.type]: String(r.amount) };
+      if (r.clientAmount) {
+        inicialCliente[k] = { ...inicialCliente[k], [r.type]: String(r.clientAmount) };
+      }
     }
     setGrupos(ordenar([...base.values()]));
     setBorrador(inicial);
+    setBorradorCliente(inicialCliente);
     setError(null);
     setEditando(true);
   }
@@ -133,6 +147,11 @@ export function RatesPanel({
   function escribir(g: Grupo, type: DeliverableType, valor: string) {
     const k = clave(g);
     setBorrador((prev) => ({ ...prev, [k]: { ...prev[k], [type]: valor } }));
+  }
+
+  function escribirCliente(g: Grupo, type: DeliverableType, valor: string) {
+    const k = clave(g);
+    setBorradorCliente((prev) => ({ ...prev, [k]: { ...prev[k], [type]: valor } }));
   }
 
   function quitarGrupo(g: Grupo) {
@@ -157,12 +176,13 @@ export function RatesPanel({
           platform: g.platform,
           type: t.type,
           amount: Number(borrador[clave(g)]?.[t.type]) || 0,
+          clientAmount: Number(borradorCliente[clave(g)]?.[t.type]) || null,
           channelId: g.channelId,
         }))
         .filter((f) => f.amount > 0),
     );
 
-    if (limpio.some((f) => f.amount > IMPORTE_MAXIMO)) {
+    if (limpio.some((f) => f.amount > IMPORTE_MAXIMO || (f.clientAmount ?? 0) > IMPORTE_MAXIMO)) {
       setError("Alguna tarifa es demasiado grande para guardarla.");
       return;
     }
@@ -277,22 +297,42 @@ export function RatesPanel({
                   </button>
                 </header>
                 <div className="space-y-1.5">
-                  {tareasDe(g).map((t) => (
-                    <label key={t.type} className="flex items-center gap-2">
-                      <span className="min-w-0 flex-1 truncate text-[12.5px] text-[var(--text-muted)]">
-                        {t.label}
-                      </span>
-                      <Input
-                        type="number"
-                        min={0}
-                        value={borrador[clave(g)]?.[t.type] ?? ""}
-                        onChange={(e) => escribir(g, t.type, e.target.value)}
-                        placeholder="—"
-                        aria-label={`${titulo(g)}: ${t.label}`}
-                        className="tabular h-8 w-28 text-right"
-                      />
-                    </label>
-                  ))}
+                  <div className="flex items-center gap-2 text-[11px] text-[var(--text-subtle)]">
+                    <span className="flex-1" />
+                    <span className="w-20 text-right">Creador</span>
+                    <span className="w-20 text-right">Cliente · kit</span>
+                  </div>
+                  {tareasDe(g).map((t) => {
+                    const base = Number(borrador[clave(g)]?.[t.type]) || 0;
+                    return (
+                      <div key={t.type} className="flex items-center gap-2">
+                        <span className="min-w-0 flex-1 truncate text-[12.5px] text-[var(--text-muted)]">
+                          {t.label}
+                        </span>
+                        <Input
+                          type="number"
+                          min={0}
+                          value={borrador[clave(g)]?.[t.type] ?? ""}
+                          onChange={(e) => escribir(g, t.type, e.target.value)}
+                          placeholder="—"
+                          aria-label={`${titulo(g)}: ${t.label}, lo que cobra el creador`}
+                          className="tabular h-8 w-20 text-right"
+                        />
+                        <Input
+                          type="number"
+                          min={0}
+                          value={borradorCliente[clave(g)]?.[t.type] ?? ""}
+                          onChange={(e) => escribirCliente(g, t.type, e.target.value)}
+                          // Lo que saldría solo, a la vista: así se ve si hace
+                          // falta escribir otro.
+                          placeholder={base > 0 ? String(conMargen(base)) : "—"}
+                          disabled={base <= 0}
+                          aria-label={`${titulo(g)}: ${t.label}, precio al cliente`}
+                          className="tabular h-8 w-20 text-right"
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
               </section>
             ))}
@@ -315,13 +355,15 @@ export function RatesPanel({
           )}
 
           <FieldHint>
-            Vacío o en cero, no hay precio para esa pieza. Sin tarifa propia, la campaña usa las
-            tarifas mínimas de la ficha.
+            «Creador» es lo que recibe él. «Cliente · kit» es lo que sale en el media kit y lo que se
+            propone cobrar al contratarlo; vacío, se calcula con el {MARGEN_AGENCIA}% de la agencia.
+            Sin precio del creador, no hay tarifa para esa pieza.
           </FieldHint>
         </div>
       ) : vista.length === 0 ? (
         <p className="border-t border-[var(--line)] px-4 py-3 text-[12.5px] text-[var(--text-muted)]">
-          Sin precios por red. La campaña usará las tarifas mínimas de la ficha.
+          Sin precios por red todavía. Ponlos aquí: de aquí salen el media kit y el precio que se
+          propone al contratarlo.
         </p>
       ) : (
         <div className="grid gap-3 border-t border-[var(--line)] p-4 sm:grid-cols-2">
@@ -342,16 +384,32 @@ export function RatesPanel({
                     </span>
                   )}
                 </header>
+                <div className="mb-1 flex justify-end gap-3 text-[11px] text-[var(--text-subtle)]">
+                  <span className="w-20 text-right">Creador</span>
+                  <span className="w-20 text-right">Cliente · kit</span>
+                </div>
                 <dl className="space-y-1">
                   {tareasDe(g)
                     .filter((t) => suyasDelGrupo.some((r) => r.type === t.type))
                     .map((t) => {
                       const r = suyasDelGrupo.find((x) => x.type === t.type)!;
                       return (
-                        <div key={t.type} className="flex items-baseline justify-between gap-3">
-                          <dt className="truncate text-[12.5px] text-[var(--text-muted)]">{t.label}</dt>
-                          <dd className="tabular shrink-0 text-[13px] font-semibold">
+                        <div key={t.type} className="flex items-baseline gap-3">
+                          <dt className="min-w-0 flex-1 truncate text-[12.5px] text-[var(--text-muted)]">
+                            {t.label}
+                          </dt>
+                          <dd className="tabular w-20 shrink-0 text-right text-[13px] font-semibold">
                             {formatMoney(r.amount, currency)}
+                          </dd>
+                          <dd
+                            className={
+                              r.clientAmount
+                                ? "tabular w-20 shrink-0 text-right text-[13px] font-semibold"
+                                : "tabular w-20 shrink-0 text-right text-[13px] text-[var(--text-muted)]"
+                            }
+                            title={r.clientAmount ? "Precio escrito a mano" : `Con el ${MARGEN_AGENCIA}% de la agencia`}
+                          >
+                            {formatMoney(r.clientAmount ?? conMargen(r.amount), currency)}
                           </dd>
                         </div>
                       );

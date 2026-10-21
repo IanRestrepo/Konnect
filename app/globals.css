@@ -85,7 +85,7 @@
   --r-control: 12px;
   --r-chip: 10px;
   --r-pill: 999px;
-  --page: 1120px;
+  --page: 1400px;
 }
 
 /* ---------- Acentos ---------- */
@@ -208,8 +208,10 @@ h3 {
   margin-inline: auto;
 }
 
+/* «Compacta» junta el contenido en el centro; «Cómoda» le da todo el ancho.
+   Estaba al revés: elegir compacta lo ensanchaba. */
 [data-density="compacta"] {
-  --page: 1400px;
+  --page: 1120px;
 }
 
 @keyframes layer-in {

@@ -235,6 +235,11 @@ export type CreatorRate = {
   platform: SocialPlatform;
   type: DeliverableType;
   amount: number;
+  /**
+   * Precio al cliente: el del media kit y el que se propone al contratar.
+   * Null = la tarifa con el margen de la agencia encima.
+   */
+  clientAmount: number | null;
   /** Canal secundario al que aplica. Vacío = toda la red. */
   channelId: string;
 };

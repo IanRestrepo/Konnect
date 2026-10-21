@@ -38,7 +38,7 @@ import { Paginador, usePagina } from "@/components/ui/pager";
 import {
   IMPORTE_MAXIMO,
   MARGEN_AGENCIA,
-  clientPriceForRate,
+  clientRateFor,
   hasRateFor,
   rateFor,
   repartirPaquete,
@@ -260,7 +260,7 @@ export function NewCampaignForm({
     // partida la incluye más la comisión: si pide 1.000 y la agencia se lleva
     // el 20%, hay que cobrar 1.250, no 1.200.
     const tarifa = rateFor(creator, platform, tipo);
-    const partida = tarifa > 0 ? Math.round(clientPriceForRate(tarifa, comisionBase)) : 0;
+    const partida = clientRateFor(creator, platform, tipo);
 
     setLineas((prev) => [
       ...prev,
@@ -291,7 +291,7 @@ export function NewCampaignForm({
         const creator = creators.find((c) => c.id === l.creatorId);
         if (!creator) return { ...l, channelId };
         const tarifa = rateFor(creator, l.platform, l.type, channelId);
-        const partida = tarifa > 0 ? Math.round(clientPriceForRate(tarifa, comisionBase)) : 0;
+        const partida = clientRateFor(creator, l.platform, l.type, channelId);
         return {
           ...l,
           channelId,

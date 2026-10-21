@@ -9,8 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { FieldHint, Input, Label, Select } from "@/components/ui/field";
 import { DeliverableTypeField } from "@/components/campaigns/deliverable-type-field";
-import { formatCompact, formatDate } from "@/lib/utils";
-import type { Creator, DeliverableKind, DeliverableType } from "@/lib/types";
+import { formatCompact, formatDate, formatMoney } from "@/lib/utils";
+import { IMPORTE_MAXIMO, clientRateFor, rateFor } from "@/lib/pricing";
+import type { Creator, Currency, DeliverableKind, DeliverableType } from "@/lib/types";
 
 type VideoPreview = {
   videoId: string;
@@ -61,6 +62,7 @@ export function AddDeliverableDialog({
   open,
   onClose,
   campaignId,
+  currency,
   creators,
   kinds,
   onKindsChange,
@@ -68,6 +70,7 @@ export function AddDeliverableDialog({
   open: boolean;
   onClose: () => void;
   campaignId: string;
+  currency: Currency;
   creators: Creator[];
   /** Tipos de pieza propios de la agencia, además de los de fábrica. */
   kinds: DeliverableKind[];
@@ -84,6 +87,7 @@ export function AddDeliverableDialog({
   const [type, setType] = useState<DeliverableType>("video");
   /** Nombre propio del encargo. Vacío = la tarea estándar de YouTube. */
   const [customType, setCustomType] = useState("");
+  const [cobro, setCobro] = useState("");
   const [fee, setFee] = useState("");
 
   function close() {
@@ -92,6 +96,7 @@ export function AddDeliverableDialog({
     setError(null);
     setSaving(false);
     setFee("");
+    setCobro("");
     setCustomType("");
     setAutodetectado(false);
     onClose();
@@ -121,12 +126,10 @@ export function AddDeliverableDialog({
         setAutodetectado(false);
       }
 
-      // Precarga la tarifa acordada del creador según el tipo de pieza.
+      // Precarga la tarifa del creador según el tipo de pieza, y el cobro al
+      // cliente con la comisión de la agencia encima.
       const creator = detectado ?? creators.find((c) => c.id === creatorId);
-      if (creator) {
-        const tarifa = found.isShort ? creator.rateShort : creator.rateVideo;
-        setFee(tarifa > 0 ? String(tarifa) : "");
-      }
+      if (creator) proponer(creator, found.isShort ? "short" : "video");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error inesperado");
     } finally {
@@ -134,8 +137,25 @@ export function AddDeliverableDialog({
     }
   }
 
+  function proponer(creator: Creator, pieza: DeliverableType) {
+    const tarifa = rateFor(creator, "youtube", pieza);
+    setFee(tarifa > 0 ? String(tarifa) : "");
+    const cliente = clientRateFor(creator, "youtube", pieza);
+    setCobro(cliente > 0 ? String(cliente) : "");
+  }
+
   async function save() {
     if (!video) return;
+    const cliente = Number(cobro) || 0;
+    const creador = Number(fee) || 0;
+    if (cliente > IMPORTE_MAXIMO || creador > IMPORTE_MAXIMO) {
+      setError("Ese importe se pasa del máximo.");
+      return;
+    }
+    if (creador > cliente) {
+      setError("El pago al creador no puede superar lo que paga el cliente.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -147,7 +167,11 @@ export function AddDeliverableDialog({
           type,
           customType,
           status: "publicado",
-          agreedFee: Number(fee) || 0,
+          // Los tres números, como en cualquier pieza pactada: sin el cobro al
+          // cliente, la campaña no contaba ni lo comprometido ni la ganancia.
+          clientPrice: cliente,
+          commissionFixed: cliente - creador,
+          agreedFee: creador,
           videoId: video.videoId,
           videoUrl: video.videoUrl,
           title: video.title,
@@ -272,7 +296,7 @@ export function AddDeliverableDialog({
               </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <Label htmlFor="deliverable-creator">Creador</Label>
                 <Select
@@ -281,6 +305,8 @@ export function AddDeliverableDialog({
                   onChange={(e) => {
                     setCreatorId(e.target.value);
                     setAutodetectado(false);
+                    const elegido = creators.find((c) => c.id === e.target.value);
+                    if (elegido) proponer(elegido, type);
                   }}
                 >
                   {creators.map((c) => (
@@ -309,20 +335,40 @@ export function AddDeliverableDialog({
                 onChange={(t, c) => {
                   setType(t);
                   setCustomType(c);
+                  const elegido = creators.find((cr) => cr.id === creatorId);
+                  if (elegido) proponer(elegido, t);
                 }}
                 onKindsChange={onKindsChange}
               />
               <div>
-                <Label htmlFor="deliverable-fee">Tarifa acordada</Label>
+                <Label htmlFor="deliverable-cobro">Pago del cliente</Label>
+                <Input
+                  id="deliverable-cobro"
+                  type="number"
+                  min={0}
+                  value={cobro}
+                  onChange={(e) => setCobro(e.target.value)}
+                  placeholder="0"
+                  className="tabular"
+                />
+              </div>
+              <div>
+                <Label htmlFor="deliverable-fee">Pago al creador</Label>
                 <Input
                   id="deliverable-fee"
                   type="number"
+                  min={0}
                   value={fee}
                   onChange={(e) => setFee(e.target.value)}
                   placeholder="0"
+                  className="tabular"
                 />
               </div>
             </div>
+            <FieldHint>
+              Quedan {formatMoney((Number(cobro) || 0) - (Number(fee) || 0), currency)} para la agencia.
+              Si el video completa una pieza ya pactada, se queda con el precio que tenía.
+            </FieldHint>
           </>
         )}
       </div>

@@ -942,6 +942,11 @@ model CreatorRate {
   type     DeliverableType
   amount   Decimal         @default(0) @db.Decimal(12, 2)
 
+  /// Lo que se le cobra al cliente por esa pieza: el precio que sale en el
+  /// media kit y el que se propone al contratarlo. Vacío = la tarifa del
+  /// creador con el margen de la agencia encima.
+  clientAmount Decimal? @db.Decimal(12, 2)
+
   /// Canal secundario al que aplica esta tarifa. Vacío = toda la red.
   ///
   /// Es texto suelto y no una relación porque forma parte de la clave única, y

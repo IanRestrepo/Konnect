@@ -26,7 +26,7 @@ import { PLATFORM_LABEL, PLATFORMS, TAREAS, nombreCanal, piezaLabel } from "@/li
 import {
   IMPORTE_MAXIMO,
   MARGEN_AGENCIA,
-  clientPriceForRate,
+  clientRateFor,
   rateFor,
   repartirPaquete,
   tarifaCanal,
@@ -73,7 +73,7 @@ function propuesta(
     costo: tarifa > 0 ? String(tarifa) : "",
     // Lo que se le cobra al cliente incluye la comisión: si pide 1.000 y la
     // agencia se lleva el 20%, hay que cobrar 1.250, no 1.200.
-    cobro: tarifa > 0 ? String(Math.round(clientPriceForRate(tarifa, MARGEN_AGENCIA))) : "",
+    cobro: String(clientRateFor(creator, red, pieza, canal) || ""),
   };
 }
 

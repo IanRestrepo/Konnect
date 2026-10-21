@@ -28,9 +28,6 @@ type Campos = {
   email: string;
   phone: string;
   currency: string;
-  rateVideo: string;
-  rateShort: string;
-  rateIntegration: string;
   notes: string;
 };
 
@@ -45,9 +42,6 @@ function desde(creator: Creator): Campos {
     email: creator.email,
     phone: creator.phone,
     currency: creator.currency,
-    rateVideo: String(creator.rateVideo),
-    rateShort: String(creator.rateShort),
-    rateIntegration: String(creator.rateIntegration),
     notes: creator.notes,
   };
 }
@@ -108,9 +102,6 @@ export function EditCreatorButton({
           email: form.email.trim(),
           phone: form.phone.trim(),
           currency: form.currency,
-          rateVideo: Number(form.rateVideo) || 0,
-          rateShort: Number(form.rateShort) || 0,
-          rateIntegration: Number(form.rateIntegration) || 0,
           notes: form.notes,
         }),
       });
@@ -258,38 +249,6 @@ export function EditCreatorButton({
             />
           </div>
 
-          <div>
-            <Label htmlFor="ec-rate-video">Video dedicado</Label>
-            <Input
-              id="ec-rate-video"
-              type="number"
-              min={0}
-              value={form.rateVideo}
-              onChange={(e) => set("rateVideo", e.target.value)}
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="ec-rate-short">Reel / Short</Label>
-            <Input
-              id="ec-rate-short"
-              type="number"
-              min={0}
-              value={form.rateShort}
-              onChange={(e) => set("rateShort", e.target.value)}
-            />
-          </div>
-
-          <div>
-            <Label htmlFor="ec-rate-integration">Fracción publicitaria</Label>
-            <Input
-              id="ec-rate-integration"
-              type="number"
-              min={0}
-              value={form.rateIntegration}
-              onChange={(e) => set("rateIntegration", e.target.value)}
-            />
-          </div>
         </div>
 
         <div className="mt-3">

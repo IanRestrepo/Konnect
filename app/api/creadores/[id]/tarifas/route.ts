@@ -28,6 +28,13 @@ const schema = z.object({
         .min(0, "Una tarifa no puede ser negativa.")
         .max(IMPORTE_MAXIMO, "Ese importe no cabe en la base.")
         .default(0),
+      /** Precio al cliente, el del media kit. Null = la tarifa con el margen. */
+      clientAmount: z
+        .number()
+        .min(0, "Un precio no puede ser negativo.")
+        .max(IMPORTE_MAXIMO, "Ese importe no cabe en la base.")
+        .nullable()
+        .default(null),
       /** Canal secundario al que aplica. Vacío = toda la red. */
       channelId: z.string().default(""),
     }),
@@ -38,8 +45,7 @@ const schema = z.object({
  * Reemplaza el tarifario del creador: su precio base por red y tipo de pieza.
  *
  * Llega la lista completa y se reescribe entera. Las de importe cero se
- * descartan en el almacén, que es lo mismo que borrarlas: sin tarifa propia,
- * `rateFor` cae en las tarifas antiguas de la ficha.
+ * descartan en el almacén, que es lo mismo que borrarlas.
  */
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession();

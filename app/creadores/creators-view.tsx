@@ -13,7 +13,8 @@ import { ListBox, ListRow } from "@/components/ui/list";
 import { EmptyState } from "@/components/ui/empty-state";
 import { NewCreatorDialog } from "@/components/creators/new-creator-dialog";
 import { CREATOR_STATUS } from "@/lib/labels";
-import { PLATFORM_METRICS } from "@/lib/socials";
+import { PLATFORM_METRICS, TAREAS } from "@/lib/socials";
+import { rateFor } from "@/lib/pricing";
 import type { Creator, CreatorStatus } from "@/lib/types";
 import { formatCompact, formatMoney } from "@/lib/utils";
 
@@ -153,14 +154,7 @@ export function CreatorsView({
                       .join(" · ")}
                     trailing={
                       <span className="flex items-center gap-4">
-                        <span className="hidden text-right sm:block">
-                          <span className="tabular block text-[14px] font-semibold">
-                            {formatMoney(creator.rateVideo, creator.currency)}
-                          </span>
-                          <span className="block text-[11.5px] text-[var(--text-subtle)]">
-                            por video
-                          </span>
-                        </span>
+<PrecioBase creator={creator} />
                         <Badge tone={status.tone}>{status.label}</Badge>
                       </span>
                     }
@@ -180,5 +174,23 @@ export function CreatorsView({
         categories={categories}
       />
     </div>
+  );
+}
+
+/**
+ * Lo que cobra por la pieza principal de su red, sacado de sus tarifas por
+ * red. Antes leía la vieja «tarifa mínima» de video, que ya no se edita.
+ */
+function PrecioBase({ creator }: { creator: Creator }) {
+  const tarea = TAREAS[creator.mainPlatform][0];
+  const precio = tarea ? rateFor(creator, creator.mainPlatform, tarea.type) : 0;
+  if (!tarea || precio <= 0) return null;
+  return (
+    <span className="hidden text-right sm:block">
+      <span className="tabular block text-[14px] font-semibold">
+        {formatMoney(precio, creator.currency)}
+      </span>
+      <span className="block text-[11.5px] text-[var(--text-subtle)]">por {tarea.label.toLowerCase()}</span>
+    </span>
   );
 }

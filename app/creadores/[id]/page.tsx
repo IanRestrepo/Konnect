@@ -4,7 +4,6 @@ import { notFound } from "next/navigation";
 import { ExternalLink, Film, Megaphone, RefreshCw } from "lucide-react";
 import { PageTitle, SectionLabel } from "@/components/ui/section";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
-import { DefList, DefRow } from "@/components/ui/def-list";
 import { ListBox, ListRow, RowIcon } from "@/components/ui/list";
 import { Stat, StatBand } from "@/components/ui/stat";
 import { Badge } from "@/components/ui/badge";
@@ -58,9 +57,6 @@ export default async function CreadorPage({ params }: { params: Promise<{ id: st
 
   const serieVistas = creatorViewsSeries(campaigns, creator.id);
   const generatedViews = piezas.reduce((s, d) => s + (d.views ?? 0), 0);
-  const billed = piezas
-    .filter((d) => d.status !== "cancelado")
-    .reduce((s, d) => s + d.agreedFee, 0);
 
   // Las campañas, no las piezas sueltas: la pregunta con la que se abre la
   // ficha es «¿en qué anda ahora?», y una lista de entregables mezclaba lo de
@@ -241,28 +237,6 @@ export default async function CreadorPage({ params }: { params: Promise<{ id: st
             packages={creator.packages}
             suyas={[...new Set([creator.mainPlatform, ...creator.socials.map((s) => s.platform)])]}
           />
-          <Card className="h-fit">
-            <CardHeader>
-              <CardTitle>Tarifas mínimas acordadas</CardTitle>
-              <span className="eyebrow">{creator.currency}</span>
-            </CardHeader>
-            <DefList className="border-t border-[var(--line)]">
-              <DefRow label="Video dedicado">
-                <span className="tabular">{formatMoney(creator.rateVideo, creator.currency)}</span>
-              </DefRow>
-              <DefRow label="Reel / Short">
-                <span className="tabular">{formatMoney(creator.rateShort, creator.currency)}</span>
-              </DefRow>
-              <DefRow label="Fracción publicitaria en video">
-                <span className="tabular">
-                  {formatMoney(creator.rateIntegration, creator.currency)}
-                </span>
-              </DefRow>
-              <DefRow label="Facturado a la fecha">
-                <span className="tabular">{formatMoney(billed, creator.currency)}</span>
-              </DefRow>
-            </DefList>
-          </Card>
           </div>
         </div>
       ),

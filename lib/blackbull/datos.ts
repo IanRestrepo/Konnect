@@ -177,7 +177,8 @@ export function construirMediaKit(
         red: PLATFORM_LABEL[r.platform],
         pieza: tareaLabel(r.platform, r.type),
         canal: canal ? nombreCanal(canal) : "",
-        precio: alCliente(r.amount),
+        // El precio al cliente escrito en la ficha manda; si no hay, el margen.
+        precio: r.clientAmount && r.clientAmount > 0 ? r.clientAmount : alCliente(r.amount),
       };
     });
 

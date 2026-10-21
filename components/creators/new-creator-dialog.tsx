@@ -14,8 +14,14 @@ import { Picker } from "@/components/ui/picker";
 import { ContactFieldsEditor } from "@/components/creators/contact-fields-editor";
 import { PaymentAccountsEditor } from "@/components/creators/payment-accounts-editor";
 import { CURRENCIES } from "@/lib/labels";
-import { PLATFORMS, PLATFORM_URL } from "@/lib/socials";
-import type { BankingAccount, ContactField, PaymentMethod, SocialPlatform } from "@/lib/types";
+import { PLATFORMS, PLATFORM_LABEL, PLATFORM_URL, TAREAS } from "@/lib/socials";
+import type {
+  BankingAccount,
+  ContactField,
+  DeliverableType,
+  PaymentMethod,
+  SocialPlatform,
+} from "@/lib/types";
 import { cn, formatCompact } from "@/lib/utils";
 
 type ChannelPreview = {
@@ -47,9 +53,6 @@ const EMPTY = {
   email: "",
   phone: "",
   currency: "USD",
-  rateVideo: "",
-  rateShort: "",
-  rateIntegration: "",
   /** Identidad fiscal: es del creador, no de una cuenta concreta. */
   holder: "",
   taxId: "",
@@ -99,6 +102,12 @@ export function NewCreatorDialog({
     { id: string; name: string; handle: string; motivo: string }[] | null
   >(null);
   const [form, setForm] = useState({ ...EMPTY });
+  /**
+   * Precio base en su red, por pieza. Antes eran tres «tarifas mínimas»
+   * sueltas, sin red, que ni el media kit ni la campaña usaban si había
+   * precios por red: se guardaban dos veces las mismas cifras.
+   */
+  const [precios, setPrecios] = useState<Partial<Record<DeliverableType, string>>>({});
   /** Solo trabaja con la agencia. */
   const [exclusive, setExclusive] = useState(false);
   /** Varias categorías; la primera es la principal. */
@@ -128,6 +137,7 @@ export function NewCreatorDialog({
     setDuplicados(null);
     setExclusive(false);
     setForm({ ...EMPTY });
+    setPrecios({});
     setCategorias(categories[0] ? [categories[0]] : []);
     onClose();
   }
@@ -192,9 +202,14 @@ export function NewCreatorDialog({
           email: form.email.trim(),
           phone: form.phone.trim(),
           currency: form.currency,
-          rateVideo: Number(form.rateVideo) || 0,
-          rateShort: Number(form.rateShort) || 0,
-          rateIntegration: Number(form.rateIntegration) || 0,
+          rates: TAREAS[platform]
+            .map((t) => ({
+              platform,
+              type: t.type,
+              amount: Number(precios[t.type]) || 0,
+              channelId: "",
+            }))
+            .filter((r) => r.amount > 0),
           paymentMethods: methods,
           banking: {
             holder: form.holder.trim(),
@@ -491,37 +506,31 @@ export function NewCreatorDialog({
             <ContactFieldsEditor fields={contactFields} onChange={setContactFields} />
 
             <div>
-              <Label>Tarifas mínimas acordadas</Label>
+              <Label>Lo que cobra en {PLATFORM_LABEL[platform]}</Label>
               <div className="grid gap-3 sm:grid-cols-4">
                 <Picker
                   value={form.currency}
                   onChange={(v) => set("currency", v)}
                   options={CURRENCIES.map((c) => ({ id: c, label: c }))}
                 />
-                <Input
-                  type="number"
-                  value={form.rateVideo}
-                  onChange={(e) => set("rateVideo", e.target.value)}
-                  placeholder="Video"
-                  aria-label="Tarifa por video"
-                />
-                <Input
-                  type="number"
-                  value={form.rateShort}
-                  onChange={(e) => set("rateShort", e.target.value)}
-                  placeholder="Reel / Short"
-                  aria-label="Tarifa por short"
-                />
-                <Input
-                  type="number"
-                  value={form.rateIntegration}
-                  onChange={(e) => set("rateIntegration", e.target.value)}
-                  placeholder="Integración"
-                  aria-label="Tarifa por fracción publicitaria"
-                />
+                {TAREAS[platform].slice(0, 3).map((t) => (
+                  <Input
+                    key={t.type}
+                    type="number"
+                    min={0}
+                    value={precios[t.type] ?? ""}
+                    onChange={(e) => setPrecios((p) => ({ ...p, [t.type]: e.target.value }))}
+                    placeholder={t.label}
+                    aria-label={`Tarifa por ${t.label}`}
+                  />
+                ))}
               </div>
               <FieldHint>
-                Video dedicado · Reel/Short · Fracción publicitaria dentro de un video.
+                {TAREAS[platform]
+                  .slice(0, 3)
+                  .map((t) => t.label)
+                  .join(" · ")}
+                . El resto de redes y el precio al cliente se ponen después en «Tarifas».
               </FieldHint>
             </div>
 

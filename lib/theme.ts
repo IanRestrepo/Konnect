@@ -15,7 +15,7 @@ export type ThemeMode = "light" | "dark" | "system";
 export type Preferences = {
   mode: ThemeMode;
   accent: AccentId;
-  /** `comoda` centra el contenido a 1120px; `compacta` lo ensancha a 1400px. */
+  /** `comoda` usa hasta 1400px de ancho; `compacta` lo junta a 1120px. */
   density: "comoda" | "compacta";
 };
 

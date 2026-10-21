@@ -54,6 +54,7 @@ const schema = z.object({
         platform: plataforma,
         type: z.enum(["video", "short", "integracion", "directo", "post"]),
         amount: z.number().min(0).max(IMPORTE_MAXIMO, "Ese importe no cabe.").default(0),
+        clientAmount: z.number().min(0).max(IMPORTE_MAXIMO, "Ese importe no cabe.").nullable().default(null),
         channelId: z.string().default(""),
       }),
     )

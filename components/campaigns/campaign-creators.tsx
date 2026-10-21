@@ -461,6 +461,7 @@ export function CampaignCreators({
         open={registrando}
         onClose={() => setRegistrando(false)}
         campaignId={campaign.id}
+        currency={campaign.currency}
         creators={creators}
         kinds={catalogo}
         onKindsChange={setCatalogo}

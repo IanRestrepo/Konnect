@@ -302,6 +302,7 @@ function toCreator(row: CreatorRow, apiConnections: CreatorApiConnection[] = [])
       platform: r.platform as SocialPlatform,
       type: r.type,
       amount: num(r.amount),
+      clientAmount: r.clientAmount === null ? null : num(r.clientAmount),
       channelId: r.channelId,
     })),
     contacts: row.contacts.map((c) => ({
@@ -728,6 +729,7 @@ export async function createCreator(
             platform: r.platform,
             type: r.type,
             amount: r.amount,
+            clientAmount: r.clientAmount ?? null,
           })),
       },
     },
@@ -3711,6 +3713,7 @@ export async function setCreatorRates(
           platform: r.platform,
           type: r.type,
           amount: r.amount,
+          clientAmount: r.clientAmount && r.clientAmount > 0 ? r.clientAmount : null,
           channelId: r.channelId ?? "",
         },
       });
