@@ -68,8 +68,8 @@ export function creatorPayout(deliverable: Deliverable, campaign: Campaign): num
  * el margen fijo de la agencia (creador 900 → cliente 1.500). Sin esto, una
  * pieza a la que nadie le puso cobro dejaba la ganancia en negativo primero
  * y en cero después, que tampoco es verdad: la agencia nunca trabaja a cero.
- * La estimación se dice en la pantalla (`unpricedPieces`) hasta que alguien
- * escriba el cobro real.
+ * Es el mismo cálculo que propone el precio al crear la campaña, así que la
+ * ganancia que se ve es la pactada, haya pagado o no el cliente.
  */
 export function clientPriceOf(deliverable: Deliverable): number {
   if (deliverable.clientPrice > 0) return deliverable.clientPrice;
