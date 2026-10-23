@@ -61,23 +61,38 @@ export function creatorPayout(deliverable: Deliverable, campaign: Campaign): num
   return deliverable.clientPrice - agencyCut(deliverable, campaign);
 }
 
+/**
+ * Lo que paga el cliente por una pieza, para las cuentas de la campaña.
+ *
+ * Si la pieza no tiene cobro guardado pero sí pago al creador, se estima con
+ * el margen fijo de la agencia (creador 900 → cliente 1.500). Sin esto, una
+ * pieza a la que nadie le puso cobro dejaba la ganancia en negativo primero
+ * y en cero después, que tampoco es verdad: la agencia nunca trabaja a cero.
+ * La estimación se dice en la pantalla (`unpricedPieces`) hasta que alguien
+ * escriba el cobro real.
+ */
+export function clientPriceOf(deliverable: Deliverable): number {
+  if (deliverable.clientPrice > 0) return deliverable.clientPrice;
+  if (deliverable.agreedFee <= 0) return 0;
+  return Math.round(clientPriceForRate(deliverable.agreedFee, MARGEN_AGENCIA));
+}
+
 /** Los cancelados no cuentan: ni se pagan ni se facturan. */
 function billable(campaign: Campaign): Deliverable[] {
   return campaign.deliverables.filter((d) => d.status !== "cancelado");
 }
 
 export type CampaignTotals = {
-  /** Suma de lo que se le factura al cliente. */
+  /** Suma de lo que se le factura al cliente, con lo estimado de las piezas sin cobro. */
   clientTotal: number;
   /** Suma de lo que reciben los creadores. */
   creatorTotal: number;
-  /**
-   * Lo que se queda la agencia, solo de las piezas con cobro al cliente. Una
-   * pieza sin cobro todavía no tiene ganancia que contar: restarle lo del
-   * creador dejaba la campaña en negativo por un precio que faltaba poner.
-   */
+  /** Lo que se queda la agencia: `clientTotal - creatorTotal`. */
   grossProfit: number;
-  /** Piezas con pago al creador pero sin cobro al cliente: falta ponerles precio. */
+  /**
+   * Piezas con pago al creador pero sin cobro al cliente guardado: su cobro
+   * entra estimado con el margen de la agencia (`clientPriceOf`).
+   */
   unpricedPieces: number;
   /** Comisión media efectiva, en porcentaje. Null si no hay nada pactado. */
   marginPct: number | null;
@@ -90,14 +105,13 @@ export type CampaignTotals = {
 export function campaignTotals(campaign: Campaign): CampaignTotals {
   const piezas = billable(campaign);
 
-  const clientTotal = piezas.reduce((s, d) => s + d.clientPrice, 0);
+  const clientTotal = piezas.reduce((s, d) => s + clientPriceOf(d), 0);
   const creatorTotal = piezas.reduce((s, d) => s + creatorPayout(d, campaign), 0);
   const paidToCreators = piezas
     .filter((d) => d.paymentStatus === "pagado")
     .reduce((s, d) => s + creatorPayout(d, campaign), 0);
 
-  const conCobro = piezas.filter((d) => d.clientPrice > 0);
-  const grossProfit = conCobro.reduce((s, d) => s + d.clientPrice - creatorPayout(d, campaign), 0);
+  const grossProfit = clientTotal - creatorTotal;
   const unpricedPieces = piezas.filter((d) => d.clientPrice <= 0 && d.agreedFee > 0).length;
 
   return {

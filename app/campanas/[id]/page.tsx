@@ -1,4 +1,4 @@
-import { creatorPayout } from "@/lib/pricing";
+import { MARGEN_AGENCIA, creatorPayout } from "@/lib/pricing";
 import { requirePermission } from "@/lib/session";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -230,7 +230,7 @@ export default async function CampanaPage({ params }: { params: Promise<{ id: st
             // Lo que falta decirlo antes que el porcentaje: una ganancia
             // calculada sin todos los cobros parece mejor o peor de lo que es.
             metrics.unpricedPieces > 0
-              ? `${metrics.unpricedPieces} pieza${metrics.unpricedPieces === 1 ? "" : "s"} sin pago del cliente: edítala${metrics.unpricedPieces === 1 ? "" : "s"} en «Piezas y pagos»`
+              ? `Estimada con el ${MARGEN_AGENCIA}%: ${metrics.unpricedPieces === 1 ? "1 pieza no tiene" : `${metrics.unpricedPieces} piezas no tienen`} el pago del cliente. Ponlo en «Piezas y pagos».`
               : metrics.clientTotal > 0
                 ? `${((metrics.grossProfit / metrics.clientTotal) * 100).toFixed(0)}% de ${formatMoney(metrics.clientTotal, campaign.currency)} cobrados`
                 : "sin cobros pactados"
