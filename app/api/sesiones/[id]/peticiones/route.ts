@@ -13,6 +13,7 @@ import {
   reorderRequirements,
   requirementDeliverableId,
   reviewRequirement,
+  setRequirementStatus,
   updateRequirement,
 } from "@/lib/store";
 
@@ -84,8 +85,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
 const revisar = z.object({
   requirementId: z.string().min(1),
-  accion: z.enum(["aprobar", "cambios", "editar"]),
+  accion: z.enum(["aprobar", "cambios", "editar", "estado"]),
   reviewNotes: z.string().default(""),
+  /** Con `accion: "estado"`: a dónde se devuelve la petición. */
+  status: z.enum(["pendiente", "enviado"]).optional(),
   kind: z.enum(KINDS).optional(),
   title: z.string().trim().min(1, "Ponle un título a la petición.").optional(),
   instructions: z.string().optional(),
@@ -94,7 +97,7 @@ const revisar = z.object({
   dueDate: z.string().nullable().optional(),
 });
 
-/** Aprueba, pide cambios o edita una petición existente. */
+/** Aprueba, pide cambios, cambia el estado a mano o edita una petición. */
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await requirePermission("editar_sesiones");
   const { id } = await params;
@@ -107,16 +110,22 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     );
   }
 
-  const { requirementId, accion, reviewNotes, ...campos } = parsed.data;
+  const { requirementId, accion, reviewNotes, status, ...campos } = parsed.data;
+
+  if (accion === "estado" && !status) {
+    return NextResponse.json({ error: "Falta el estado." }, { status: 400 });
+  }
 
   const actualizada =
     accion === "editar"
       ? await updateRequirement(id, requirementId, campos)
-      : await reviewRequirement(id, requirementId, {
-          aprobado: accion === "aprobar",
-          reviewNotes,
-          actorLabel: session.name,
-        });
+      : accion === "estado"
+        ? await setRequirementStatus(id, requirementId, status!)
+        : await reviewRequirement(id, requirementId, {
+            aprobado: accion === "aprobar",
+            reviewNotes,
+            actorLabel: session.name,
+          });
 
   if (!actualizada) {
     return NextResponse.json({ error: "Esa petición no existe." }, { status: 404 });
@@ -124,6 +133,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
   revalidatePath(`/sesiones/${id}`);
   revalidatePath(`/portal/${id}`);
+  // Aprobar o devolver a pendiente cambia la pieza de la campaña.
+  if (actualizada.campaignId) revalidatePath(`/campanas/${actualizada.campaignId}`);
 
   return NextResponse.json(actualizada);
 }

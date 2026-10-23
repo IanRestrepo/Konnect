@@ -227,9 +227,13 @@ export default async function CampanaPage({ params }: { params: Promise<{ id: st
           label="Ganancia"
           value={formatMoney(metrics.grossProfit, campaign.currency)}
           hint={
-            metrics.clientTotal > 0
-              ? `${((metrics.grossProfit / metrics.clientTotal) * 100).toFixed(0)}% de ${formatMoney(metrics.clientTotal, campaign.currency)} cobrados`
-              : "sin cobros pactados"
+            // Lo que falta decirlo antes que el porcentaje: una ganancia
+            // calculada sin todos los cobros parece mejor o peor de lo que es.
+            metrics.unpricedPieces > 0
+              ? `${metrics.unpricedPieces} pieza${metrics.unpricedPieces === 1 ? "" : "s"} sin pago del cliente: edítala${metrics.unpricedPieces === 1 ? "" : "s"} en «Piezas y pagos»`
+              : metrics.clientTotal > 0
+                ? `${((metrics.grossProfit / metrics.clientTotal) * 100).toFixed(0)}% de ${formatMoney(metrics.clientTotal, campaign.currency)} cobrados`
+                : "sin cobros pactados"
           }
           tone={metrics.grossProfit < 0 ? "danger" : "ok"}
         />

@@ -36,6 +36,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { FieldHint, Input, Label, Select, Textarea } from "@/components/ui/field";
+import { Picker } from "@/components/ui/picker";
 import { MATERIAL_VACIO, MaterialFields, type MaterialDraft } from "@/components/sessions/material-fields";
 import { useCan } from "@/components/session-provider";
 import {
@@ -226,6 +227,35 @@ export function SessionDetail({
       `/api/sesiones/${session.id}/peticiones`,
       json({ requirementId, accion, reviewNotes }, "PATCH"),
       "No se pudo revisar.",
+    );
+  }
+
+  /**
+   * Cambia el estado desde el desplegable de la fila. Aprobar y pedir cambios
+   * van por su camino de siempre, que avisa al creador y mueve la pieza; los
+   * otros dos son para corregir a mano.
+   */
+  async function cambiarEstado(req: SessionRequirement, nuevo: SessionRequirement["status"]) {
+    if (nuevo === req.status) return;
+    if (nuevo === "aprobado") return revisar(req.id, "aprobar");
+    if (nuevo === "cambios") {
+      const nota = window.prompt("¿Qué hay que cambiar?");
+      if (nota) await revisar(req.id, "cambios", nota);
+      return;
+    }
+    if (
+      nuevo === "pendiente" &&
+      req.deliverableId &&
+      !window.confirm(
+        `«${req.title}» es una pieza pactada. Volverla a pendiente la devuelve a pendiente también en la campaña (salvo que ya esté pagada). ¿Seguir?`,
+      )
+    ) {
+      return;
+    }
+    await llamar(
+      `/api/sesiones/${session.id}/peticiones`,
+      json({ requirementId: req.id, accion: "estado", status: nuevo }, "PATCH"),
+      "No se pudo cambiar el estado.",
     );
   }
 
@@ -489,10 +519,25 @@ export function SessionDetail({
                             <ExternalLink size={14} />
                           </a>
                         )}
-                        {tarde ? (
-                          <Badge tone="danger">Atrasado</Badge>
+                        {tarde && <Badge tone="danger">Atrasado</Badge>}
+                        {/* Quien edita la sesión cambia el estado desde aquí;
+                            antes solo se podía aprobar o pedir cambios cuando
+                            el creador ya había entregado. */}
+                        {puedeEditar ? (
+                          <Picker
+                            size="sm"
+                            value={req.status}
+                            onChange={(v) => void cambiarEstado(req, v as SessionRequirement["status"])}
+                            className="w-36"
+                            options={(
+                              Object.entries(ESTADO_PETICION) as [
+                                SessionRequirement["status"],
+                                { label: string },
+                              ][]
+                            ).map(([id, e]) => ({ id, label: e.label }))}
+                          />
                         ) : (
-                          <Badge tone={estado.tone}>{estado.label}</Badge>
+                          !tarde && <Badge tone={estado.tone}>{estado.label}</Badge>
                         )}
 
                         {puedeEditar && req.status === "enviado" && (

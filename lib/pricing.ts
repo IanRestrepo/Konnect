@@ -71,8 +71,14 @@ export type CampaignTotals = {
   clientTotal: number;
   /** Suma de lo que reciben los creadores. */
   creatorTotal: number;
-  /** Lo que se queda la agencia: `clientTotal - creatorTotal`. */
+  /**
+   * Lo que se queda la agencia, solo de las piezas con cobro al cliente. Una
+   * pieza sin cobro todavía no tiene ganancia que contar: restarle lo del
+   * creador dejaba la campaña en negativo por un precio que faltaba poner.
+   */
   grossProfit: number;
+  /** Piezas con pago al creador pero sin cobro al cliente: falta ponerles precio. */
+  unpricedPieces: number;
   /** Comisión media efectiva, en porcentaje. Null si no hay nada pactado. */
   marginPct: number | null;
   /** Cuánto del tope de referencia se ha comprometido. Null si no hay tope. */
@@ -90,11 +96,16 @@ export function campaignTotals(campaign: Campaign): CampaignTotals {
     .filter((d) => d.paymentStatus === "pagado")
     .reduce((s, d) => s + creatorPayout(d, campaign), 0);
 
+  const conCobro = piezas.filter((d) => d.clientPrice > 0);
+  const grossProfit = conCobro.reduce((s, d) => s + d.clientPrice - creatorPayout(d, campaign), 0);
+  const unpricedPieces = piezas.filter((d) => d.clientPrice <= 0 && d.agreedFee > 0).length;
+
   return {
     clientTotal,
     creatorTotal,
-    grossProfit: clientTotal - creatorTotal,
-    marginPct: clientTotal > 0 ? ((clientTotal - creatorTotal) / clientTotal) * 100 : null,
+    grossProfit,
+    unpricedPieces,
+    marginPct: clientTotal > 0 ? (grossProfit / clientTotal) * 100 : null,
     budgetUsedPct:
       campaign.budget && campaign.budget > 0 ? (clientTotal / campaign.budget) * 100 : null,
     paidToCreators,

@@ -40,7 +40,7 @@ export function campaignMetrics(campaign: Campaign): CampaignMetrics {
   const views = published.reduce((s, d) => s + (d.views ?? 0), 0);
   const likes = published.reduce((s, d) => s + (d.likes ?? 0), 0);
   const comments = published.reduce((s, d) => s + (d.comments ?? 0), 0);
-  const { creatorTotal: spent, clientTotal, grossProfit } = campaignTotals(campaign);
+  const { creatorTotal: spent, clientTotal, grossProfit, unpricedPieces } = campaignTotals(campaign);
 
   return {
     views,
@@ -49,6 +49,7 @@ export function campaignMetrics(campaign: Campaign): CampaignMetrics {
     spent,
     clientTotal,
     grossProfit,
+    unpricedPieces,
     cpm: views > 0 ? (spent / views) * 1000 : null,
     engagementRate: views > 0 ? ((likes + comments) / views) * 100 : null,
     published: published.length,

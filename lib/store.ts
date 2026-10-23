@@ -3615,6 +3615,45 @@ export async function submitRequirement(
 }
 
 /** La agencia revisa: aprueba o pide cambios. */
+/**
+ * Pone una petición a mano en «pendiente» o «en revisión».
+ *
+ * Aprobar y pedir cambios tienen su propio camino (`reviewRequirement`), que
+ * avisa al creador. Esto es para corregir: algo que se aprobó por error, o
+ * una entrega que llegó por otro lado y hay que dejar en revisión.
+ *
+ * Volver a pendiente devuelve también la pieza pactada a pendiente, igual
+ * que pedir cambios, salvo que ya esté pagada: eso no se deshace desde aquí.
+ */
+export async function setRequirementStatus(
+  sessionId: string,
+  requirementId: string,
+  status: "pendiente" | "enviado",
+): Promise<CollabSession | null> {
+  const { count } = await prisma.sessionRequirement.updateMany({
+    where: { id: requirementId, sessionId },
+    data:
+      status === "pendiente"
+        ? { status, reviewedAt: null, reviewNotes: "" }
+        : { status, reviewedAt: null, submittedAt: new Date() },
+  });
+  if (count === 0) return null;
+
+  if (status === "pendiente") {
+    const req = await prisma.sessionRequirement.findUnique({
+      where: { id: requirementId },
+      select: { deliverableId: true },
+    });
+    if (req?.deliverableId) {
+      await prisma.deliverable.updateMany({
+        where: { id: req.deliverableId, status: "publicado", paymentStatus: { not: "pagado" } },
+        data: { status: "pendiente" },
+      });
+    }
+  }
+  return getCollabSession(sessionId);
+}
+
 export async function reviewRequirement(
   sessionId: string,
   requirementId: string,

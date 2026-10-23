@@ -380,8 +380,10 @@ export type CampaignMetrics = {
   spent: number;
   /** Lo que se le factura al cliente: pago al creador más el margen. */
   clientTotal: number;
-  /** Beneficio bruto de la agencia: `clientTotal - spent`. */
+  /** Beneficio bruto de la agencia, de las piezas que tienen cobro al cliente. */
   grossProfit: number;
+  /** Piezas con pago al creador pero sin cobro al cliente. */
+  unpricedPieces: number;
   cpm: number | null;
   engagementRate: number | null;
   published: number;
