@@ -209,7 +209,7 @@ export type Company = {
   createdAt: string;
 };
 
-export type DeliverableType = "video" | "short" | "integracion" | "directo" | "post";
+export type DeliverableType = "video" | "short" | "integracion" | "directo" | "post" | "historia";
 
 /**
  * Tipo de pieza con nombre propio, a gusto de la agencia: «Unboxing»,

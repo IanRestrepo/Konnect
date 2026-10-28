@@ -46,6 +46,7 @@ export const DELIVERABLE_TYPE: Record<DeliverableType, string> = {
   integracion: "Fracción publicitaria",
   directo: "Directo",
   post: "Publicación",
+  historia: "Historia",
 };
 
 export const DELIVERABLE_STATUS: Record<DeliverableStatus, { label: string; tone: Tone }> = {

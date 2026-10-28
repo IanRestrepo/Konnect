@@ -7,7 +7,7 @@ import { addDeliverableKind, listDeliverableKinds, setDeliverableKinds } from "@
 
 export const dynamic = "force-dynamic";
 
-const BASES = ["video", "short", "integracion", "directo", "post"] as const;
+const BASES = ["video", "short", "integracion", "directo", "post", "historia"] as const;
 
 export async function GET() {
   const session = await getSession();

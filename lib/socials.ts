@@ -168,15 +168,19 @@ export const TAREAS: Record<SocialPlatform, { type: DeliverableType; label: stri
     { type: "short", label: "Short" },
     { type: "directo", label: "Directo" },
   ],
+  // Las historias son su propio tipo y no una «publicación»: duran un día, se
+  // cobran aparte y se piden por separado (un TikTok y dos historias).
   instagram: [
     { type: "short", label: "Reel" },
+    { type: "historia", label: "Historia" },
     { type: "post", label: "Publicación" },
-    { type: "directo", label: "Historia en vivo" },
+    { type: "directo", label: "Directo" },
   ],
   tiktok: [
     { type: "short", label: "Video" },
+    { type: "historia", label: "Historia" },
+    { type: "directo", label: "Directo (LIVE)" },
     { type: "integracion", label: "Mención en un video" },
-    { type: "directo", label: "Directo" },
   ],
   x: [
     { type: "post", label: "Publicación" },
@@ -228,6 +232,7 @@ export function tareaLabel(platform: SocialPlatform, type: DeliverableType): str
     integracion: "Mención",
     directo: "Directo",
     post: "Publicación",
+    historia: "Historia",
   };
   return generico[type];
 }

@@ -27,12 +27,19 @@ import { useCan } from "@/components/session-provider";
 import { QuickCompanyDialog } from "@/components/companies/quick-company-dialog";
 import { DeliverableTypeField } from "@/components/campaigns/deliverable-type-field";
 import {
+  PiecesEditor,
+  cuentas as cuentasPieza,
+  nuevaClave,
+  piezaNueva,
+  type Pieza,
+} from "@/components/campaigns/pieces-editor";
+import { Modal } from "@/components/ui/modal";
+import {
   PLATFORM_LABEL,
   PLATFORMS,
   TAREAS,
   nombreCanal,
   piezaLabel,
-  tareaLabel,
 } from "@/lib/socials";
 import { Paginador, usePagina } from "@/components/ui/pager";
 import {
@@ -171,16 +178,6 @@ export function NewCampaignForm({
   const [tipoPropio, setTipoPropio] = useState("");
   const [categoria, setCategoria] = useState("");
   const [busqueda, setBusqueda] = useState("");
-  /**
-   * Aviso de que cambiar de red obligó a cambiar la pieza.
-   *
-   * Antes se sustituía en silencio, y ahí se perdía lo que habías pedido: al
-   * pasar por Instagram, que no admite menciones dentro de un video, un
-   * `integracion` se convertía en `short` y al volver a YouTube se quedaba en
-   * Short, porque YouTube sí los tiene. Acababas encargando un Short sin
-   * haberlo elegido nunca.
-   */
-  const [avisoTipo, setAvisoTipo] = useState<string | null>(null);
 
   /**
    * Lo que se eligió en cada red, para devolverlo al volver a ella.
@@ -195,6 +192,12 @@ export function NewCampaignForm({
   >({});
 
   const [lineas, setLineas] = useState<Linea[]>([]);
+
+  /**
+   * El creador cuyas piezas se están editando en la ventana aparte, con su
+   * borrador. Se edita sobre una copia: «Cancelar» deja las líneas como estaban.
+   */
+  const [editando, setEditando] = useState<{ creator: Creator; piezas: Pieza[] } | null>(null);
 
   /** Categorías reales de los creadores que están en la red elegida. */
   const categorias = useMemo(() => {
@@ -240,42 +243,57 @@ export function NewCampaignForm({
     { cliente: 0, agencia: 0, creadores: 0 },
   );
 
-  function alternar(creator: Creator) {
-    // La línea se identifica también por la pieza: al mismo creador se le puede
-    // encargar un video dedicado y una mención en la misma red, y son dos
-    // acuerdos con dos precios. Sin el tipo, el segundo encargo desmarcaba el
-    // primero en vez de añadirse.
-    const mismaLinea = (l: Linea) =>
-      l.creatorId === creator.id &&
-      l.platform === platform &&
-      l.type === tipo &&
-      l.customType === tipoPropio;
+  /**
+   * Abre la ventana de piezas de un creador.
+   *
+   * Antes la casilla marcaba una sola pieza —la red y el tipo del filtro— y
+   * para pedir un TikTok, dos historias y un directo había que ir cambiando
+   * el filtro y volviendo a marcar, y dos piezas iguales no cabían. Ahora
+   * elegir a un creador abre sus piezas, y ahí se añaden las que hagan falta.
+   */
+  function abrirPiezas(creator: Creator) {
+    const suyas = lineas.filter((l) => l.creatorId === creator.id);
+    const piezas: Pieza[] = suyas.length
+      ? suyas.map((l) => ({
+          key: nuevaClave(),
+          platform: l.platform,
+          type: l.type,
+          customType: l.customType,
+          channelId: l.channelId,
+          cobro: l.clientPrice,
+          costo: l.creatorCost,
+          paquete: l.paquete,
+        }))
+      : [piezaNueva(creator, platform, { type: tipo, customType: tipoPropio })];
+    setEditando({ creator, piezas });
+  }
 
-    if (lineas.some(mismaLinea)) {
-      setLineas((prev) => prev.filter((l) => !mismaLinea(l)));
-      return;
-    }
+  /** Guarda el borrador de la ventana en el sitio que ocupaban sus líneas. */
+  function guardarPiezas() {
+    if (!editando) return;
+    const { creator, piezas } = editando;
+    const nuevas: Linea[] = piezas.map((p) => ({
+      creatorId: creator.id,
+      platform: p.platform,
+      type: p.type,
+      customType: p.customType,
+      channelId: p.channelId,
+      clientPrice: p.cobro,
+      creatorCost: p.costo,
+      paquete: p.paquete,
+    }));
+    setLineas((prev) => {
+      const fuera = prev.filter((l) => l.creatorId !== creator.id);
+      const desde = prev.findIndex((l) => l.creatorId === creator.id);
+      // Las suyas vuelven al mismo sitio de la lista; si es nuevo, al final.
+      if (desde < 0) return [...fuera, ...nuevas];
+      return [...fuera.slice(0, desde), ...nuevas, ...fuera.slice(desde)];
+    });
+    setEditando(null);
+  }
 
-    // La tarifa del creador es lo que él quiere recibir, así que el cobro de
-    // partida la incluye más la comisión: si pide 1.000 y la agencia se lleva
-    // el 20%, hay que cobrar 1.250, no 1.200.
-    const tarifa = rateFor(creator, platform, tipo);
-    const partida = clientRateFor(creator, platform, tipo);
-
-    setLineas((prev) => [
-      ...prev,
-      {
-        creatorId: creator.id,
-        platform,
-        type: tipo,
-        customType: tipoPropio,
-        // Se parte de su canal principal; el canal concreto se elige después,
-        // en el paso de precios, que es donde importa cuál cambia la tarifa.
-        channelId: "",
-        clientPrice: partida ? String(partida) : "",
-        creatorCost: tarifa > 0 ? String(tarifa) : "",
-      },
-    ]);
+  function quitarCreador(creatorId: string) {
+    setLineas((prev) => prev.filter((l) => l.creatorId !== creatorId));
   }
 
   /**
@@ -678,24 +696,17 @@ export function NewCampaignForm({
                           if (guardado) {
                             setTipo(guardado.type);
                             setTipoPropio(guardado.customType);
-                            setAvisoTipo(null);
                             return;
                           }
 
                           // Un Reel no existe en Twitch: se cae a la primera
-                          // tarea que sí tenga sentido en la red elegida, pero
-                          // diciéndolo, que es lo que faltaba.
+                          // tarea que sí tenga sentido en la red elegida. Ya no
+                          // se avisa: lo que se dejó en cada red se recuerda
+                          // (`tipoPorRed`), y el aviso solo confundía.
                           // Con un tipo propio elegido no hay nada que caer:
                           // «Unboxing» vale igual en YouTube que en Twitch.
                           if (!tipoPropio && !TAREAS[id].some((t) => t.type === tipo)) {
-                            const anterior = tareaLabel(platform, tipo);
-                            const nueva = TAREAS[id][0];
-                            setTipo(nueva.type);
-                            setAvisoTipo(
-                              `${PLATFORM_LABEL[id]} no admite «${anterior}». Se cambió a «${nueva.label}».`,
-                            );
-                          } else {
-                            setAvisoTipo(null);
+                            setTipo(TAREAS[id][0].type);
                           }
                         }}
                       />
@@ -713,15 +724,12 @@ export function NewCampaignForm({
                         onChange={(t, propio) => {
                           setTipo(t);
                           setTipoPropio(propio);
-                          setAvisoTipo(null);
                         }}
                         onKindsChange={setCatalogo}
                       />
-                      {avisoTipo ? (
-                        <FieldHint className="text-[var(--warn)]">{avisoTipo}</FieldHint>
-                      ) : (
-                        <FieldHint>Determina qué tarifa del creador se aplica.</FieldHint>
-                      )}
+                      <FieldHint>
+                        La primera pieza de cada creador. Al elegirlo se le añaden las demás.
+                      </FieldHint>
                     </div>
                     <div>
                       <Label htmlFor="categoria">Categoría de contenido</Label>
@@ -762,26 +770,35 @@ export function NewCampaignForm({
                   {lineas.length > 0 && (
                     <div className="flex flex-wrap items-center gap-1.5 rounded-[var(--r-control)] bg-[var(--surface-2)] p-2">
                       <span className="px-1 text-[12px] text-[var(--text-muted)]">
-                        Elegidos ({lineas.length}):
+                        Elegidos ({new Set(lineas.map((l) => l.creatorId)).size}):
                       </span>
-                      {lineas.map((l, i) => {
-                        const quien = creators.find((c) => c.id === l.creatorId);
+                      {[...new Set(lineas.map((l) => l.creatorId))].map((creatorId) => {
+                        const quien = creators.find((c) => c.id === creatorId);
+                        const suyas = lineas.filter((l) => l.creatorId === creatorId);
                         return (
                           <span
-                            key={`${l.creatorId}-${i}`}
+                            key={creatorId}
                             className="inline-flex h-7 items-center gap-1.5 rounded-[var(--r-pill)] border border-[var(--line)] bg-[var(--surface)] pr-1 pl-1 text-[12px]"
                           >
-                            <Avatar src={quien?.avatarUrl ?? null} name={quien?.name ?? "?"} size={18} />
-                            <span className="max-w-[180px] truncate">
-                              {quien?.name ?? "Creador"} ·{" "}
-                              <span className="text-[var(--text-muted)]">
-                                {PLATFORM_LABEL[l.platform]} ·{" "}
-                                {piezaLabel(l.platform, l.type, l.customType)}
-                              </span>
-                            </span>
                             <button
                               type="button"
-                              onClick={() => setLineas((p) => p.filter((_, j) => j !== i))}
+                              onClick={() => quien && abrirPiezas(quien)}
+                              title="Ver y editar sus piezas"
+                              className="inline-flex items-center gap-1.5"
+                            >
+                              <Avatar src={quien?.avatarUrl ?? null} name={quien?.name ?? "?"} size={18} />
+                              <span className="max-w-[220px] truncate">
+                                {quien?.name ?? "Creador"} ·{" "}
+                                <span className="text-[var(--text-muted)]">
+                                  {suyas.length === 1
+                                    ? `${PLATFORM_LABEL[suyas[0]!.platform]} · ${piezaLabel(suyas[0]!.platform, suyas[0]!.type, suyas[0]!.customType)}`
+                                    : `${suyas.length} piezas`}
+                                </span>
+                              </span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => quitarCreador(creatorId)}
                               aria-label={`Quitar a ${quien?.name ?? "este creador"}`}
                               className="grid h-5 w-5 place-items-center rounded-full text-[var(--text-subtle)] transition hover:bg-[var(--surface-3)] hover:text-[var(--danger)]"
                             >
@@ -801,28 +818,15 @@ export function NewCampaignForm({
                   ) : (
                     <div className="space-y-1.5">
                       {pagina.visibles.map((creator) => {
-                        const active = lineas.some(
-                          (l) =>
-                            l.creatorId === creator.id &&
-                            l.platform === platform &&
-                            l.type === tipo &&
-                            l.customType === tipoPropio,
-                        );
-                        // Ya contratado en esta red para otra pieza: se dice,
-                        // para que no parezca que la marca se perdió.
-                        const otras = lineas.filter(
-                          (l) =>
-                            l.creatorId === creator.id &&
-                            l.platform === platform &&
-                            !(l.type === tipo && l.customType === tipoPropio),
-                        );
+                        const suyas = lineas.filter((l) => l.creatorId === creator.id);
+                        const active = suyas.length > 0;
                         const precio = rateFor(creator, platform, tipo);
                         const propia = hasRateFor(creator, platform, tipo);
 
                         return (
                           <div key={creator.id} className="space-y-1">
                           <button
-                            onClick={() => alternar(creator)}
+                            onClick={() => abrirPiezas(creator)}
                             className={cn(
                               "flex w-full items-center gap-3 rounded-[var(--r-control)] border p-3 text-left transition",
                               active
@@ -845,10 +849,9 @@ export function NewCampaignForm({
                                 )}
                               </p>
                             </div>
-                            {otras.length > 0 && (
+                            {active && (
                               <Badge tone="accent">
-                                Ya tiene {piezaLabel(platform, otras[0]!.type, otras[0]!.customType)}
-                                {otras.length > 1 ? ` +${otras.length - 1}` : ""}
+                                {suyas.length === 1 ? "1 pieza" : `${suyas.length} piezas`} · editar
                               </Badge>
                             )}
                             <span
@@ -1132,6 +1135,54 @@ export function NewCampaignForm({
           </CardContent>
         </Card>
       </div>
+
+      {editando && (
+        <Modal
+          open
+          onClose={() => setEditando(null)}
+          size="xl"
+          title={`Qué se le encarga a ${editando.creator.name}`}
+          description="Una fila por pieza, cada una con su red, su tipo y su precio."
+          footerNote={(() => {
+            const t = editando.piezas.reduce(
+              (acc, p) => {
+                const c = cuentasPieza(p);
+                return { cobro: acc.cobro + c.cobro, costo: acc.costo + c.costo };
+              },
+              { cobro: 0, costo: 0 },
+            );
+            return (
+              <span className="tabular">
+                Cobras {formatMoney(t.cobro, currency)} · le pagas {formatMoney(t.costo, currency)} ·{" "}
+                <span className="font-medium text-[var(--text)]">
+                  quedan {formatMoney(t.cobro - t.costo, currency)}
+                </span>
+              </span>
+            );
+          })()}
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setEditando(null)}>
+                Cancelar
+              </Button>
+              <Button variant="primary" onClick={guardarPiezas}>
+                {editando.piezas.length === 0
+                  ? "Quitar de la campaña"
+                  : `Listo · ${editando.piezas.length} pieza${editando.piezas.length === 1 ? "" : "s"}`}
+              </Button>
+            </>
+          }
+        >
+          <PiecesEditor
+            creator={editando.creator}
+            piezas={editando.piezas}
+            onChange={(piezas) => setEditando((e) => (e ? { ...e, piezas } : e))}
+            currency={currency as "USD"}
+            kinds={catalogo}
+            onKindsChange={setCatalogo}
+          />
+        </Modal>
+      )}
 
       <QuickCompanyDialog
         open={creandoCliente}

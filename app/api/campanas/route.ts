@@ -35,7 +35,7 @@ const PLATAFORMAS = [
 const linea = z.object({
   creatorId: z.string().min(1),
   platform: z.enum(PLATAFORMAS),
-  type: z.enum(["video", "short", "integracion", "directo", "post"]),
+  type: z.enum(["video", "short", "integracion", "directo", "post", "historia"]),
   /** Nombre propio del encargo. Vacío = la tarea estándar de esa red. */
   customType: z.string().max(60, "Ese nombre de pieza es demasiado largo.").default(""),
   /** Canal secundario en el que se publica. Vacío = el principal. */

@@ -1004,8 +1004,22 @@ export async function setCreatorSocials(
   creatorId: string,
   socials: SocialLink[],
 ): Promise<Creator | null> {
-  const existe = await prisma.creator.findUnique({ where: { id: creatorId }, select: { id: true } });
+  const existe = await prisma.creator.findUnique({
+    where: { id: creatorId },
+    select: { id: true, mainPlatform: true },
+  });
   if (!existe) return null;
+
+  // Fuera de YouTube no hay API que traiga la audiencia: la cifra de la ficha
+  // es la de su red principal. Antes se escribía solo al dar de alta, y si
+  // luego se corregía en «Redes sociales» la de arriba se quedaba con la vieja.
+  const principal = socials.find((s) => s.platform === existe.mainPlatform);
+  if (existe.mainPlatform !== "youtube" && principal?.followers) {
+    await prisma.creator.update({
+      where: { id: creatorId },
+      data: { subscribers: principal.followers },
+    });
+  }
   return replaceCreatorLists(creatorId, { socials });
 }
 

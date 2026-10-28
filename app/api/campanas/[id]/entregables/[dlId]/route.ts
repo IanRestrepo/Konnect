@@ -23,7 +23,7 @@ const schema = z
   .object({
     status: z.enum(["pendiente", "en_revision", "publicado", "cancelado"]).optional(),
     paymentStatus: z.enum(["pendiente", "aprobado", "pagado"]).optional(),
-    type: z.enum(["video", "short", "integracion", "directo", "post"]).optional(),
+    type: z.enum(["video", "short", "integracion", "directo", "post", "historia"]).optional(),
     /** Nombre propio del encargo. Cadena vacía = vuelve al nombre de fábrica. */
     customType: z.string().max(60, "Ese nombre de pieza es demasiado largo.").optional(),
     platform: z

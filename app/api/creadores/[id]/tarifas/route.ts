@@ -22,7 +22,7 @@ const schema = z.object({
         "roblox",
         "web",
       ]),
-      type: z.enum(["video", "short", "integracion", "directo", "post"]),
+      type: z.enum(["video", "short", "integracion", "directo", "post", "historia"]),
       amount: z
         .number()
         .min(0, "Una tarifa no puede ser negativa.")

@@ -28,7 +28,7 @@ const pieza = z.object({
     "roblox",
     "web",
   ]),
-  type: z.enum(["video", "short", "integracion", "directo", "post"]),
+  type: z.enum(["video", "short", "integracion", "directo", "post", "historia"]),
   /** Nombre propio del encargo. Vacío = la tarea estándar de esa red. */
   customType: z.string().max(60, "Ese nombre de pieza es demasiado largo.").default(""),
   /** Canal secundario pactado. Vacío = su canal principal. */

@@ -59,6 +59,8 @@ enum DeliverableType {
   directo
   /// Publicación estática: carrusel, foto o hilo.
   post
+  /// Historia de Instagram o TikTok: dura un día y se mide aparte.
+  historia
 }
 
 enum DeliverableStatus {

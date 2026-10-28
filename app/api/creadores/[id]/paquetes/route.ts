@@ -19,7 +19,7 @@ const schema = z.object({
     .array(
       z.object({
         platform: z.enum(["youtube", "instagram", "tiktok", "x", "twitch", "kick", "discord", "roblox", "web"]),
-        type: z.enum(["video", "short", "integracion", "directo", "post"]),
+        type: z.enum(["video", "short", "integracion", "directo", "post", "historia"]),
         customType: z.string().trim().max(80).nullable().default(null),
         qty: z.number().int().min(1, "Cada línea necesita al menos una pieza.").max(100),
       }),

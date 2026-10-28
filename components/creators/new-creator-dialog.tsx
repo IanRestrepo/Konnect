@@ -22,7 +22,7 @@ import type {
   PaymentMethod,
   SocialPlatform,
 } from "@/lib/types";
-import { cn, formatCompact } from "@/lib/utils";
+import { cn, formatCompact, parseCantidad } from "@/lib/utils";
 
 type ChannelPreview = {
   channelId: string;
@@ -177,7 +177,9 @@ export function NewCreatorDialog({
     const enlace = esYoutube
       ? channel!.channelUrl
       : perfil.url.trim() || PLATFORM_URL[platform](handle);
-    const seguidores = esYoutube ? channel!.subscribers : Number(perfil.followers) || 0;
+    // «85.5k», «85,5 mil» o «85500»: con Number() a secas, «85.5» se guardaba
+    // como 85 y «85.5k» como cero.
+    const seguidores = esYoutube ? channel!.subscribers : parseCantidad(perfil.followers);
 
     try {
       const res = await fetch("/api/creadores", {
@@ -383,11 +385,10 @@ export function NewCreatorDialog({
               <Label htmlFor="perfil-followers">Seguidores</Label>
               <Input
                 id="perfil-followers"
-                type="number"
-                min={0}
+                inputMode="decimal"
                 value={perfil.followers}
                 onChange={(e) => setPerfil({ ...perfil, followers: e.target.value })}
-                placeholder="0"
+                placeholder="85.5k o 85500"
               />
             </div>
           </div>
