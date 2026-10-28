@@ -1,7 +1,8 @@
 import { requirePermission } from "@/lib/session";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ExternalLink, Film, Megaphone, RefreshCw } from "lucide-react";
+import { ExternalLink, Film, Megaphone } from "lucide-react";
+import { RefreshSocialsButton } from "@/components/creators/refresh-socials-button";
 import { PageTitle, SectionLabel } from "@/components/ui/section";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { ListBox, ListRow, RowIcon } from "@/components/ui/list";
@@ -345,9 +346,7 @@ export default async function CreadorPage({ params }: { params: Promise<{ id: st
                     </Button>
                   </Link>
                 )}
-                <Button variant="secondary" size="icon-lg" aria-label="Actualizar métricas">
-                  <RefreshCw size={17} strokeWidth={1.75} />
-                </Button>
+                <RefreshSocialsButton creatorId={creator.id} />
                 <MediaKitButton creatorId={creator.id} />
                 <EditCreatorButton creator={creator} categories={categories} />
               </>

@@ -4557,3 +4557,30 @@ export async function sendDueReminders(): Promise<number> {
   }
   return debidos.length;
 }
+
+/* ---------------- Seguidores leídos de las redes ---------------- */
+
+/**
+ * Apunta lo que se leyó de una red: seguidores y publicaciones de ese perfil,
+ * y la cifra de arriba de la ficha si es su red principal y no es YouTube
+ * (la de YouTube la trae su propia API).
+ */
+export async function saveSocialReading(
+  creatorId: string,
+  socialId: string,
+  datos: { followers: number; posts: number | null },
+): Promise<void> {
+  const red = await prisma.socialLink.update({
+    where: { id: socialId },
+    data: {
+      followers: datos.followers,
+      ...(datos.posts !== null ? { contentCount: datos.posts } : {}),
+      metricsUpdatedAt: new Date(),
+    },
+    select: { platform: true },
+  });
+  await prisma.creator.updateMany({
+    where: { id: creatorId, mainPlatform: red.platform, NOT: { mainPlatform: "youtube" } },
+    data: { subscribers: datos.followers },
+  });
+}
