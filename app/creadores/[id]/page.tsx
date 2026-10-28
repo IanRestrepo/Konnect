@@ -48,6 +48,13 @@ export default async function CreadorPage({ params }: { params: Promise<{ id: st
 
   // Las métricas se nombran según dónde publica: un TikToker no tiene suscriptores.
   const metricas = PLATFORM_METRICS[creator.mainPlatform];
+  // Fuera de YouTube, las cifras de arriba son las de su red principal: es lo
+  // que se escribe en «Redes sociales» y lo que lee el botón de actualizar. La
+  // copia guardada en la ficha se quedaba con la del alta (salían 85 con 85.300).
+  const redPrincipal =
+    creator.mainPlatform === "youtube"
+      ? undefined
+      : creator.socials.find((s) => s.platform === creator.mainPlatform);
 
   const related = creatorCampaigns(campaigns, creator.id);
   const status = CREATOR_STATUS[creator.status];
@@ -376,9 +383,9 @@ export default async function CreadorPage({ params }: { params: Promise<{ id: st
       </div>
 
       <StatBand>
-        <Stat label={metricas.audience} value={formatAudiencia(creator.subscribers)} />
-        <Stat label={metricas.views} value={formatAudiencia(creator.totalViews)} />
-        <Stat label={metricas.content} value={formatAudiencia(creator.videoCount)} />
+        <Stat label={metricas.audience} value={formatAudiencia(redPrincipal?.followers || creator.subscribers)} />
+        <Stat label={metricas.views} value={formatAudiencia(redPrincipal?.totalViews || creator.totalViews)} />
+        <Stat label={metricas.content} value={formatAudiencia(redPrincipal?.contentCount || creator.videoCount)} />
         <Stat
           label="Vistas para clientes"
           value={formatCompact(generatedViews)}
