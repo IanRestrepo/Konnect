@@ -66,15 +66,27 @@ export async function leerRed(platform: SocialPlatform, handle: string): Promise
   const usuario = handle.trim().replace(/^@/, "").replace(/\/+$/, "").split("/").pop() ?? "";
   if (!usuario) throw new Error("La red no tiene usuario apuntado.");
 
-  const res = await fetch(
-    `https://api.apify.com/v2/acts/${lector.actor}/run-sync-get-dataset-items?timeout=50`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify(lector.entrada(usuario)),
-      signal: AbortSignal.timeout(55_000),
-    },
-  );
+  // Hasta 50 s: en frío, el lector de TikTok tarda más de 25 en arrancar, y
+  // la ruta tiene 60 en total.
+  const pedir = (segundos: number) =>
+    fetch(
+      `https://api.apify.com/v2/acts/${lector.actor}/run-sync-get-dataset-items?timeout=${segundos}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(lector.entrada(usuario)),
+        signal: AbortSignal.timeout((segundos + 3) * 1000),
+      },
+    );
+  // A veces falla al arrancar con un 502 que a la segunda ya no sale. Solo se
+  // reintenta si falló rápido: si ya se fue el tiempo, no queda para otra.
+  const inicio = Date.now();
+  let res = await pedir(50);
+  const gastado = (Date.now() - inicio) / 1000;
+  if (res.status >= 500 && gastado < 20) res = await pedir(Math.floor(52 - gastado));
+  if (res.status === 408 || (res.status === 400 && gastado > 45)) {
+    throw new Error("La red tardó demasiado en responder. Prueba otra vez en un momento.");
+  }
   if (res.status === 401 || res.status === 403) throw new Error("Apify rechazó el token.");
   if (res.status === 402) throw new Error("Se acabó el saldo de Apify.");
   if (!res.ok) throw new Error(`Apify respondió ${res.status}.`);
