@@ -50,6 +50,7 @@ export function HireCreatorDialog({
   currency,
   kinds,
   onKindsChange,
+  soloCreador,
 }: {
   open: boolean;
   onClose: () => void;
@@ -59,17 +60,25 @@ export function HireCreatorDialog({
   /** Tipos de pieza propios de la agencia, además de los de fábrica. */
   kinds: DeliverableKind[];
   onKindsChange: (kinds: DeliverableKind[]) => void;
+  /**
+   * Añadir piezas a alguien que ya está en la campaña: se salta la elección
+   * del creador y abre directamente sus piezas. El que lo use lo monta al
+   * abrirlo, para que cada vez empiece de cero.
+   */
+  soloCreador?: Creator;
 }) {
   const router = useRouter();
 
-  const [paso, setPaso] = useState<"creador" | "piezas">("creador");
+  const [paso, setPaso] = useState<"creador" | "piezas">(soloCreador ? "piezas" : "creador");
   const [busqueda, setBusqueda] = useState("");
-  const [creatorId, setCreatorId] = useState("");
-  const [piezas, setPiezas] = useState<Pieza[]>([]);
+  const [creatorId, setCreatorId] = useState(soloCreador?.id ?? "");
+  const [piezas, setPiezas] = useState<Pieza[]>(() =>
+    soloCreador ? [piezaNueva(soloCreador, soloCreador.mainPlatform)] : [],
+  );
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const elegido = creators.find((c) => c.id === creatorId) ?? null;
+  const elegido = soloCreador ?? creators.find((c) => c.id === creatorId) ?? null;
 
   const resultados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
@@ -185,7 +194,7 @@ export function HireCreatorDialog({
         onClose={cerrar}
         size="xl"
         icon={UserPlus}
-        title="Qué se le encarga"
+        title={soloCreador ? `Añadir piezas a ${soloCreador.name}` : "Qué se le encarga"}
         description="Una fila por pieza, cada una con su precio. Todas aparecen en su checklist del portal."
         footerNote={
           <span className="tabular">
@@ -197,13 +206,20 @@ export function HireCreatorDialog({
         }
         footer={
           <>
-            <Button variant="ghost" onClick={() => setPaso("creador")} disabled={guardando}>
-              <ArrowLeft size={14} />
-              Atrás
-            </Button>
+            {soloCreador ? (
+              <Button variant="ghost" onClick={cerrar} disabled={guardando}>
+                Cancelar
+              </Button>
+            ) : (
+              <Button variant="ghost" onClick={() => setPaso("creador")} disabled={guardando}>
+                <ArrowLeft size={14} />
+                Atrás
+              </Button>
+            )}
             <Button variant="primary" onClick={guardar} disabled={guardando || piezas.length === 0}>
               {guardando && <LoaderCircle size={14} className="animate-spin" />}
-              Contratar {piezas.length === 1 ? "1 pieza" : `${piezas.length} piezas`}
+              {soloCreador ? "Añadir" : "Contratar"}{" "}
+              {piezas.length === 1 ? "1 pieza" : `${piezas.length} piezas`}
             </Button>
           </>
         }
@@ -219,13 +235,15 @@ export function HireCreatorDialog({
                 {elegido.categories.join(", ")} · {PLATFORM_LABEL[elegido.mainPlatform]}
               </span>
             </span>
-            <button
-              type="button"
-              onClick={() => setPaso("creador")}
-              className="shrink-0 text-[12.5px] text-[var(--text-muted)] transition hover:text-[var(--text)]"
-            >
-              Cambiar
-            </button>
+            {!soloCreador && (
+              <button
+                type="button"
+                onClick={() => setPaso("creador")}
+                className="shrink-0 text-[12.5px] text-[var(--text-muted)] transition hover:text-[var(--text)]"
+              >
+                Cambiar
+              </button>
+            )}
           </div>
 
           <PiecesEditor

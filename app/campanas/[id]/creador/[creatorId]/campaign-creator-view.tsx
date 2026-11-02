@@ -9,9 +9,11 @@ import {
   ExternalLink,
   Film,
   LoaderCircle,
+  Plus,
   TriangleAlert,
   UserRound,
 } from "lucide-react";
+import { HireCreatorDialog } from "@/components/campaigns/hire-creator-dialog";
 import { PageTitle, SectionLabel } from "@/components/ui/section";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -85,6 +87,7 @@ export function CampaignCreatorView({
   const [editando, setEditando] = useState<Deliverable | null>(null);
   const [catalogo, setCatalogo] = useState(kinds);
   const [errorPieza, setErrorPieza] = useState<string | null>(null);
+  const [ampliando, setAmpliando] = useState(false);
 
   const vivas = deliverables.filter((d) => d.status !== "cancelado");
   const pactado = vivas.reduce((s, d) => s + creatorPayout(d, campaign), 0);
@@ -155,7 +158,15 @@ export function CampaignCreatorView({
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)]">
         <div className="space-y-6">
           <section>
-            <SectionLabel>Sus piezas en esta campaña</SectionLabel>
+            <div className="flex items-center justify-between gap-3">
+              <SectionLabel>Sus piezas en esta campaña</SectionLabel>
+              {puedeEditar && (
+                <Button variant="secondary" size="sm" onClick={() => setAmpliando(true)} className="mb-2.5">
+                  <Plus size={14} />
+                  Añadir piezas
+                </Button>
+              )}
+            </div>
             {errorPieza && (
               <p className="mb-2.5 flex items-start gap-2 rounded-[var(--r-control)] bg-[var(--danger-soft)] px-3 py-2 text-[12.5px] text-[var(--danger)]">
                 <TriangleAlert size={14} className="mt-px shrink-0" />
@@ -307,6 +318,19 @@ export function CampaignCreatorView({
           )}
         </div>
       </div>
+
+      {ampliando && (
+        <HireCreatorDialog
+          open
+          onClose={() => setAmpliando(false)}
+          campaignId={campaign.id}
+          creators={[creator]}
+          currency={campaign.currency}
+          kinds={catalogo}
+          onKindsChange={setCatalogo}
+          soloCreador={creator}
+        />
+      )}
 
       <EditDeliverableDialog
         key={editando?.id ?? "sin-pieza"}

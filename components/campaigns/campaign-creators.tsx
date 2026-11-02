@@ -100,6 +100,8 @@ export function CampaignCreators({
   const puedeEditar = can("editar_campanas");
 
   const [contratando, setContratando] = useState(false);
+  /** Creador al que se le están añadiendo piezas, sin pasar por elegirlo. */
+  const [ampliando, setAmpliando] = useState<Creator | null>(null);
   /** Registrar un video que ya salió, pegando su enlace. */
   const [registrando, setRegistrando] = useState(false);
   const [cerrando, setCerrando] = useState<Participante | null>(null);
@@ -342,6 +344,19 @@ export function CampaignCreators({
                                 casi nunca se sabe el día que se le añade, y
                                 como no se veía dónde cambiarlo se acababa
                                 quitando al creador y contratándolo otra vez. */}
+                            {/* Pedirle algo más a quien ya está: antes solo se
+                                podía contratar a alguien nuevo, y para sumarle
+                                una pieza había que volver a «Añadir creador». */}
+                            <Opcion
+                              icono={Plus}
+                              onClick={() => {
+                                close();
+                                setAmpliando(p.creator);
+                              }}
+                            >
+                              Añadir piezas
+                            </Opcion>
+
                             {p.vivas.length > 0 && (
                               <>
                                 <div className="my-1 h-px bg-[var(--line)]" />
@@ -476,6 +491,20 @@ export function CampaignCreators({
         kinds={catalogo}
         onKindsChange={setCatalogo}
       />
+
+      {ampliando && (
+        <HireCreatorDialog
+          key={ampliando.id}
+          open
+          onClose={() => setAmpliando(null)}
+          campaignId={campaign.id}
+          creators={creators}
+          currency={currency}
+          kinds={catalogo}
+          onKindsChange={setCatalogo}
+          soloCreador={ampliando}
+        />
+      )}
 
       <Modal
         open={cerrando !== null}
