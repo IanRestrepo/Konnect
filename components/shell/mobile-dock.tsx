@@ -24,27 +24,29 @@ export function MobileDock() {
       className="fixed inset-x-0 bottom-0 z-40 flex justify-center px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:hidden"
       aria-label="Navegación principal"
     >
-      <div className="flex items-center gap-0.5 rounded-[var(--r-pill)] border border-[var(--line)] bg-[color-mix(in_oklab,var(--surface)_88%,transparent)] p-1.5 shadow-[var(--shadow-pop)] backdrop-blur-xl">
-        {items.map((item) => {
-          const Icon = item.icon;
-          const active = isActive(item.href);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              aria-label={item.label}
-              aria-current={active ? "page" : undefined}
-              className={cn(
-                "grid h-11 w-11 place-items-center rounded-[var(--r-pill)] transition",
-                active
-                  ? "bg-[var(--solid)] text-[var(--solid-fg)]"
-                  : "text-[var(--text-subtle)] active:bg-[var(--surface-2)]",
-              )}
-            >
-              <Icon size={19} strokeWidth={1.75} />
-            </Link>
-          );
-        })}
+      <div className="flex max-w-full items-center gap-0.5 rounded-[var(--r-pill)] border border-[var(--line)] bg-[color-mix(in_oklab,var(--surface)_88%,transparent)] p-1.5 shadow-[var(--shadow-pop)] backdrop-blur-xl">
+        <div className="flex min-w-0 items-center gap-0.5 overflow-x-auto [scrollbar-width:none]">
+          {items.map((item) => {
+            const Icon = item.icon;
+            const active = isActive(item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                aria-label={item.label}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "grid h-11 w-11 shrink-0 place-items-center rounded-[var(--r-pill)] transition",
+                  active
+                    ? "bg-[var(--solid)] text-[var(--solid-fg)]"
+                    : "text-[var(--text-subtle)] active:bg-[var(--surface-2)]",
+                )}
+              >
+                <Icon size={19} strokeWidth={1.75} />
+              </Link>
+            );
+          })}
+        </div>
 
         <span className="mx-0.5 h-6 w-px bg-[var(--line)]" />
 

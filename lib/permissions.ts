@@ -33,6 +33,13 @@ export const PERMISSIONS = [
     href: "/empresas",
   },
   {
+    id: "ver_contratos",
+    label: "Contratos",
+    description: "Generar contratos con empresas e influencers",
+    group: "Páginas",
+    href: "/contratos",
+  },
+  {
     id: "ver_mensajes",
     label: "Mensajes",
     description: "Bandeja de correo de la agencia",
@@ -221,6 +228,7 @@ const ROUTE_PERMISSION: { prefix: string; permission: PermissionId }[] = [
   { prefix: "/creadores", permission: "ver_creadores" },
   { prefix: "/campanas", permission: "ver_campanas" },
   { prefix: "/empresas", permission: "ver_empresas" },
+  { prefix: "/contratos", permission: "ver_contratos" },
   { prefix: "/mensajes", permission: "ver_mensajes" },
   { prefix: "/finanzas", permission: "ver_finanzas" },
   { prefix: "/sesiones", permission: "ver_sesiones" },

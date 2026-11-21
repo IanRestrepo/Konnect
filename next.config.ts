@@ -5,6 +5,7 @@ const nextConfig: NextConfig = {
   // no ve esa lectura: sin esto la función se empaqueta sin Poppins y el PDF
   // sale en Helvetica.
   outputFileTracingIncludes: {
+    "/api/contratos": ["./node_modules/@fontsource/poppins/files/poppins-latin-*-normal.woff"],
     "/api/creadores/\\[id\\]/media-kit": [
       "./node_modules/@fontsource/poppins/files/poppins-latin-*-normal.woff",
     ],
